@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / discussion
+    url: https://github.com/drmikecrypto/v2rayF/discussions
+    about: Ask questions or share ideas (not for bug reports)
+  - name: Security issue
+    url: https://github.com/drmikecrypto/v2rayF/security/advisories/new
+    about: Report a vulnerability privately

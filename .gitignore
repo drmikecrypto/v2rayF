@@ -1,0 +1,38 @@
+# Build outputs
+bin/
+obj/
+dist/
+.tools/
+release-assets/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.DotSettings.user
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Xray binaries & geo data (downloaded at build/packaging time)
+src/v2rayF.Desktop/cores/
+src/v2rayF.Android/Assets/xray
+src/v2rayF.Android/NativeLibs/**/*.so
+src/v2rayF.Android/Assets/geoip.dat
+src/v2rayF.Android/Assets/geosite.dat
+
+# Logs & temp
+*.log
+*.tmp
+*~
+
+# NuGet
+packages/
+project.lock.json
+
+# Publish artifacts outside dist/
+publish/

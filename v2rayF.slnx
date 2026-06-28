@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/v2rayF.Core/v2rayF.Core.csproj" />
+    <Project Path="src/v2rayF/v2rayF.csproj" />
+    <Project Path="src/v2rayF.Desktop/v2rayF.Desktop.csproj" />
+    <Project Path="src/v2rayF.Android/v2rayF.Android.csproj" />
+  </Folder>
+</Solution>

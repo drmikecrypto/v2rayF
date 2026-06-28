@@ -1,0 +1,132 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:v2rayF.ViewModels"
+        xmlns:models="using:v2rayF.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="1024"
+        d:DesignHeight="720"
+        x:Class="v2rayF.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="v2rayF"
+        Width="1024"
+        Height="720"
+        MinWidth="800"
+        MinHeight="560">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <StackPanel Grid.Row="0" Spacing="12">
+            <TextBlock Text="v2rayF"
+                       FontSize="28"
+                       FontWeight="SemiBold"/>
+            <TextBlock Text="Proxy hub with routing rules, TUN mode, latency tests, and multi-desktop system proxy."
+                       Opacity="0.75"
+                       TextWrapping="Wrap"/>
+
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0"
+                         PlaceholderText="Subscription URL (https://...)"
+                         Text="{Binding SubscriptionUrl}"/>
+                <Button Grid.Column="1" Content="Import URL" Command="{Binding ImportFromSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="3" Content="Clipboard" Command="{Binding ImportFromClipboardCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="4" Content="{Binding ConnectButtonText}" Classes="accent"
+                        Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="120"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56" MaxHeight="80"
+                         PlaceholderText="Paste share links (vmess://, vless://, ss://, trojan://) or base64 subscription"
+                         Text="{Binding ImportText}" TextWrapping="Wrap"/>
+                <Button Grid.Column="1" VerticalAlignment="Stretch" Content="Import"
+                        Command="{Binding ImportFromTextCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="96"/>
+            </Grid>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,16,0,16" ColumnDefinitions="2*,*" ColumnSpacing="16">
+            <Border Grid.Column="0" BorderThickness="1" CornerRadius="8" Padding="8">
+                <DockPanel LastChildFill="True">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                        <TextBlock Text="Servers" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button Content="Test" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+                        <Button Content="Test All" Command="{Binding TestAllLatencyCommand}" IsEnabled="{Binding !IsBusy}"/>
+                        <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+                    </StackPanel>
+
+                    <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
+                             DoubleTapped="ServerList_DoubleTapped">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="models:ProxyServer">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+                                    <Border Grid.Column="0" Padding="6,3" CornerRadius="4"
+                                            Background="{DynamicResource SystemAccentColor}">
+                                        <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding DisplayEndpoint}" Opacity="0.7" FontSize="12"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"
+                                               MinWidth="56" HorizontalAlignment="Right" FontWeight="SemiBold"/>
+                                    <TextBlock Grid.Column="3" Text="{Binding Network}" VerticalAlignment="Center" Opacity="0.7"/>
+                                    <TextBlock Grid.Column="4" Text="{Binding Security}" VerticalAlignment="Center" Opacity="0.7"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <Border Grid.Column="1" BorderThickness="1" CornerRadius="8" Padding="12">
+                <ScrollViewer>
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold"/>
+
+                        <TextBlock Text="Routing" FontWeight="SemiBold"/>
+                        <ComboBox ItemsSource="{Binding RoutingModes}"
+                                  SelectedItem="{Binding SelectedRoutingMode}"
+                                  HorizontalAlignment="Stretch"/>
+
+                        <TextBlock Text="Custom direct rules (domains or IPs, one per line)"
+                                   IsVisible="{Binding ShowCustomRules}"
+                                   TextWrapping="Wrap" Opacity="0.8" FontSize="12"/>
+                        <TextBox AcceptsReturn="True" MinHeight="72" MaxHeight="120"
+                                 Text="{Binding CustomDirectRules}" TextWrapping="Wrap"
+                                 IsVisible="{Binding ShowCustomRules}"
+                                 PlaceholderText="example.com&#10;192.168.0.0/16"/>
+
+                        <CheckBox Content="TUN mode (full-device VPN)" IsChecked="{Binding EnableTunMode}"
+                                  IsVisible="{Binding ShowDesktopProxySettings}"/>
+                        <TextBlock Text="{Binding TunStatus}" TextWrapping="Wrap" FontSize="12" Opacity="0.75"/>
+
+                        <CheckBox Content="Set system HTTP proxy on connect" IsChecked="{Binding EnableSystemProxy}"
+                                  IsEnabled="{Binding !EnableTunMode}"
+                                  IsVisible="{Binding ShowDesktopProxySettings}"/>
+
+                        <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Stretch"/>
+
+                        <Separator Opacity="0.3"/>
+
+                        <TextBlock Text="Local proxies" FontWeight="SemiBold"/>
+                        <TextBlock Text="HTTP  → 127.0.0.1:10809" FontSize="12" Opacity="0.75"/>
+                        <TextBlock Text="SOCKS → 127.0.0.1:10808" FontSize="12" Opacity="0.75"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="2" Padding="12" CornerRadius="8"
+                Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding StatusText}"/>
+                <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  XRAY_VERSION: v26.3.27
+
+jobs:
+  build:
+    name: Build ${{ matrix.rid }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: win-arm64
+            os: windows-latest
+          - rid: linux-x64
+            os: ubuntu-latest
+          - rid: linux-arm64
+            os: ubuntu-latest
+          - rid: osx-x64
+            os: ubuntu-latest
+          - rid: osx-arm64
+            os: macos-latest
+          - rid: android-arm64
+            os: ubuntu-latest
+            android: true
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Android workload
+        if: matrix.android == true
+        run: dotnet workload install android
+
+      - name: Package Android APK
+        if: matrix.android == true
+        shell: pwsh
+        run: ./scripts/package-android-release.ps1 -XrayVersion ${{ env.XRAY_VERSION }}
+
+      - name: Package ${{ matrix.rid }}
+        if: matrix.android != true
+        shell: pwsh
+        run: ./scripts/package-all.ps1 -Rid ${{ matrix.rid }} -XrayVersion ${{ env.XRAY_VERSION }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v2rayF-${{ matrix.rid }}
+          path: dist/v2rayF-${{ matrix.rid }}.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: v2rayF-*
+          merge-multiple: true
+
+      - name: List release assets
+        run: find artifacts -type f -name "*.zip" -ls
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

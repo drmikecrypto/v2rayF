@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:v2rayF.ViewModels"
+             xmlns:models="using:v2rayF.Models"
+             x:Class="v2rayF.Views.MainView"
+             x:DataType="vm:MainWindowViewModel">
+
+    <ScrollViewer Padding="16">
+        <StackPanel Spacing="12">
+            <TextBlock Text="v2rayF" FontSize="26" FontWeight="SemiBold"/>
+            <TextBlock Text="Android proxy client — import, tap, connect."
+                       Opacity="0.75" TextWrapping="Wrap"/>
+
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0" PlaceholderText="Subscription URL"
+                         Text="{Binding SubscriptionUrl}"/>
+                <Button Grid.Column="1" Content="Import" Command="{Binding ImportFromSubscriptionCommand}"/>
+                <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}"
+                        IsEnabled="{Binding HasSavedSubscription}"/>
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56"
+                         PlaceholderText="Paste share link"
+                         Text="{Binding ImportText}" TextWrapping="Wrap"/>
+                <Button Grid.Column="1" Content="Paste" Command="{Binding ImportFromClipboardCommand}"/>
+                <Button Grid.Column="2" Content="Add" Command="{Binding ImportFromTextCommand}"/>
+            </Grid>
+
+            <Button Content="{Binding ConnectButtonText}" Classes="accent"
+                    Command="{Binding ToggleConnectionCommand}" HorizontalAlignment="Stretch" MinHeight="48"/>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Test" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+                <Button Content="Test All" Command="{Binding TestAllLatencyCommand}"/>
+                <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}" MinHeight="220">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="models:ProxyServer">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                            <Border Padding="6,3" CornerRadius="4" Background="{DynamicResource SystemAccentColor}">
+                                <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Border Padding="12" CornerRadius="8" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Settings" FontWeight="SemiBold"/>
+                    <ComboBox ItemsSource="{Binding RoutingModes}" SelectedItem="{Binding SelectedRoutingMode}"/>
+                    <TextBlock Text="{Binding TunStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
+                    <Button Content="Save settings" Command="{Binding SaveSettingsCommand}"/>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

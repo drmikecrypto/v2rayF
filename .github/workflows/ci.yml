@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore v2rayF.slnx
+
+      - name: Build desktop
+        run: dotnet build src/v2rayF.Desktop/v2rayF.Desktop.csproj -c Release --no-restore
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Android workload
+        run: dotnet workload install android
+
+      - name: Download Android Xray assets
+        shell: pwsh
+        run: ./scripts/package-android.ps1
+
+      - name: Build Android
+        run: dotnet build src/v2rayF.Android/v2rayF.Android.csproj -c Release -f net10.0-android
