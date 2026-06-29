@@ -522,18 +522,32 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task RemoveSelectedAsync()
+    private Task RemoveSelectedAsync() => RemoveServerAsync(SelectedServer);
+
+    [RelayCommand]
+    private async Task RemoveServerAsync(ProxyServer? server)
     {
-        if (SelectedServer is null)
+        if (server is null)
+        {
+            StatusText = "Select a server to remove.";
+            return;
+        }
+
+        var target = Servers.FirstOrDefault(s => s.Id == server.Id);
+        if (target is null)
             return;
 
-        if (IsConnected && _proxyCore.ActiveServer?.Id == SelectedServer.Id)
-            await DisconnectAsync();
+        if (IsConnected && _proxyCore.ActiveServer?.Id == target.Id)
+            await DisconnectAsync().ConfigureAwait(true);
 
-        Servers.Remove(SelectedServer);
-        SelectedServer = Servers.FirstOrDefault();
-        await _serverStore.SaveAsync(Servers);
-        StatusText = "Server removed.";
+        Servers.Remove(target);
+        if (SelectedServer?.Id == target.Id)
+            SelectedServer = Servers.FirstOrDefault();
+
+        await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
+        StatusText = Servers.Count == 0
+            ? "Server removed. List is empty."
+            : $"Removed \"{target.Name}\".";
     }
 
     [RelayCommand]

@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <Version>1.1.6</Version>
+    <Version>1.1.9</Version>
     <Product>v2rayF</Product>
     <Description>Shared Avalonia UI for v2rayF.</Description>
     <RepositoryUrl>https://github.com/drmikecrypto/v2rayF</RepositoryUrl>

@@ -36,10 +36,15 @@
                 <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
             </StackPanel>
 
-            <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}" MinHeight="220">
+            <ListBox x:Name="ServerList"
+                     ItemsSource="{Binding Servers}"
+                     SelectedItem="{Binding SelectedServer}"
+                     MinHeight="220"
+                     SelectionMode="Single"
+                     Tapped="ServerList_Tapped">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="models:ProxyServer">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                             <Border Padding="6,3" CornerRadius="4" Background="{DynamicResource SystemAccentColor}">
                                 <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
                             </Border>
@@ -48,6 +53,16 @@
                                 <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="3"
+                                    Content="×"
+                                    ToolTip.Tip="Remove this server"
+                                    Padding="10,4"
+                                    MinWidth="44"
+                                    MinHeight="36"
+                                    FontSize="18"
+                                    VerticalAlignment="Center"
+                                    Tag="{Binding}"
+                                    Click="RemoveServer_Click"/>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

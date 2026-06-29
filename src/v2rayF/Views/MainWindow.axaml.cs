@@ -38,4 +38,16 @@ public partial class MainWindow : Window
 
         await vm.ConnectToServerCommand.ExecuteAsync(server);
     }
+
+    private async void RemoveServer_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: ProxyServer server })
+            return;
+
+        if (DataContext is not MainWindowViewModel vm)
+            return;
+
+        e.Handled = true;
+        await vm.RemoveServerCommand.ExecuteAsync(server);
+    }
 }

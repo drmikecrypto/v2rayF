@@ -60,10 +60,11 @@
                     </StackPanel>
 
                     <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
+                             SelectionMode="Single"
                              DoubleTapped="ServerList_DoubleTapped">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="models:ProxyServer">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                                     <Border Grid.Column="0" Padding="6,3" CornerRadius="4"
                                             Background="{DynamicResource SystemAccentColor}">
                                         <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
@@ -76,6 +77,15 @@
                                                MinWidth="56" HorizontalAlignment="Right" FontWeight="SemiBold"/>
                                     <TextBlock Grid.Column="3" Text="{Binding Network}" VerticalAlignment="Center" Opacity="0.7"/>
                                     <TextBlock Grid.Column="4" Text="{Binding Security}" VerticalAlignment="Center" Opacity="0.7"/>
+                                    <Button Grid.Column="5"
+                                            Content="×"
+                                            ToolTip.Tip="Remove this server"
+                                            Padding="8,2"
+                                            MinWidth="32"
+                                            FontSize="16"
+                                            VerticalAlignment="Center"
+                                            Tag="{Binding}"
+                                            Click="RemoveServer_Click"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
