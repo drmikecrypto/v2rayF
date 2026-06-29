@@ -5,6 +5,15 @@ All notable changes to v2rayF are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.8] - 2026-06-29
+
+### Fixed
+
+- Android connect crash — pass VPN TUN fd to Xray via `XRAY_TUN_FD` environment variable (required on Android)
+- Android connect — set `LD_LIBRARY_PATH` when launching Xray so native dependencies load on Samsung and similar devices
+- Android connect — removed double Xray start on connect (VPN first, single core launch)
+- Android connect — clearer error when ProcessBuilder cannot exec the core instead of silent force-close
+
 ## [1.1.7] - 2026-06-28
 
 ### Fixed

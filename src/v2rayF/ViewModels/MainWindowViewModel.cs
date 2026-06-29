@@ -455,20 +455,6 @@ public partial class MainWindowViewModel : ViewModelBase
         AppSettings settings,
         Action<bool> markVpnEngaged)
     {
-        RunOnUiThread(() => StatusText = $"Checking {server.Name}…");
-
-        var probeSettings = new AppSettings
-        {
-            RoutingMode = settings.RoutingMode,
-            CustomDirectRules = settings.CustomDirectRules,
-            EnableTunMode = false,
-            EnableSystemProxy = false,
-            SubscriptionUrl = settings.SubscriptionUrl
-        };
-
-        await _proxyCore.StartAsync(server, probeSettings, null).ConfigureAwait(false);
-        await _proxyCore.StopAsync().ConfigureAwait(false);
-
         RunOnUiThread(() => StatusText = "Starting VPN…");
         var tunFd = await AppServices.Platform.EstablishVpnAsync().ConfigureAwait(false);
         if (tunFd is null)
@@ -480,14 +466,22 @@ public partial class MainWindowViewModel : ViewModelBase
         markVpnEngaged(true);
 
         RunOnUiThread(() => StatusText = $"Starting proxy for {server.Name}…");
-        await _proxyCore.StartAsync(server, settings, tunFd).ConfigureAwait(false);
-        await AppServices.Platform.EnableProxyAsync().ConfigureAwait(false);
-
-        RunOnUiThread(() =>
+        try
         {
-            StatusText = $"Connected — {server.Name} (VPN)";
-            IsConnected = true;
-        });
+            await _proxyCore.StartAsync(server, settings, tunFd).ConfigureAwait(false);
+            await AppServices.Platform.EnableProxyAsync().ConfigureAwait(false);
+
+            RunOnUiThread(() =>
+            {
+                StatusText = $"Connected — {server.Name} (VPN)";
+                IsConnected = true;
+            });
+        }
+        catch
+        {
+            await SafeTeardownAsync(vpnEngaged: true).ConfigureAwait(false);
+            throw;
+        }
     }
 
     private async Task SafeTeardownAsync(bool vpnEngaged)

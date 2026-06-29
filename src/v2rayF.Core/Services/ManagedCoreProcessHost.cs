@@ -21,6 +21,7 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
         string corePath,
         string configPath,
         string workingDirectory,
+        int? tunFd = null,
         CancellationToken cancellationToken = default)
     {
         StopAsync(cancellationToken).GetAwaiter().GetResult();

@@ -72,6 +72,7 @@ public sealed class LatencyService
                 corePath,
                 configPath,
                 _environment.GetCoresDirectory(),
+                tunFd: null,
                 cancellationToken).ConfigureAwait(false);
 
             await WaitForCoreReadyAsync(cancellationToken).ConfigureAwait(false);

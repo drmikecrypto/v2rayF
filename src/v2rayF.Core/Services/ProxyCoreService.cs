@@ -66,6 +66,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             ResolveCorePath(),
             _configPath,
             ResolveCoresDirectory(),
+            tunFd,
             cancellationToken).ConfigureAwait(false);
 
         await WaitForCoreReadyAsync(cancellationToken).ConfigureAwait(false);

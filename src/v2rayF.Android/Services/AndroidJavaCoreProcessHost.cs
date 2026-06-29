@@ -1,10 +1,14 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Android.App;
+using Android.OS;
 using Java.IO;
 using Java.Lang;
 using v2rayF.Services;
 using Process = Java.Lang.Process;
+using IOException = Java.IO.IOException;
 
 namespace v2rayF.Android.Services;
 
@@ -13,6 +17,8 @@ namespace v2rayF.Android.Services;
 /// </summary>
 public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
 {
+    private const string TunFdEnvKey = "XRAY_TUN_FD";
+
     private readonly object _lock = new();
     private Process? _process;
     private string _recentOutput = "";
@@ -22,7 +28,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
         get
         {
             lock (_lock)
-                return _process is { IsAlive: true };
+                return IsAlive(_process);
         }
     }
 
@@ -31,7 +37,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
         get
         {
             lock (_lock)
-                return _process is null || !_process.IsAlive;
+                return _process is null || !IsAlive(_process);
         }
     }
 
@@ -39,27 +45,54 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
         string corePath,
         string configPath,
         string workingDirectory,
+        int? tunFd = null,
         CancellationToken cancellationToken = default)
     {
         StopAsync(cancellationToken).GetAwaiter().GetResult();
 
+        if (!System.IO.File.Exists(corePath))
+            throw new System.IO.FileNotFoundException("Xray core not found.", corePath);
+
+        if (!System.IO.File.Exists(configPath))
+            throw new System.IO.FileNotFoundException("Xray config not found.", configPath);
+
         lock (_lock)
             _recentOutput = "";
 
-        var cmd = new[] { corePath, "run", "-c", configPath };
-        var builder = new ProcessBuilder(cmd);
-        builder.Directory(new File(workingDirectory));
-        builder.RedirectErrorStream(true);
+        var nativeLibDir = Application.Context?.ApplicationInfo?.NativeLibraryDir ?? workingDirectory;
 
-        Process process;
-        lock (_lock)
+        try
         {
-            _process = builder.Start();
-            process = _process;
-        }
+            var builder = new ProcessBuilder(corePath, "run", "-c", configPath);
+            builder.Directory(new Java.IO.File(workingDirectory));
+            builder.RedirectErrorStream(true);
 
-        if (process is not null)
-            _ = Task.Run(() => DrainOutputAsync(process), cancellationToken);
+            var env = builder.Environment();
+            env["LD_LIBRARY_PATH"] = nativeLibDir;
+            env["TMPDIR"] = workingDirectory;
+
+            if (tunFd is int fd && fd >= 0)
+            {
+                env[TunFdEnvKey] = fd.ToString();
+                env["xray.tun.fd"] = fd.ToString();
+            }
+
+            Process process;
+            lock (_lock)
+            {
+                _process = builder.Start();
+                process = _process;
+            }
+
+            if (process is not null)
+                _ = Task.Run(() => DrainOutputAsync(process), cancellationToken);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidOperationException(
+                $"Xray core failed to start: {ex.Message}. Reinstall the app or check that your device is ARM64.",
+                ex);
+        }
 
         return Task.CompletedTask;
     }
@@ -73,7 +106,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
 
             try
             {
-                if (_process.IsAlive)
+                if (IsAlive(_process))
                     _process.Destroy();
             }
             catch
@@ -93,7 +126,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
     {
         lock (_lock)
         {
-            if (_process is { IsAlive: true })
+            if (_process is not null && IsAlive(_process))
                 return _recentOutput.Trim();
 
             if (_process is not null)
@@ -113,6 +146,25 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
             }
 
             return _recentOutput.Trim();
+        }
+    }
+
+    private static bool IsAlive(Process? process)
+    {
+        if (process is null)
+            return false;
+
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+            return process.IsAlive;
+
+        try
+        {
+            process.ExitValue();
+            return false;
+        }
+        catch (IllegalThreadStateException)
+        {
+            return true;
         }
     }
 

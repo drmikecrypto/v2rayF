@@ -13,6 +13,7 @@ public interface ICoreProcessHost
         string corePath,
         string configPath,
         string workingDirectory,
+        int? tunFd = null,
         CancellationToken cancellationToken = default);
 
     Task StopAsync(CancellationToken cancellationToken = default);
