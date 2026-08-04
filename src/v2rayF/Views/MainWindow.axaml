@@ -10,7 +10,7 @@
         x:Class="v2rayF.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="v2rayF"
+        Title="v2rayF Sentinel"
         Width="1024"
         Height="720"
         MinWidth="800"
@@ -27,7 +27,7 @@
                     <TextBlock Text="v2rayF"
                                FontSize="28"
                                FontWeight="SemiBold"/>
-                    <TextBlock Text="{Binding AppVersionLabel, StringFormat='v{0}'}"
+                    <TextBlock Text="{Binding AppVersionLabel, StringFormat='v{0} · Sentinel'}"
                                Opacity="0.55" FontSize="12"/>
                 </StackPanel>
                 <Button Grid.Column="1"
@@ -40,7 +40,7 @@
                         Padding="14,8"
                         MinWidth="100"/>
             </Grid>
-            <TextBlock Text="Proxy hub with routing rules, TUN mode, latency tests, and multi-desktop system proxy."
+            <TextBlock Text="Anti-censorship proxy hub — Smart Connect, leak shield, multipath, Secure Share."
                        Opacity="0.75"
                        TextWrapping="Wrap"/>
 
@@ -52,7 +52,7 @@
                 <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
                 <Button Grid.Column="3" Content="Clipboard" Command="{Binding ImportFromClipboardCommand}" IsEnabled="{Binding !IsBusy}"/>
                 <Button Grid.Column="4" Content="{Binding ConnectButtonText}" Classes="accent"
-                        Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="120"/>
+                        Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding CanToggleConnection}" MinWidth="120"/>
             </Grid>
 
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -113,18 +113,29 @@
                     <StackPanel Spacing="12">
                         <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold"/>
 
+                        <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"
+                                HorizontalAlignment="Stretch"/>
+
+                        <CheckBox Content="Smart Connect" IsChecked="{Binding SmartConnectEnabled}"/>
+                        <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"/>
+
                         <TextBlock Text="Routing" FontWeight="SemiBold"/>
                         <ComboBox ItemsSource="{Binding RoutingModes}"
                                   SelectedItem="{Binding SelectedRoutingMode}"
                                   HorizontalAlignment="Stretch"/>
 
-                        <TextBlock Text="Custom direct rules (domains or IPs, one per line)"
-                                   IsVisible="{Binding ShowCustomRules}"
-                                   TextWrapping="Wrap" Opacity="0.8" FontSize="12"/>
-                        <TextBox AcceptsReturn="True" MinHeight="72" MaxHeight="120"
-                                 Text="{Binding CustomDirectRules}" TextWrapping="Wrap"
-                                 IsVisible="{Binding ShowCustomRules}"
-                                 PlaceholderText="example.com&#10;192.168.0.0/16"/>
+                        <StackPanel Spacing="8" IsVisible="{Binding ShowCustomRules}">
+                            <TextBlock Text="Direct (domains/IPs, one per line)" Opacity="0.8" FontSize="12"/>
+                            <TextBox AcceptsReturn="True" MinHeight="56" MaxHeight="90"
+                                     Text="{Binding CustomDirectRules}" TextWrapping="Wrap"
+                                     PlaceholderText="example.com&#10;192.168.0.0/16"/>
+                            <TextBlock Text="Force proxy" Opacity="0.8" FontSize="12"/>
+                            <TextBox AcceptsReturn="True" MinHeight="40" MaxHeight="72"
+                                     Text="{Binding CustomProxyRules}" TextWrapping="Wrap"/>
+                            <TextBlock Text="Block" Opacity="0.8" FontSize="12"/>
+                            <TextBox AcceptsReturn="True" MinHeight="40" MaxHeight="72"
+                                     Text="{Binding CustomBlockRules}" TextWrapping="Wrap"/>
+                        </StackPanel>
 
                         <CheckBox Content="TUN mode (full-device VPN)" IsChecked="{Binding EnableTunMode}"
                                   IsVisible="{Binding ShowDesktopProxySettings}"/>
@@ -134,13 +145,26 @@
                                   IsEnabled="{Binding !EnableTunMode}"
                                   IsVisible="{Binding ShowDesktopProxySettings}"/>
 
+                        <CheckBox Content="Secure Share (LAN gateway)" IsChecked="{Binding SecureShareEnabled}"/>
+                        <TextBlock Text="{Binding SecureShareEndpoint}" TextWrapping="Wrap" FontSize="11" Opacity="0.8"
+                                   IsVisible="{Binding SecureShareEnabled}"/>
+                        <Button Content="Copy SOCKS share link" Command="{Binding CopySecureShareCommand}"
+                                HorizontalAlignment="Stretch"
+                                IsVisible="{Binding SecureShareEnabled}"/>
+
+                        <Expander Header="Advanced protection" IsExpanded="False">
+                            <StackPanel Spacing="8" Margin="0,8,0,0">
+                                <CheckBox Content="Kill switch" IsChecked="{Binding KillSwitchEnabled}"/>
+                                <CheckBox Content="DNS through proxy" IsChecked="{Binding DnsThroughProxy}"/>
+                                <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
+                                <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
+                                <CheckBox Content="Fetch subscriptions via proxy when connected" IsChecked="{Binding SubscriptionViaProxy}"/>
+                                <TextBlock Text="HTTP  → 127.0.0.1:10809" FontSize="12" Opacity="0.75"/>
+                                <TextBlock Text="SOCKS → 127.0.0.1:10808" FontSize="12" Opacity="0.75"/>
+                            </StackPanel>
+                        </Expander>
+
                         <Button Content="Save settings" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Stretch"/>
-
-                        <Separator Opacity="0.3"/>
-
-                        <TextBlock Text="Local proxies" FontWeight="SemiBold"/>
-                        <TextBlock Text="HTTP  → 127.0.0.1:10809" FontSize="12" Opacity="0.75"/>
-                        <TextBlock Text="SOCKS → 127.0.0.1:10808" FontSize="12" Opacity="0.75"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -149,7 +173,7 @@
         <Border Grid.Row="2" Padding="12" CornerRadius="8"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
             <StackPanel Spacing="4">
-                <TextBlock Text="{Binding StatusText}"/>
+                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>
             </StackPanel>
         </Border>

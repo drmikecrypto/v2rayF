@@ -5,6 +5,30 @@ All notable changes to v2rayF are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-04
+
+### Added
+
+- **Sentinel** anti-censorship profile (Global + kill switch + DNS through proxy + IPv6 block)
+- **Smart Connect** — probe proxy path and connect to the fastest working node with failover
+- **Smart Multipath** — Xray `burstObservatory` + `leastPing` balancer across top nodes
+- **Secure Share** — authenticated LAN SOCKS/HTTP gateway for phone↔PC / hotspot clients
+- Desktop **kill switch** (Windows Firewall) and Android VPN-as-kill-switch
+- Custom routing **Direct / Proxy / Block** lists; Android per-app VPN bypass
+- Optional TLS **packet fragment** DPI evasion; subscription fetch via local proxy when connected
+- Connection state machine, core health watchdog, unexpected-exit teardown
+
+### Fixed
+
+- TUN DNS no longer forced to `direct` (ISP hostname leak)
+- DNS module traffic tagged and routed through the proxy when enabled
+- Android IPv6 catch-all route when Block IPv6 is on
+- Core process death now clears Connected state and tears down platform proxy/VPN
+- Kill switch stays armed after unexpected drop (fail-closed); Disconnect releases it
+- Kill switch arms after core is ready (no blocked dial); Windows-only firewall rules
+- Smart Connect TCP prefilter before proxy probes; prefer proxy-path OK peers only
+- Packet fragment skipped for Vision flows; settings UI collapsed under Advanced
+
 ## [1.2.2] - 2026-06-30
 
 ### Fixed

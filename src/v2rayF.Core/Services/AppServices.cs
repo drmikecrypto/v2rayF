@@ -13,6 +13,8 @@ public static class AppServices
 
     public static IAppUpdater? Updater { get; set; }
 
+    public static IKillSwitch KillSwitch { get; set; } = new NullKillSwitch();
+
     /// <summary>Called when the Android activity stops — tear down VPN so network is not left hijacked.</summary>
     public static Func<Task>? EmergencyDisconnectAsync { get; set; }
 }

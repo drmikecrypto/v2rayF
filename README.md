@@ -37,8 +37,12 @@ Each desktop package includes **Xray-core** and geo data (`geoip.dat`, `geosite.
 
 - **Protocols** — VMess, VLESS (incl. REALITY), Shadowsocks, Trojan, SOCKS
 - **Import** — clipboard, paste box, subscription URL (`https://…`)
-- **Latency test** — per server or test all
-- **Routing** — Global, Bypass LAN, Bypass China, custom direct list
+- **Smart Connect** — auto-pick the fastest working node; failover on failure
+- **Smart Multipath** — balance across top servers (Xray observatory)
+- **Latency test** — per server or test all (proxy-path preferred)
+- **Routing** — Global/Sentinel, Bypass LAN, Bypass China, Custom Direct/Proxy/Block
+- **Leak shield** — DNS through proxy, IPv6 block, kill switch, crash-aware teardown
+- **Secure Share** — LAN SOCKS/HTTP gateway for phone↔PC / hotspot clients
 - **TUN / VPN mode** — full-device capture (Admin on Windows; VPN permission on Android)
 - **System proxy** — Windows, macOS, GNOME, KDE, XFCE (desktop only)
 - **Tray icon** — status at a glance; minimize to tray while connected

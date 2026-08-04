@@ -1,10 +1,16 @@
 # Routing rules
 
-v2rayF ships routing presets (Global, Bypass LAN, etc.) that map to Xray `routing` rules using bundled `geoip.dat` and `geosite.dat`.
+v2rayF maps UI presets to Xray `routing` rules (and bundled `geoip.dat` / `geosite.dat` where needed).
 
-Switch presets before connecting if you need:
+| Preset | Behavior |
+|--------|----------|
+| **Global (Sentinel)** | Almost everything via proxy. Loopback stays local. Use with **Sentinel profile** (kill switch + DNS through proxy + IPv6 block). |
+| **Bypass LAN** | Private IPv4/IPv6 ranges go direct; the rest via proxy. |
+| **Bypass China** | `geosite:cn` / `geoip:cn` + private → direct. Requires geo files. |
+| **Custom** | Three lists: **Direct**, **Force proxy**, **Block** (blackhole). Domains or CIDRs, one per line. |
 
-- **Global** â€” send most traffic through the proxy
-- **Bypass LAN** â€” keep local/private ranges direct
+DNS (port 53 and the Xray DNS module) is routed through the proxy when **DNS through proxy** is enabled — it is never forced to clearnet in TUN mode.
 
-Custom rule editing may be added in future releases; presets cover typical desktop and mobile use.
+## Android per-app bypass
+
+On Android, enter package names (one per line) under **Per-app bypass**. Those apps are excluded from the VPN with `VpnService.Builder.AddDisallowedApplication`.

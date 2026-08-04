@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,9 +16,18 @@ public interface IPlatformIntegration
 
     string? LastEstablishError { get; }
 
-    Task<int?> EstablishVpnAsync(CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Establish VPN/TUN. Optional Android per-app bypass package names and IPv6 block flag.
+    /// </summary>
+    Task<int?> EstablishVpnAsync(
+        IReadOnlyList<string>? bypassPackages = null,
+        bool blockIpv6 = true,
+        CancellationToken cancellationToken = default);
 
     Task EnableProxyAsync(CancellationToken cancellationToken = default);
 
     Task DisableProxyAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
+    string? GetLanIPv4Address();
 }

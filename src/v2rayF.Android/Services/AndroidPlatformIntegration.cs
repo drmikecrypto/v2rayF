@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
@@ -26,10 +30,16 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             platform.LastEstablishError = message;
     }
 
-    public Task<int?> EstablishVpnAsync(CancellationToken cancellationToken = default) =>
-        AndroidUiThread.InvokeAsync(() => EstablishVpnOnUiThreadAsync(cancellationToken));
+    public Task<int?> EstablishVpnAsync(
+        IReadOnlyList<string>? bypassPackages = null,
+        bool blockIpv6 = true,
+        CancellationToken cancellationToken = default) =>
+        AndroidUiThread.InvokeAsync(() => EstablishVpnOnUiThreadAsync(bypassPackages, blockIpv6, cancellationToken));
 
-    private async Task<int?> EstablishVpnOnUiThreadAsync(CancellationToken cancellationToken)
+    private async Task<int?> EstablishVpnOnUiThreadAsync(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        CancellationToken cancellationToken)
     {
         LastEstablishError = null;
         var activity = MainActivity.Instance;
@@ -47,7 +57,8 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         }
 
         var context = activity.ApplicationContext ?? activity;
-        return await V2rayVpnService.EstablishAsync(context, cancellationToken).ConfigureAwait(false);
+        return await V2rayVpnService.EstablishAsync(context, bypassPackages, blockIpv6, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public Task EnableProxyAsync(CancellationToken cancellationToken = default)
@@ -65,4 +76,34 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             LastProxyMethod = null;
             await Task.CompletedTask;
         });
+
+    public string? GetLanIPv4Address()
+    {
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up)
+                    continue;
+                if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback)
+                    continue;
+
+                foreach (var addr in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (addr.Address.AddressFamily != AddressFamily.InterNetwork)
+                        continue;
+                    var ip = addr.Address.ToString();
+                    if (ip.StartsWith("127.", StringComparison.Ordinal))
+                        continue;
+                    return ip;
+                }
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
 }

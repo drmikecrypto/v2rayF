@@ -22,6 +22,8 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
     private readonly object _lock = new();
     private Process? _process;
     private string _recentOutput = "";
+    private bool _manualStop;
+    private CancellationTokenSource? _watchCts;
 
     public bool IsRunning
     {
@@ -40,6 +42,8 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
                 return _process is null || !IsAlive(_process);
         }
     }
+
+    public event EventHandler? UnexpectedExited;
 
     public Task StartAsync(
         string corePath,
@@ -80,12 +84,17 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
             Process process;
             lock (_lock)
             {
+                _manualStop = false;
                 _process = builder.Start();
                 process = _process;
             }
 
             if (process is not null)
+            {
                 _ = Task.Run(() => DrainOutputAsync(process), cancellationToken);
+                _watchCts = new CancellationTokenSource();
+                _ = Task.Run(() => WatchExitAsync(process, _watchCts.Token), CancellationToken.None);
+            }
         }
         catch (IOException ex)
         {
@@ -99,6 +108,18 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
 
     public Task StopAsync(CancellationToken cancellationToken = default)
     {
+        _manualStop = true;
+        try
+        {
+            _watchCts?.Cancel();
+            _watchCts?.Dispose();
+            _watchCts = null;
+        }
+        catch
+        {
+            // ignore
+        }
+
         lock (_lock)
         {
             if (_process is null)
@@ -146,6 +167,34 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
             }
 
             return _recentOutput.Trim();
+        }
+    }
+
+    private async Task WatchExitAsync(Process process, CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && IsAlive(process))
+                await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+
+            if (cancellationToken.IsCancellationRequested || _manualStop)
+                return;
+
+            lock (_lock)
+            {
+                if (ReferenceEquals(_process, process))
+                    _process = null;
+            }
+
+            UnexpectedExited?.Invoke(this, EventArgs.Empty);
+        }
+        catch (System.OperationCanceledException)
+        {
+            // Stopped intentionally.
+        }
+        catch
+        {
+            // ignore
         }
     }
 

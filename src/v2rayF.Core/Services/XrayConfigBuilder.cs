@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using v2rayF.Models;
@@ -11,27 +12,31 @@ public static class XrayConfigBuilder
 {
     public const int SocksPort = 10808;
     public const int HttpPort = 10809;
+    public const int SpeedtestSocksPort = 10818;
+    public const int DefaultSharePort = 10880;
 
-    public static string Build(ProxyServer server, AppSettings settings, int? tunFd = null)
+    public static string Build(
+        ProxyServer server,
+        AppSettings settings,
+        int? tunFd = null,
+        IReadOnlyList<ProxyServer>? multipathServers = null)
     {
+        var peers = NormalizePeers(server, multipathServers, settings.SmartMultipathEnabled);
+        var useBalancer = peers.Count > 1;
+
         var inbounds = new JsonArray
         {
-            new JsonObject
-            {
-                ["tag"] = "socks-in",
-                ["port"] = SocksPort,
-                ["listen"] = "127.0.0.1",
-                ["protocol"] = "socks",
-                ["settings"] = new JsonObject { ["udp"] = true }
-            },
-            new JsonObject
-            {
-                ["tag"] = "http-in",
-                ["port"] = HttpPort,
-                ["listen"] = "127.0.0.1",
-                ["protocol"] = "http"
-            }
+            BuildLocalSocksInbound("socks-in", SocksPort, "127.0.0.1"),
+            BuildLocalHttpInbound("http-in", HttpPort, "127.0.0.1")
         };
+
+        if (settings.SecureShareEnabled)
+        {
+            var sharePort = settings.ShareBindPort > 0 ? settings.ShareBindPort : DefaultSharePort;
+            EnsureShareCredentials(settings);
+            inbounds.Add(BuildShareSocksInbound(sharePort, settings.ShareAuthUser, settings.ShareAuthPass));
+            inbounds.Add(BuildShareHttpInbound(sharePort + 1, settings.ShareAuthUser, settings.ShareAuthPass));
+        }
 
         if (settings.EnableTunMode)
         {
@@ -42,6 +47,9 @@ public static class XrayConfigBuilder
                 ["inet4_address"] = "172.19.0.1/30",
                 ["stack"] = "system"
             };
+
+            if (!settings.BlockIpv6)
+                tunSettings["inet6_address"] = "fdfe:dcba:9876::1/126";
 
             if (tunFd is int fd)
             {
@@ -62,35 +70,94 @@ public static class XrayConfigBuilder
                 ["sniffing"] = new JsonObject
                 {
                     ["enabled"] = true,
-                    ["destOverride"] = new JsonArray { "http", "tls", "quic" }
+                    ["destOverride"] = new JsonArray { "http", "tls", "quic" },
+                    ["routeOnly"] = false
                 }
             });
         }
 
+        var outbounds = new JsonArray();
+
+        var useFragmentDialer = settings.EnablePacketFragment &&
+                                peers.Any(p => !IsVisionFlow(p));
+
+        if (useFragmentDialer)
+        {
+            outbounds.Add(new JsonObject
+            {
+                ["tag"] = "fragment",
+                ["protocol"] = "freedom",
+                ["settings"] = new JsonObject
+                {
+                    ["fragment"] = new JsonObject
+                    {
+                        ["packets"] = "tlshello",
+                        ["length"] = "100-200",
+                        ["interval"] = "10-20"
+                    }
+                }
+            });
+        }
+
+        if (useBalancer)
+        {
+            for (var i = 0; i < peers.Count; i++)
+                outbounds.Add(BuildOutbound(peers[i], $"proxy-{i}", useFragmentDialer));
+        }
+        else
+        {
+            outbounds.Add(BuildOutbound(peers[0], "proxy", useFragmentDialer));
+        }
+
+        outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
+        outbounds.Add(new JsonObject { ["tag"] = "block", ["protocol"] = "blackhole" });
+        outbounds.Add(new JsonObject
+        {
+            ["tag"] = "dns-out",
+            ["protocol"] = "dns",
+            ["settings"] = new JsonObject()
+        });
+
         var config = new JsonObject
         {
             ["log"] = new JsonObject { ["loglevel"] = "warning" },
-            ["dns"] = BuildDns(),
+            ["dns"] = BuildDns(settings),
             ["inbounds"] = inbounds,
-            ["outbounds"] = new JsonArray
-            {
-                BuildOutbound(server),
-                new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" },
-                new JsonObject { ["tag"] = "block", ["protocol"] = "blackhole" }
-            },
-            ["routing"] = BuildRouting(settings)
+            ["outbounds"] = outbounds,
+            ["routing"] = BuildRouting(settings, useBalancer)
         };
+
+        if (useBalancer)
+        {
+            var selector = new JsonArray();
+            for (var i = 0; i < peers.Count; i++)
+                selector.Add($"proxy-{i}");
+
+            config["burstObservatory"] = new JsonObject
+            {
+                ["subjectSelector"] = selector.DeepClone(),
+                ["pingConfig"] = new JsonObject
+                {
+                    ["destination"] = "https://www.gstatic.com/generate_204",
+                    ["interval"] = "1m",
+                    ["sampling"] = 2,
+                    ["timeout"] = "5s"
+                }
+            };
+
+            config["routing"]!["balancers"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["tag"] = "balancer",
+                    ["selector"] = selector,
+                    ["strategy"] = new JsonObject { ["type"] = "leastPing" }
+                }
+            };
+        }
 
         return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
-
-    private static JsonObject BuildDns() => new()
-    {
-        ["servers"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
-        ["queryStrategy"] = "UseIPv4"
-    };
-
-    public const int SpeedtestSocksPort = 10818;
 
     public static string BuildSpeedtest(ProxyServer server, int socksPort = SpeedtestSocksPort)
     {
@@ -110,7 +177,7 @@ public static class XrayConfigBuilder
             },
             ["outbounds"] = new JsonArray
             {
-                BuildOutbound(server),
+                BuildOutbound(server, "proxy", enableFragment: false),
                 new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" }
             },
             ["routing"] = new JsonObject
@@ -131,18 +198,97 @@ public static class XrayConfigBuilder
         return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static JsonObject BuildRouting(AppSettings settings)
+    public static void EnsureShareCredentials(AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.ShareAuthUser))
+            settings.ShareAuthUser = "v2rayf";
+
+        if (string.IsNullOrWhiteSpace(settings.ShareAuthPass))
+            settings.ShareAuthPass = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+    }
+
+    private static List<ProxyServer> NormalizePeers(
+        ProxyServer primary,
+        IReadOnlyList<ProxyServer>? multipathServers,
+        bool multipathEnabled)
+    {
+        var list = new List<ProxyServer> { primary };
+        if (!multipathEnabled || multipathServers is null || multipathServers.Count == 0)
+            return list;
+
+        foreach (var peer in multipathServers)
+        {
+            if (list.Any(s => s.Id == peer.Id))
+                continue;
+            list.Add(peer);
+            if (list.Count >= SmartConnectService.MaxMultipathCandidates)
+                break;
+        }
+
+        return list;
+    }
+
+    private static JsonObject BuildDns(AppSettings settings)
+    {
+        var dns = new JsonObject
+        {
+            ["queryStrategy"] = settings.BlockIpv6 ? "UseIPv4" : "UseIP",
+            ["tag"] = "dns-module"
+        };
+
+        if (settings.DnsThroughProxy)
+        {
+            // DoH endpoints; traffic tagged dns-module is routed through the proxy.
+            dns["servers"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["address"] = "https://1.1.1.1/dns-query",
+                    ["skipFallback"] = false
+                },
+                new JsonObject
+                {
+                    ["address"] = "https://8.8.8.8/dns-query",
+                    ["skipFallback"] = false
+                }
+            };
+        }
+        else
+        {
+            dns["servers"] = new JsonArray { "1.1.1.1", "8.8.8.8" };
+        }
+
+        return dns;
+    }
+
+    private static JsonObject BuildRouting(AppSettings settings, bool useBalancer)
     {
         var rules = new JsonArray();
 
-        if (settings.EnableTunMode)
+        // Xray DNS module traffic → proxy (or balancer).
+        if (settings.DnsThroughProxy)
+        {
+            rules.Add(MakeOutboundRule(
+                useBalancer,
+                inboundTag: "dns-module"));
+        }
+
+        // App DNS on TUN/local → dns outbound (resolved via dns module above).
+        rules.Add(new JsonObject
+        {
+            ["type"] = "field",
+            ["port"] = "53",
+            ["network"] = "udp,tcp",
+            ["outboundTag"] = "dns-out"
+        });
+
+        // Private LAN stays out of Global except loopback (local apps).
+        if (settings.RoutingMode == RoutingMode.Global)
         {
             rules.Add(new JsonObject
             {
                 ["type"] = "field",
-                ["inboundTag"] = new JsonArray { "tun-in" },
-                ["port"] = "53",
-                ["network"] = "udp",
+                ["ip"] = new JsonArray { "127.0.0.0/8", "::1/128" },
                 ["outboundTag"] = "direct"
             });
         }
@@ -150,24 +296,11 @@ public static class XrayConfigBuilder
         switch (settings.RoutingMode)
         {
             case RoutingMode.BypassLan:
-                rules.Add(new JsonObject
-                {
-                    ["type"] = "field",
-                    ["ip"] = new JsonArray
-                    {
-                        "10.0.0.0/8",
-                        "172.16.0.0/12",
-                        "192.168.0.0/16",
-                        "127.0.0.0/8",
-                        "169.254.0.0/16",
-                        "224.0.0.0/4",
-                        "240.0.0.0/4"
-                    },
-                    ["outboundTag"] = "direct"
-                });
+                rules.Add(PrivateLanDirectRule());
                 break;
 
             case RoutingMode.BypassChina:
+                rules.Add(PrivateLanDirectRule());
                 rules.Add(new JsonObject
                 {
                     ["type"] = "field",
@@ -183,40 +316,35 @@ public static class XrayConfigBuilder
                 break;
 
             case RoutingMode.CustomDirect:
-                foreach (var entry in ParseCustomRules(settings.CustomDirectRules))
-                {
-                    if (entry.StartsWith("full:", StringComparison.Ordinal) ||
-                        entry.StartsWith("domain:", StringComparison.Ordinal) ||
-                        entry.StartsWith("regexp:", StringComparison.Ordinal) ||
-                        entry.Contains('.') && !entry.Contains('/'))
-                    {
-                        var domain = entry.Contains(':') ? entry : $"domain:{entry}";
-                        rules.Add(new JsonObject
-                        {
-                            ["type"] = "field",
-                            ["domain"] = new JsonArray { domain },
-                            ["outboundTag"] = "direct"
-                        });
-                    }
-                    else
-                    {
-                        rules.Add(new JsonObject
-                        {
-                            ["type"] = "field",
-                            ["ip"] = new JsonArray { entry },
-                            ["outboundTag"] = "direct"
-                        });
-                    }
-                }
+                AppendCustomRules(rules, settings.CustomBlockRules, "block");
+                AppendCustomRules(rules, settings.CustomProxyRules, useBalancer ? null : "proxy", useBalancer ? "balancer" : null);
+                AppendCustomRules(rules, settings.CustomDirectRules, "direct");
+                rules.Add(PrivateLanDirectRule());
+                break;
+
+            case RoutingMode.Global:
+            default:
                 break;
         }
 
-        rules.Add(new JsonObject
+        if (useBalancer)
         {
-            ["type"] = "field",
-            ["network"] = "tcp,udp",
-            ["outboundTag"] = "proxy"
-        });
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["network"] = "tcp,udp",
+                ["balancerTag"] = "balancer"
+            });
+        }
+        else
+        {
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["network"] = "tcp,udp",
+                ["outboundTag"] = "proxy"
+            });
+        }
 
         return new JsonObject
         {
@@ -225,25 +353,186 @@ public static class XrayConfigBuilder
         };
     }
 
-    private static IEnumerable<string> ParseCustomRules(string rules) =>
-        rules.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static JsonObject BuildOutbound(ProxyServer server) =>
-        server.Protocol switch
+    private static JsonObject MakeOutboundRule(bool useBalancer, string inboundTag)
+    {
+        if (useBalancer)
         {
-            ProxyProtocol.VMess => BuildVmessOutbound(server),
-            ProxyProtocol.VLESS => BuildVlessOutbound(server),
-            ProxyProtocol.Shadowsocks => BuildShadowsocksOutbound(server),
-            ProxyProtocol.Trojan => BuildTrojanOutbound(server),
-            ProxyProtocol.Socks => BuildSocksOutbound(server),
+            return new JsonObject
+            {
+                ["type"] = "field",
+                ["inboundTag"] = new JsonArray { inboundTag },
+                ["balancerTag"] = "balancer"
+            };
+        }
+
+        return new JsonObject
+        {
+            ["type"] = "field",
+            ["inboundTag"] = new JsonArray { inboundTag },
+            ["outboundTag"] = "proxy"
+        };
+    }
+
+    private static JsonObject PrivateLanDirectRule() => new()
+    {
+        ["type"] = "field",
+        ["ip"] = new JsonArray
+        {
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "127.0.0.0/8",
+            "169.254.0.0/16",
+            "224.0.0.0/4",
+            "240.0.0.0/4",
+            "fc00::/7",
+            "fe80::/10",
+            "::1/128"
+        },
+        ["outboundTag"] = "direct"
+    };
+
+    private static void AppendCustomRules(
+        JsonArray rules,
+        string raw,
+        string? outboundTag,
+        string? balancerTag = null)
+    {
+        foreach (var entry in ParseCustomRules(raw))
+        {
+            JsonObject rule;
+            if (entry.StartsWith("full:", StringComparison.Ordinal) ||
+                entry.StartsWith("domain:", StringComparison.Ordinal) ||
+                entry.StartsWith("regexp:", StringComparison.Ordinal) ||
+                (entry.Contains('.') && !entry.Contains('/')))
+            {
+                var domain = entry.Contains(':') ? entry : $"domain:{entry}";
+                rule = new JsonObject
+                {
+                    ["type"] = "field",
+                    ["domain"] = new JsonArray { domain }
+                };
+            }
+            else
+            {
+                rule = new JsonObject
+                {
+                    ["type"] = "field",
+                    ["ip"] = new JsonArray { entry }
+                };
+            }
+
+            if (!string.IsNullOrEmpty(balancerTag))
+                rule["balancerTag"] = balancerTag;
+            else
+                rule["outboundTag"] = outboundTag;
+
+            rules.Add(rule);
+        }
+    }
+
+    private static IEnumerable<string> ParseCustomRules(string rules) =>
+        string.IsNullOrWhiteSpace(rules)
+            ? []
+            : rules.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static JsonObject BuildLocalSocksInbound(string tag, int port, string listen) => new()
+    {
+        ["tag"] = tag,
+        ["port"] = port,
+        ["listen"] = listen,
+        ["protocol"] = "socks",
+        ["settings"] = new JsonObject { ["udp"] = true }
+    };
+
+    private static JsonObject BuildLocalHttpInbound(string tag, int port, string listen) => new()
+    {
+        ["tag"] = tag,
+        ["port"] = port,
+        ["listen"] = listen,
+        ["protocol"] = "http"
+    };
+
+    private static JsonObject BuildShareSocksInbound(int port, string user, string pass) => new()
+    {
+        ["tag"] = "share-socks",
+        ["port"] = port,
+        ["listen"] = "0.0.0.0",
+        ["protocol"] = "socks",
+        ["settings"] = new JsonObject
+        {
+            ["udp"] = true,
+            ["auth"] = "password",
+            ["accounts"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["user"] = user,
+                    ["pass"] = pass
+                }
+            }
+        },
+        ["sniffing"] = new JsonObject
+        {
+            ["enabled"] = true,
+            ["destOverride"] = new JsonArray { "http", "tls" }
+        }
+    };
+
+    private static JsonObject BuildShareHttpInbound(int port, string user, string pass) => new()
+    {
+        ["tag"] = "share-http",
+        ["port"] = port,
+        ["listen"] = "0.0.0.0",
+        ["protocol"] = "http",
+        ["settings"] = new JsonObject
+        {
+            ["accounts"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["user"] = user,
+                    ["pass"] = pass
+                }
+            },
+            ["allowTransparent"] = false
+        }
+    };
+
+    private static JsonObject BuildOutbound(ProxyServer server, string tag, bool enableFragment)
+    {
+        var outbound = server.Protocol switch
+        {
+            ProxyProtocol.VMess => BuildVmessOutbound(server, tag),
+            ProxyProtocol.VLESS => BuildVlessOutbound(server, tag),
+            ProxyProtocol.Shadowsocks => BuildShadowsocksOutbound(server, tag),
+            ProxyProtocol.Trojan => BuildTrojanOutbound(server, tag),
+            ProxyProtocol.Socks => BuildSocksOutbound(server, tag),
             _ => throw new NotSupportedException($"Protocol {server.Protocol} is not supported.")
         };
 
-    private static JsonObject BuildVmessOutbound(ProxyServer server)
+        if (enableFragment &&
+            !IsVisionFlow(server) &&
+            outbound["streamSettings"] is JsonObject stream)
+        {
+            stream["sockopt"] = new JsonObject
+            {
+                ["dialerProxy"] = "fragment"
+            };
+        }
+
+        return outbound;
+    }
+
+    private static bool IsVisionFlow(ProxyServer server) =>
+        !string.IsNullOrWhiteSpace(server.Flow) &&
+        server.Flow.Contains("vision", StringComparison.OrdinalIgnoreCase);
+
+    private static JsonObject BuildVmessOutbound(ProxyServer server, string tag)
     {
         var outbound = new JsonObject
         {
-            ["tag"] = "proxy",
+            ["tag"] = tag,
             ["protocol"] = "vmess",
             ["settings"] = new JsonObject
             {
@@ -271,7 +560,7 @@ public static class XrayConfigBuilder
         return outbound;
     }
 
-    private static JsonObject BuildVlessOutbound(ProxyServer server)
+    private static JsonObject BuildVlessOutbound(ProxyServer server, string tag)
     {
         var user = new JsonObject
         {
@@ -282,9 +571,9 @@ public static class XrayConfigBuilder
         if (!string.IsNullOrWhiteSpace(server.Flow))
             user["flow"] = server.Flow;
 
-        var outbound = new JsonObject
+        return new JsonObject
         {
-            ["tag"] = "proxy",
+            ["tag"] = tag,
             ["protocol"] = "vless",
             ["settings"] = new JsonObject
             {
@@ -300,13 +589,11 @@ public static class XrayConfigBuilder
             },
             ["streamSettings"] = BuildStreamSettings(server)
         };
-
-        return outbound;
     }
 
-    private static JsonObject BuildShadowsocksOutbound(ProxyServer server) => new()
+    private static JsonObject BuildShadowsocksOutbound(ProxyServer server, string tag) => new()
     {
-        ["tag"] = "proxy",
+        ["tag"] = tag,
         ["protocol"] = "shadowsocks",
         ["settings"] = new JsonObject
         {
@@ -323,9 +610,9 @@ public static class XrayConfigBuilder
         }
     };
 
-    private static JsonObject BuildTrojanOutbound(ProxyServer server) => new()
+    private static JsonObject BuildTrojanOutbound(ProxyServer server, string tag) => new()
     {
-        ["tag"] = "proxy",
+        ["tag"] = tag,
         ["protocol"] = "trojan",
         ["settings"] = new JsonObject
         {
@@ -346,12 +633,13 @@ public static class XrayConfigBuilder
             ["tlsSettings"] = new JsonObject
             {
                 ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
-                ["allowInsecure"] = server.AllowInsecure
+                ["allowInsecure"] = server.AllowInsecure,
+                ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint
             }
         }
     };
 
-    private static JsonObject BuildSocksOutbound(ProxyServer server)
+    private static JsonObject BuildSocksOutbound(ProxyServer server, string tag)
     {
         var socksServer = new JsonObject
         {
@@ -373,7 +661,7 @@ public static class XrayConfigBuilder
 
         return new JsonObject
         {
-            ["tag"] = "proxy",
+            ["tag"] = tag,
             ["protocol"] = "socks",
             ["settings"] = new JsonObject
             {
@@ -396,7 +684,8 @@ public static class XrayConfigBuilder
                 stream["tlsSettings"] = new JsonObject
                 {
                     ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
-                    ["allowInsecure"] = server.AllowInsecure
+                    ["allowInsecure"] = server.AllowInsecure,
+                    ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint
                 };
                 break;
 

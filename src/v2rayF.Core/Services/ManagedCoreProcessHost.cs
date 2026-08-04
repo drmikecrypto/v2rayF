@@ -17,6 +17,8 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
 
     public bool HasExited => _process is null || _process.HasExited;
 
+    public event EventHandler? UnexpectedExited;
+
     public Task StartAsync(
         string corePath,
         string configPath,
@@ -52,11 +54,14 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        _manualStop = true;
         var process = Interlocked.Exchange(ref _process, null);
         if (process is null)
+        {
+            _manualStop = false;
             return;
+        }
 
-        _manualStop = true;
         try
         {
             if (!process.HasExited)
@@ -101,6 +106,14 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
             return;
 
         _process = null;
+        try
+        {
+            UnexpectedExited?.Invoke(this, EventArgs.Empty);
+        }
+        catch
+        {
+            // Never throw from process exit handler.
+        }
     }
 
     private void OnErrorDataReceived(object sender, DataReceivedEventArgs e)

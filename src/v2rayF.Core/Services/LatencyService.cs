@@ -30,26 +30,43 @@ public sealed class LatencyService
         _speedtestHost = environment.CreateProcessHost();
     }
 
-    public async Task<int?> MeasureAsync(ProxyServer server, CancellationToken cancellationToken = default)
+    public async Task<int?> MeasureTcpOnlyAsync(ProxyServer server, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(server.Address) || server.Port <= 0)
             return null;
 
-        // TCP RTT to the node — same metric most clients show (v2rayNG, Hiddify, etc.).
-        var tcp = await MeasureTcpAsync(server, cancellationToken).ConfigureAwait(false);
-        if (tcp.HasValue && tcp.Value >= 0)
-            return tcp;
+        return await MeasureTcpAsync(server, cancellationToken).ConfigureAwait(false);
+    }
 
-        // Some nodes block raw TCP probes; fall back to a short proxy path test.
+    public async Task<int?> MeasureAsync(ProxyServer server, CancellationToken cancellationToken = default)
+    {
+        var detailed = await MeasureDetailedAsync(server, cancellationToken).ConfigureAwait(false);
+        return detailed.LatencyMs;
+    }
+
+    public readonly record struct LatencyResult(int? LatencyMs, bool ProxyPathOk);
+
+    /// <summary>
+    /// Prefer proxy-path RTT; fall back to TCP. ProxyPathOk is true only when generate_204 via the node succeeded.
+    /// </summary>
+    public async Task<LatencyResult> MeasureDetailedAsync(ProxyServer server, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(server.Address) || server.Port <= 0)
+            return new LatencyResult(null, false);
+
         await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
         if (File.Exists(_environment.GetCorePath()))
         {
             var proxyResult = await MeasureViaCoreAsync(server, cancellationToken).ConfigureAwait(false);
             if (proxyResult.HasValue && proxyResult.Value >= 0)
-                return proxyResult;
+                return new LatencyResult(proxyResult, true);
         }
 
-        return tcp ?? -1;
+        var tcp = await MeasureTcpAsync(server, cancellationToken).ConfigureAwait(false);
+        if (tcp.HasValue && tcp.Value >= 0)
+            return new LatencyResult(tcp, false);
+
+        return new LatencyResult(tcp ?? -1, false);
     }
 
     public async Task<int?> MeasureViaSocksAsync(int socksPort, CancellationToken cancellationToken = default)

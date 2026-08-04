@@ -54,14 +54,30 @@ See [Subscription URLs](tips/subscription-urls.md) and [Latency testing](tips/la
 
 ## 4. Settings (right panel)
 
+Use **Apply Sentinel profile** for maximum anti-censorship defaults (Global routing, kill switch, DNS through proxy, IPv6 block, TUN when available).
+
+### Smart Connect / Multipath / Secure Share
+
+| Toggle | Behavior |
+|--------|----------|
+| **Smart Connect** | Probes added servers and connects to the fastest working one (failover on failure) |
+| **Smart Multipath** | Balances across top nodes via Xray observatory |
+| **Secure Share** | LAN SOCKS/HTTP gateway so other devices use this tunnel — see [Secure Share](tips/secure-share.md) |
+| **Kill switch** | Blocks clearnet if the tunnel drops (needs admin on desktop) |
+| **DNS through proxy** | Prevents ISP DNS leaks |
+| **Block IPv6** | Stops IPv6 bypass around the tunnel |
+| **Packet fragment** | Optional DPI evasion (slower) |
+
 ### Routing
+
+See [Routing rules](tips/routing-rules.md).
 
 | Mode | Behavior |
 |------|----------|
-| **Global** | All TCP/UDP through the proxy |
+| **Global** | All TCP/UDP through the proxy (Sentinel) |
 | **Bypass LAN** | Private IPs go direct (default) |
 | **Bypass China** | CN domains/IPs direct (uses geo files in `cores/`) |
-| **Custom** | Your own direct list (domains or CIDRs, one per line) |
+| **Custom** | Direct / Proxy / Block lists |
 
 Click **Save settings** before connecting if you changed routing.
 
