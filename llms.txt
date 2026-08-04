@@ -1,0 +1,55 @@
+# v2rayF
+
+> Cross-platform V2Ray / Xray proxy and TUN VPN client for Windows, macOS, Linux, and Android.
+
+This file helps LLMs and automated agents understand the project quickly. Humans should start with [README.md](README.md) and [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+
+## Summary
+
+- **Name:** v2rayF
+- **Owner:** drmikecrypto
+- **Repo:** https://github.com/drmikecrypto/v2rayF
+- **License:** MIT
+- **UI:** Avalonia (.NET 10)
+- **Data plane:** Xray-core (bundled in release zips; not committed to git)
+- **Platforms:** Windows (x64/arm64), macOS (x64/arm64), Linux (x64/arm64), Android (arm64). No iOS product.
+- **Protocols:** VMess, VLESS (REALITY / Vision), Shadowsocks, Trojan, SOCKS
+- **Latest downloads:** https://github.com/drmikecrypto/v2rayF/releases/latest
+
+## What it is for
+
+Privacy and anti-censorship proxy use: import `vless://` / `vmess://` / `ss://` / `trojan://` links or HTTPS subscriptions, connect via system proxy or TUN/VPN, with optional Smart Connect, multipath balancing, DNS-through-proxy, IPv6 block, kill switch (Windows Firewall + Android VpnService hold), and Secure Share (LAN SOCKS/HTTP).
+
+## Key paths
+
+| Path | Role |
+|------|------|
+| `src/v2rayF.Core/` | Models, Xray config builder, latency, stores, orchestration services |
+| `src/v2rayF/` | Shared Avalonia UI and ViewModels |
+| `src/v2rayF.Desktop/` | Desktop host, system proxy, Windows kill switch |
+| `src/v2rayF.Android/` | Android VpnService, Java ProcessBuilder Xray host |
+| `scripts/package-all.ps1` | Desktop release packaging |
+| `scripts/package-android-release.ps1` | Android APK zip packaging |
+| `docs/` | User-facing tips (routing, Secure Share, Sentinel QA) |
+
+## Important commands
+
+```bash
+dotnet run --project src/v2rayF.Desktop/v2rayF.Desktop.csproj
+pwsh -File scripts/package-all.ps1
+pwsh -File scripts/package-android-release.ps1
+```
+
+## Docs for deeper reading
+
+- [README.md](README.md) — overview, diagrams, FAQ, downloads
+- [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — install and connect
+- [docs/tips/routing-rules.md](docs/tips/routing-rules.md) — routing presets
+- [docs/tips/secure-share.md](docs/tips/secure-share.md) — LAN gateway / hotspot notes
+- [docs/tips/sentinel-qa.md](docs/tips/sentinel-qa.md) — leak / lifecycle checklist
+- [CHANGELOG.md](CHANGELOG.md) — version history
+- [SECURITY.md](SECURITY.md) — vulnerability reporting
+
+## Optional
+
+- [docs/llms-full.txt](docs/llms-full.txt) — longer machine-oriented feature map
