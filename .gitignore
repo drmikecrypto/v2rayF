@@ -36,3 +36,9 @@ project.lock.json
 
 # Publish artifacts outside dist/
 publish/
+
+# Android signing (never commit keystores / passwords)
+*.jks
+*.keystore
+**/credentials.txt
+.signing/

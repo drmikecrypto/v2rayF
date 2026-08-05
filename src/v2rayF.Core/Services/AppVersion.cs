@@ -4,8 +4,15 @@ namespace v2rayF.Services;
 
 public static class AppVersion
 {
+    private static string? _override;
+
+    /// <summary>Prefer platform package version (e.g. Android VersionName) when available.</summary>
+    public static void OverrideCurrent(string version) =>
+        _override = string.IsNullOrWhiteSpace(version) ? null : Normalize(version);
+
     public static string Current =>
-        Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)
+        _override
+        ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3)
         ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
         ?? "0.0.0";
 

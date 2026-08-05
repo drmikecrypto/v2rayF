@@ -205,6 +205,9 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
 
+        AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync();
+        AppServices.ReportStatus = msg => RunOnUiThread(() => StatusText = msg);
+
         UpdateCoreStatus();
         _ = InitializeAsync();
     }
@@ -258,12 +261,24 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             var offer = await _updateCheck.CheckAsync(AppServices.Updater.ReleaseAssetFileName).ConfigureAwait(true);
             if (offer is null)
+            {
+                await SetOnUiAsync(() =>
+                {
+                    _pendingUpdate = null;
+                    UpdateAvailable = false;
+                    UpdateLabel = "";
+                }).ConfigureAwait(true);
                 return;
+            }
 
-            _pendingUpdate = offer;
-            UpdateAvailable = true;
-            UpdateLabel = offer.Version;
-            StatusText = $"v{offer.Version} is available — tap Update.";
+            await SetOnUiAsync(() =>
+            {
+                _pendingUpdate = offer;
+                UpdateAvailable = true;
+                UpdateLabel = offer.Version;
+                if (!IsBusy && !IsUpdating)
+                    StatusText = $"v{offer.Version} is available — tap Update.";
+            }).ConfigureAwait(true);
         }
         catch
         {
@@ -286,15 +301,21 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var progress = new Progress<string>(msg => RunOnUiThread(() => StatusText = msg));
             await AppServices.Updater.ApplyUpdateAsync(_pendingUpdate, progress).ConfigureAwait(true);
+            await SetOnUiAsync(() =>
+                StatusText = "Confirm the system Install prompt, then return here.").ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            StatusText = $"Update failed: {StatusSanitizer.Scrub(ex.Message)}";
-            IsUpdating = false;
+            await SetOnUiAsync(() =>
+                StatusText = $"Update failed: {StatusSanitizer.Scrub(ex.Message)}").ConfigureAwait(true);
         }
         finally
         {
-            IsBusy = false;
+            await SetOnUiAsync(() =>
+            {
+                IsBusy = false;
+                IsUpdating = false;
+            }).ConfigureAwait(true);
         }
     }
 

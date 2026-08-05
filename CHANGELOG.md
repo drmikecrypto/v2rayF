@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-08-06
+
+### Fixed
+
+- Android in-app Update now signs release APKs with a stable keystore (GitHub secrets) so upgrades are no longer rejected with signature mismatch
+- Android Update UX — PackageInstaller status callbacks, signature-mismatch guidance (uninstall once if upgrading from 1.3.1 and earlier CI builds), clear IsUpdating after opening the installer, refresh update check on resume
+- Android `versionCode` derived as `major*10000+minor*100+patch` (1.3.2 → 10302) so upgrades always increase the package version code
+- Android version label prefers package `VersionName` for update comparisons
+
 ## [1.3.1] - 2026-08-06
 
 ### Fixed

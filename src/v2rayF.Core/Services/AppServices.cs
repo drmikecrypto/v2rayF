@@ -17,4 +17,10 @@ public static class AppServices
 
     /// <summary>Called when the Android activity stops — tear down VPN so network is not left hijacked.</summary>
     public static Func<Task>? EmergencyDisconnectAsync { get; set; }
+
+    /// <summary>Re-check GitHub releases (e.g. after returning from the system package installer).</summary>
+    public static Action? RefreshUpdateCheck { get; set; }
+
+    /// <summary>Surface updater / PackageInstaller status into the UI status line.</summary>
+    public static Action<string>? ReportStatus { get; set; }
 }

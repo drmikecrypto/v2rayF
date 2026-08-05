@@ -24,10 +24,25 @@ public class V2rayApplication : AvaloniaAndroidApplication<v2rayF.App>
         AppServices.CoreProcessHost = new AndroidJavaCoreProcessHost();
         AppServices.KillSwitch = new AndroidKillSwitch();
         AppServices.Updater = new AndroidAppUpdater();
+        TryOverrideAppVersion();
         AndroidEnvironment.UnhandledExceptionRaiser += (_, e) =>
             global::Android.Util.Log.Error("v2rayF", e.Exception?.ToString() ?? "Unhandled exception");
         base.OnCreate();
         _ = WarmupAsync();
+    }
+
+    private void TryOverrideAppVersion()
+    {
+        try
+        {
+            var info = PackageManager?.GetPackageInfo(PackageName!, 0);
+            if (!string.IsNullOrWhiteSpace(info?.VersionName))
+                AppVersion.OverrideCurrent(info.VersionName);
+        }
+        catch
+        {
+            // Fall back to assembly version.
+        }
     }
 
     private static async Task WarmupAsync()

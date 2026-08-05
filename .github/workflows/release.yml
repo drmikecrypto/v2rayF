@@ -47,10 +47,35 @@ jobs:
         if: matrix.android == true
         run: dotnet workload install android
 
+      - name: Decode Android release keystore
+        if: matrix.android == true
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Missing secret ANDROID_KEYSTORE_BASE64 — Android releases must be signed with a stable key."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/signing"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/signing/v2rayf-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/v2rayf-release.jks" >> "$GITHUB_ENV"
+
       - name: Package Android APK
         if: matrix.android == true
         shell: pwsh
-        run: ./scripts/package-android-release.ps1 -XrayVersion ${{ env.XRAY_VERSION }}
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:ANDROID_KEYSTORE_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:ANDROID_KEY_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace('${{ secrets.ANDROID_KEY_ALIAS }}')) {
+            throw "Missing Android signing secrets (ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD / ANDROID_KEY_ALIAS)."
+          }
+          ./scripts/package-android-release.ps1 `
+            -XrayVersion ${{ env.XRAY_VERSION }} `
+            -KeystorePath $env:ANDROID_KEYSTORE_PATH `
+            -KeyAlias '${{ secrets.ANDROID_KEY_ALIAS }}'
 
       - name: Package ${{ matrix.rid }}
         if: matrix.android != true
