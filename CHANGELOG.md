@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-08-06
+
 ### Fixed
 
 - Android Connect crash — Avalonia UI property updates after VPN/Xray awaits are marshalled back to the UI thread (fixes “different thread owns it” and app close on Connect)
+- Android APK `ApplicationDisplayVersion` / version code now match the release version (was stuck on 1.2.2)
 
 ## [1.3.0] - 2026-08-04
 
