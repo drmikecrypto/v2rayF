@@ -22,4 +22,25 @@ public abstract class ViewModelBase : ObservableObject
         else
             await Dispatcher.UIThread.InvokeAsync(action).ConfigureAwait(true);
     }
+
+    /// <summary>Awaitable UI marshal for property updates after off-thread work.</summary>
+    protected static Task SetOnUiAsync(Action action)
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        return Dispatcher.UIThread.InvokeAsync(action).GetTask();
+    }
+
+    /// <summary>Re-enter the Avalonia UI context after ConfigureAwait(false) / Android thread hops.</summary>
+    protected static Task ResumeOnUiAsync()
+    {
+        if (Dispatcher.UIThread.CheckAccess())
+            return Task.CompletedTask;
+
+        return Dispatcher.UIThread.InvokeAsync(() => { }).GetTask();
+    }
 }

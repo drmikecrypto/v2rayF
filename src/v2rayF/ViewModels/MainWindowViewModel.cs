@@ -561,38 +561,51 @@ public partial class MainWindowViewModel : ViewModelBase
         if (ConnectionState is ConnectionState.Connecting or ConnectionState.Disconnecting)
             return;
 
-        await ConnectWithOrchestrationAsync().ConfigureAwait(true);
+        if (IsMobile)
+            await RunOnUiThreadAsync(ConnectWithOrchestrationAsync).ConfigureAwait(true);
+        else
+            await ConnectWithOrchestrationAsync().ConfigureAwait(true);
     }
 
     private async Task ConnectWithOrchestrationAsync()
     {
-        if (!await _connectionGate.WaitAsync(0).ConfigureAwait(true))
+        if (!await _connectionGate.WaitAsync(0).ConfigureAwait(false))
             return;
+
+        await ResumeOnUiAsync().ConfigureAwait(true);
 
         _connectCts?.Cancel();
         _connectCts?.Dispose();
         _connectCts = new CancellationTokenSource();
         var token = _connectCts.Token;
 
-        IsBusy = true;
-        ConnectionState = ConnectionState.Connecting;
-        OnPropertyChanged(nameof(ConnectButtonText));
+        await SetOnUiAsync(() =>
+        {
+            IsBusy = true;
+            ConnectionState = ConnectionState.Connecting;
+            OnPropertyChanged(nameof(ConnectButtonText));
+        }).ConfigureAwait(true);
 
         try
         {
             if (!_proxyCore.IsCoreAvailable())
             {
-                await AppServices.CoreEnvironment.EnsureCoreAsync(token).ConfigureAwait(true);
-                UpdateCoreStatus();
+                await AppServices.CoreEnvironment.EnsureCoreAsync(token).ConfigureAwait(false);
+                await ResumeOnUiAsync().ConfigureAwait(true);
+                await SetOnUiAsync(UpdateCoreStatus).ConfigureAwait(true);
             }
 
             if (!_proxyCore.IsCoreAvailable())
             {
-                StatusText = "Xray core not found.";
-                ConnectionState = ConnectionState.Failed;
+                await SetOnUiAsync(() =>
+                {
+                    StatusText = "Xray core not found.";
+                    ConnectionState = ConnectionState.Failed;
+                }).ConfigureAwait(true);
                 return;
             }
 
+            await ResumeOnUiAsync().ConfigureAwait(true);
             var settings = CollectSettings();
             if (IsMobile)
             {
@@ -602,15 +615,21 @@ public partial class MainWindowViewModel : ViewModelBase
                     settings.RoutingMode = RoutingMode.BypassLan;
             }
 
-            await _settingsStore.SaveAsync(settings).ConfigureAwait(true);
+            await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+            await ResumeOnUiAsync().ConfigureAwait(true);
 
             IReadOnlyList<ProxyServer> candidates;
             if (settings.SmartConnectEnabled && Servers.Count > 0)
             {
-                StatusText = "Smart Connect — probing servers…";
-                _lastRanking = await _smartConnect.RankAsync(Servers.ToList(), token).ConfigureAwait(true);
-                foreach (var ranked in _lastRanking)
-                    ranked.Server.SetLatency(ranked.LatencyMs < 0 ? -1 : ranked.LatencyMs);
+                await SetOnUiAsync(() => StatusText = "Smart Connect — probing servers…").ConfigureAwait(true);
+                var serversSnapshot = Servers.ToList();
+                _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                await ResumeOnUiAsync().ConfigureAwait(true);
+                await SetOnUiAsync(() =>
+                {
+                    foreach (var ranked in _lastRanking)
+                        ranked.Server.SetLatency(ranked.LatencyMs < 0 ? -1 : ranked.LatencyMs);
+                }).ConfigureAwait(true);
 
                 candidates = _smartConnect.SelectConnectOrder(
                     _lastRanking,
@@ -621,22 +640,32 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 if (SelectedServer is null)
                 {
-                    StatusText = "Select a server first.";
-                    ConnectionState = ConnectionState.Failed;
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = "Select a server first.";
+                        ConnectionState = ConnectionState.Failed;
+                    }).ConfigureAwait(true);
                     return;
                 }
 
                 candidates = [SelectedServer];
                 if (settings.SmartMultipathEnabled && Servers.Count > 1)
-                    _lastRanking = await _smartConnect.RankAsync(Servers.ToList(), token).ConfigureAwait(true);
+                {
+                    var serversSnapshot = Servers.ToList();
+                    _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                    await ResumeOnUiAsync().ConfigureAwait(true);
+                }
             }
 
             Exception? lastError = null;
             foreach (var server in candidates)
             {
                 token.ThrowIfCancellationRequested();
-                SelectedServer = server;
-                StatusText = $"Connecting to {StatusSanitizer.Scrub(server.Name)}…";
+                await SetOnUiAsync(() =>
+                {
+                    SelectedServer = server;
+                    StatusText = $"Connecting to {StatusSanitizer.Scrub(server.Name)}…";
+                }).ConfigureAwait(true);
 
                 try
                 {
@@ -644,58 +673,83 @@ public partial class MainWindowViewModel : ViewModelBase
                     if (settings.SmartMultipathEnabled && Servers.Count > 1)
                     {
                         if (_lastRanking.Count == 0)
-                            _lastRanking = await _smartConnect.RankAsync(Servers.ToList(), token).ConfigureAwait(true);
+                        {
+                            var serversSnapshot = Servers.ToList();
+                            _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                            await ResumeOnUiAsync().ConfigureAwait(true);
+                        }
+
                         multipath = _smartConnect.PickMultipathPeers(_lastRanking, server);
                     }
 
                     if (IsMobile)
-                        await ConnectAndroidAsync(server, settings, multipath, token).ConfigureAwait(true);
+                        await ConnectAndroidAsync(server, settings, multipath, token).ConfigureAwait(false);
                     else
-                        await ConnectDesktopAsync(server, settings, multipath, token).ConfigureAwait(true);
+                        await ConnectDesktopAsync(server, settings, multipath, token).ConfigureAwait(false);
 
+                    await ResumeOnUiAsync().ConfigureAwait(true);
                     settings.LastGoodServerId = server.Id.ToString();
-                    await _settingsStore.SaveAsync(settings).ConfigureAwait(true);
-                    await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
-                    ConnectionState = ConnectionState.Connected;
-                    UpdateSecureShareEndpoint();
+                    await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+                    await _serverStore.SaveAsync(Servers).ConfigureAwait(false);
+                    await SetOnUiAsync(() =>
+                    {
+                        ConnectionState = ConnectionState.Connected;
+                        UpdateSecureShareEndpoint();
+                    }).ConfigureAwait(true);
                     return;
                 }
                 catch (OperationCanceledException)
                 {
-                    await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
-                    StatusText = "Connect cancelled.";
-                    ConnectionState = ConnectionState.Idle;
+                    await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = "Connect cancelled.";
+                        ConnectionState = ConnectionState.Idle;
+                    }).ConfigureAwait(true);
                     return;
                 }
                 catch (Exception ex)
                 {
                     lastError = ex;
                     // Keep kill switch armed across failover attempts (no clearnet window).
-                    await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(true);
+                    await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(false);
+                    await ResumeOnUiAsync().ConfigureAwait(true);
                 }
             }
 
-            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
-            ConnectionState = ConnectionState.Failed;
-            StatusText = $"Connection failed: {StatusSanitizer.Scrub(lastError?.Message ?? "no candidates")}";
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Failed;
+                StatusText = $"Connection failed: {StatusSanitizer.Scrub(lastError?.Message ?? "no candidates")}";
+            }).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
-            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
-            StatusText = "Connect cancelled.";
-            ConnectionState = ConnectionState.Idle;
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+            await SetOnUiAsync(() =>
+            {
+                StatusText = "Connect cancelled.";
+                ConnectionState = ConnectionState.Idle;
+            }).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
-            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
-            ConnectionState = ConnectionState.Failed;
-            StatusText = $"Connection failed: {StatusSanitizer.Scrub(ex.Message)}";
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Failed;
+                StatusText = $"Connection failed: {StatusSanitizer.Scrub(ex.Message)}";
+            }).ConfigureAwait(true);
         }
         finally
         {
-            IsBusy = false;
-            OnPropertyChanged(nameof(ConnectButtonText));
-            OnPropertyChanged(nameof(TrayToolTip));
+            await SetOnUiAsync(() =>
+            {
+                IsBusy = false;
+                OnPropertyChanged(nameof(ConnectButtonText));
+                OnPropertyChanged(nameof(TrayToolTip));
+            }).ConfigureAwait(true);
             _connectionGate.Release();
         }
     }
@@ -713,17 +767,24 @@ public partial class MainWindowViewModel : ViewModelBase
                 blockIpv6: settings.BlockIpv6,
                 cancellationToken).ConfigureAwait(false);
 
+        await ResumeOnUiAsync().ConfigureAwait(true);
+
         // Start core first; arm kill switch only after SOCKS is up (fail-closed without blocking dial).
         await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
+        await ResumeOnUiAsync().ConfigureAwait(true);
 
         if (settings.KillSwitchEnabled)
         {
             await AppServices.KillSwitch.EnableAsync(_proxyCore.ResolveCorePath(), cancellationToken)
                 .ConfigureAwait(false);
+            await ResumeOnUiAsync().ConfigureAwait(true);
         }
 
         if (settings.EnableSystemProxy && !settings.EnableTunMode)
+        {
             await AppServices.Platform.EnableProxyAsync(cancellationToken).ConfigureAwait(false);
+            await ResumeOnUiAsync().ConfigureAwait(true);
+        }
 
         var mode = settings.EnableTunMode
             ? "TUN"
@@ -732,12 +793,16 @@ public partial class MainWindowViewModel : ViewModelBase
                 : "manual 127.0.0.1:10809";
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
-        StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({mode}{multi})";
-        IsConnected = true;
-
+        var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({mode}{multi})";
         if (settings.KillSwitchEnabled && !string.IsNullOrWhiteSpace(AppServices.KillSwitch.LastError) &&
             !AppServices.KillSwitch.IsArmed)
-            StatusText += " · kill switch unavailable (need admin)";
+            status += " · kill switch unavailable (need admin)";
+
+        await SetOnUiAsync(() =>
+        {
+            StatusText = status;
+            IsConnected = true;
+        }).ConfigureAwait(true);
     }
 
     private async Task ConnectAndroidAsync(
@@ -746,24 +811,37 @@ public partial class MainWindowViewModel : ViewModelBase
         IReadOnlyList<ProxyServer>? multipath,
         CancellationToken cancellationToken)
     {
-        StatusText = "Starting VPN…";
+        await SetOnUiAsync(() => StatusText = "Starting VPN…").ConfigureAwait(true);
         var bypass = ParsePackageList(settings.AndroidBypassPackages);
         var tunFd = await AppServices.Platform.EstablishVpnAsync(bypass, settings.BlockIpv6, cancellationToken)
             .ConfigureAwait(false);
+
+        // AndroidUiThread resumes on the thread pool — hop back to Avalonia before any UI touch.
+        await ResumeOnUiAsync().ConfigureAwait(true);
+
         if (tunFd is null)
         {
-            StatusText = GetAndroidVpnFailureMessage();
-            throw new InvalidOperationException(StatusText);
+            var message = GetAndroidVpnFailureMessage();
+            await SetOnUiAsync(() => StatusText = message).ConfigureAwait(true);
+            throw new InvalidOperationException(message);
         }
 
-        StatusText = $"Starting proxy for {StatusSanitizer.Scrub(server.Name)}…";
+        await SetOnUiAsync(() =>
+            StatusText = $"Starting proxy for {StatusSanitizer.Scrub(server.Name)}…").ConfigureAwait(true);
+
         await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
+        await ResumeOnUiAsync().ConfigureAwait(true);
+
         await AppServices.KillSwitch.EnableAsync(_proxyCore.ResolveCorePath(), cancellationToken).ConfigureAwait(false);
         await AppServices.Platform.EnableProxyAsync(cancellationToken).ConfigureAwait(false);
+        await ResumeOnUiAsync().ConfigureAwait(true);
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
-        StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi})";
-        IsConnected = true;
+        await SetOnUiAsync(() =>
+        {
+            StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi})";
+            IsConnected = true;
+        }).ConfigureAwait(true);
     }
 
     private async Task HandleUnexpectedCoreStopAsync()
@@ -775,7 +853,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
-            RunOnUiThread(() =>
+            await SetOnUiAsync(() =>
             {
                 ConnectionState = ConnectionState.Failed;
                 StatusText = AppServices.KillSwitch.IsArmed
@@ -784,7 +862,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ConnectButtonText));
                 OnPropertyChanged(nameof(TrayToolTip));
                 UpdateSecureShareEndpoint();
-            });
+            }).ConfigureAwait(true);
         }
     }
 
@@ -820,11 +898,11 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        RunOnUiThread(() =>
+        await SetOnUiAsync(() =>
         {
             IsConnected = false;
             UpdateSecureShareEndpoint();
-        });
+        }).ConfigureAwait(true);
     }
 
     private Task EmergencyDisconnectAsync() => SafeTeardownAsync(releaseKillSwitch: true);
@@ -832,7 +910,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task DisconnectAsync()
     {
-        if (!await _connectionGate.WaitAsync(0).ConfigureAwait(true))
+        if (!await _connectionGate.WaitAsync(0).ConfigureAwait(false))
         {
             // Cancel in-flight connect; that path releases kill switch on cancel.
             _connectCts?.Cancel();
@@ -841,20 +919,29 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            ConnectionState = ConnectionState.Disconnecting;
-            IsBusy = true;
-            OnPropertyChanged(nameof(ConnectButtonText));
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Disconnecting;
+                IsBusy = true;
+                OnPropertyChanged(nameof(ConnectButtonText));
+            }).ConfigureAwait(true);
             _connectCts?.Cancel();
 
-            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
-            ConnectionState = ConnectionState.Idle;
-            StatusText = "Disconnected";
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Idle;
+                StatusText = "Disconnected";
+            }).ConfigureAwait(true);
         }
         finally
         {
-            IsBusy = false;
-            OnPropertyChanged(nameof(ConnectButtonText));
-            OnPropertyChanged(nameof(TrayToolTip));
+            await SetOnUiAsync(() =>
+            {
+                IsBusy = false;
+                OnPropertyChanged(nameof(ConnectButtonText));
+                OnPropertyChanged(nameof(TrayToolTip));
+            }).ConfigureAwait(true);
             _connectionGate.Release();
         }
     }

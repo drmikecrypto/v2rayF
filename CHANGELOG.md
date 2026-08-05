@@ -5,6 +5,12 @@ All notable changes to v2rayF are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Android Connect crash — Avalonia UI property updates after VPN/Xray awaits are marshalled back to the UI thread (fixes “different thread owns it” and app close on Connect)
+
 ## [1.3.0] - 2026-08-04
 
 ### Added
