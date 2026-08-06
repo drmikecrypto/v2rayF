@@ -3,6 +3,9 @@ using Java.Security;
 using Javax.Crypto;
 using Javax.Crypto.Spec;
 using v2rayF.Services;
+using AndroidKeyGenParameterSpec = global::Android.Security.Keystore.KeyGenParameterSpec;
+using AndroidKeyProperties = global::Android.Security.Keystore.KeyProperties;
+using AndroidKeyStorePurpose = global::Android.Security.Keystore.KeyStorePurpose;
 
 namespace v2rayF.Android.Services;
 
@@ -49,15 +52,15 @@ public sealed class AndroidSecretProtector : ISecretProtector
         if (ks.ContainsAlias(KeystoreAlias))
             return;
 
-        var builder = new Android.Security.Keystore.KeyGenParameterSpec.Builder(
+        var builder = new AndroidKeyGenParameterSpec.Builder(
                 KeystoreAlias,
-                Android.Security.Keystore.KeyStorePurpose.Encrypt | Android.Security.Keystore.KeyStorePurpose.Decrypt)
-            .SetBlockModes(Android.Security.Keystore.KeyProperties.BlockModeGcm)
-            .SetEncryptionPaddings(Android.Security.Keystore.KeyProperties.EncryptionPaddingNone)
+                AndroidKeyStorePurpose.Encrypt | AndroidKeyStorePurpose.Decrypt)
+            .SetBlockModes(AndroidKeyProperties.BlockModeGcm)
+            .SetEncryptionPaddings(AndroidKeyProperties.EncryptionPaddingNone)
             .SetKeySize(256);
 
         var keyGen = KeyGenerator.GetInstance(
-            Android.Security.Keystore.KeyProperties.KeyAlgorithmAes,
+            AndroidKeyProperties.KeyAlgorithmAes,
             AndroidKeyStore)!;
         keyGen.Init(builder.Build());
         keyGen.GenerateKey();
