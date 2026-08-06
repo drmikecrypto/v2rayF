@@ -15,6 +15,8 @@ Manual checks after builds that touch connect, DNS, or platform networking.
 - [ ] With TUN + Sentinel: packet capture shows **no** cleartext DNS to ISP resolvers
 - [ ] With Block IPv6: IPv6 sites fail closed / no native IPv6 path outside tunnel
 - [ ] Kill switch (desktop, elevated): with tunnel down unexpectedly, clearnet browsers fail
+- [ ] Windows elevated: Connected + Global + TUN + kill switch → browse and DNS work (not blackholed)
+- [ ] Disconnect after TUN+kill switch session → clearnet browsing returns
 
 ## Smart Connect / Multipath
 

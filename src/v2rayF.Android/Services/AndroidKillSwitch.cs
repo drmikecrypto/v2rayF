@@ -16,7 +16,10 @@ public sealed class AndroidKillSwitch : IKillSwitch
 
     public string? LastError => null;
 
-    public Task EnableAsync(string coreExecutablePath, CancellationToken cancellationToken = default)
+    public Task EnableAsync(
+        string coreExecutablePath,
+        bool allowTunInterface = false,
+        CancellationToken cancellationToken = default)
     {
         IsArmed = true;
         return Task.CompletedTask;

@@ -93,6 +93,8 @@ Routes **all device traffic** through the virtual adapter (like a system VPN).
 
 When TUN is on, system HTTP proxy is usually not needed.
 
+On Windows, **TUN + kill switch** together need a build that allows outbound on the `v2rayF` adapter. Older builds armed a block-all firewall rule without that allow and looked fully offline while still showing Connected — update to the latest release, or temporarily use TUN with kill switch off / system proxy with kill switch on.
+
 ### System proxy
 
 When enabled (default), v2rayF sets OS proxy to `127.0.0.1:10809` on connect.
@@ -130,6 +132,7 @@ On Linux/macOS, `ApplicationData` maps to `~/.config/` or equivalent.
 | Connect fails | Check server link, firewall, VPS port |
 | Bypass China fails | Confirm `geoip.dat` and `geosite.dat` exist in `cores/` |
 | TUN fails | Run with Admin / sudo |
+| Connected + TUN + offline | Update past the TUN kill-switch fix; or turn kill switch off, or use system proxy instead of TUN |
 | Linux proxy not set | Use TUN, or set manual proxy `127.0.0.1:10809` |
 | macOS blocked | `xattr -cr` on the folder |
 

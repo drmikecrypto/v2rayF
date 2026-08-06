@@ -45,7 +45,7 @@ public static class XrayConfigBuilder
         {
             var tunSettings = new JsonObject
             {
-                ["name"] = "v2rayF",
+                ["name"] = TunConstants.InterfaceName,
                 ["MTU"] = 1280,
                 ["inet4_address"] = "172.19.0.1/30",
                 ["stack"] = "system"

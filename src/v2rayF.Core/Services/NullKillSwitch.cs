@@ -11,7 +11,10 @@ public sealed class NullKillSwitch : IKillSwitch
 
     public string? LastError => null;
 
-    public Task EnableAsync(string coreExecutablePath, CancellationToken cancellationToken = default) =>
+    public Task EnableAsync(
+        string coreExecutablePath,
+        bool allowTunInterface = false,
+        CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
     public Task DisableAsync(CancellationToken cancellationToken = default) =>

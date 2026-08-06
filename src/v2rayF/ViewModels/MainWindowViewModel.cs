@@ -1038,7 +1038,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (settings.KillSwitchEnabled)
         {
-            await AppServices.KillSwitch.EnableAsync(_proxyCore.ResolveCorePath(), cancellationToken)
+            await AppServices.KillSwitch.EnableAsync(
+                    _proxyCore.ResolveCorePath(),
+                    allowTunInterface: settings.EnableTunMode,
+                    cancellationToken)
                 .ConfigureAwait(false);
             await ResumeOnUiAsync().ConfigureAwait(true);
         }
@@ -1059,7 +1062,11 @@ public partial class MainWindowViewModel : ViewModelBase
         var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({mode}{multi})";
         if (settings.KillSwitchEnabled && !string.IsNullOrWhiteSpace(AppServices.KillSwitch.LastError) &&
             !AppServices.KillSwitch.IsArmed)
-            status += " · kill switch unavailable (need admin)";
+        {
+            status += settings.EnableTunMode
+                ? $" · kill switch not armed ({StatusSanitizer.Scrub(AppServices.KillSwitch.LastError)})"
+                : " · kill switch unavailable (need admin)";
+        }
 
         await SetOnUiAsync(() =>
         {
@@ -1095,7 +1102,11 @@ public partial class MainWindowViewModel : ViewModelBase
         await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
         await ResumeOnUiAsync().ConfigureAwait(true);
 
-        await AppServices.KillSwitch.EnableAsync(_proxyCore.ResolveCorePath(), cancellationToken).ConfigureAwait(false);
+        await AppServices.KillSwitch.EnableAsync(
+                _proxyCore.ResolveCorePath(),
+                allowTunInterface: true,
+                cancellationToken)
+            .ConfigureAwait(false);
         await AppServices.Platform.EnableProxyAsync(cancellationToken).ConfigureAwait(false);
         await ResumeOnUiAsync().ConfigureAwait(true);
 

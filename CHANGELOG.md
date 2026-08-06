@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-06
+
+### Fixed
+
+- Windows **TUN + kill switch** no longer blackholes browsing — allow outbound on the `v2rayF` TUN adapter before the block-all firewall rule (Connected could previously show while apps had no path)
+- If the TUN allow rule cannot be added, kill switch stays disarmed and status shows the error instead of leaving a silent offline session
+
 ## [1.4.0] - 2026-08-06
 
 ### Added
@@ -223,6 +230,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.1]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.1
+[1.4.0]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.0
 [1.1.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.1.6
 [1.1.5]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.1.5
 [1.1.4]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.1.4
