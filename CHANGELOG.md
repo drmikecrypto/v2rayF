@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-06
+
+### Added
+
+- **Encrypted profile vault** — sensitive fields in `settings.json` / `servers.json` encrypted at rest (DPAPI on Windows, Android Keystore-wrapped key, restricted key file on macOS/Linux); session lock/unlock; passphrase-protected `.v2rayf` export/import
+- **Adaptive Survive** — when Smart Connect failover fails, temporarily escalate packet fragment and Sentinel DNS/IPv6/Global tactics without permanently rewriting user prefs (persists only a last-successful tactic hint)
+- Unit tests (`v2rayF.Core.Tests`) and CI `dotnet test` step
+- Release `SHA256SUMS` asset for verified in-app updates
+
+### Changed
+
+- **Config versatility** — share-link import + Xray builder cover Vision on REALITY *or* TLS, Trojan REALITY/WS, and transports TCP (HTTP header), WS, gRPC (multi), H2, HTTPUpgrade, xHTTP/SplitHTTP, mKCP, QUIC, plus ALPN/fp/serviceName/mode/seed
+- **Connect agility** — Smart Connect early-exits after 3 working proxy paths (max 6 path probes); dead TCP nodes skipped; per-probe budget ~4.5s; generate_204 URLs race first-success
+- Adaptive Survive retries only the top 2 candidates per tactic (not the full failover list × tactics)
+- **Test All** is parallel TCP-only (Test still prefers proxy-path)
+- Runtime/speedtest Xray JSON is compact; process hosts await Stop without sync-over-async; Android EnsureCore caches readiness and extracts geo files in parallel
+
+### Security
+
+- Update downloads restricted to GitHub hosts; Zip-Slip-safe extract; SHA256 required before install
+- Android `allowBackup="false"`
+- Secure Share defaults to LAN IP bind (not `0.0.0.0`); optional listen-all; password masked until vault unlock + reveal; copy-once / rotate controls
+
 ## [1.3.2] - 2026-08-06
 
 ### Fixed

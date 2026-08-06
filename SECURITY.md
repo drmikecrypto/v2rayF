@@ -4,7 +4,9 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
+| 1.4.x   | :white_check_mark: |
+| 1.3.x   | :white_check_mark: |
+| 1.0.x   | :x:                |
 
 ## Reporting a vulnerability
 
@@ -34,3 +36,17 @@ Out of scope: vulnerabilities in [Xray-core](https://github.com/XTLS/Xray-core) 
 ## Safe use
 
 Use v2rayF only on networks and servers you are authorized to access. Proxy tools can route sensitive traffic; keep your share links and subscription URLs private.
+
+### At-rest encryption (1.4+)
+
+Server UUIDs/passwords, subscription URLs, and Secure Share passwords are stored encrypted under the app data directory (AES-GCM). The AES key is wrapped with:
+
+- **Windows** — DPAPI (CurrentUser)
+- **Android** — Android Keystore
+- **macOS / Linux** — key file with restrictive permissions (`0600`)
+
+Encrypted `.v2rayf` vault files use a user passphrase (PBKDF2 + AES-GCM). Prefer vault export over clipboard when moving profiles between devices.
+
+### Updates (1.4+)
+
+In-app updates download only from allowed GitHub hosts, verify **SHA256** (release digest or `SHA256SUMS`), and extract with Zip-Slip rejection. Android also checks APK signing fingerprints.

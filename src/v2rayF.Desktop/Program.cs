@@ -22,6 +22,7 @@ sealed class Program
         };
 
         AppServices.CoreEnvironment = new DesktopCoreEnvironment();
+        AppServices.SecretProtector = new DesktopSecretProtector(AppServices.CoreEnvironment);
         AppServices.Platform = new DesktopPlatformIntegration();
         AppServices.KillSwitch = new DesktopKillSwitch();
         AppServices.Updater = new DesktopAppUpdater();

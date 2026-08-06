@@ -37,6 +37,17 @@ public sealed class AndroidAppUpdater : IAppUpdater
         await UpdateDownloadHelper.DownloadAsync(offer.DownloadUrl, zipPath, progress, cancellationToken)
             .ConfigureAwait(true);
 
+        if (!string.IsNullOrWhiteSpace(offer.Sha256))
+        {
+            progress?.Report("Verifying SHA256…");
+            UpdateDownloadHelper.VerifySha256(zipPath, offer.Sha256);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "Update package has no SHA256 checksum (digest or SHA256SUMS). Refusing to install.");
+        }
+
         var extractDir = Path.Combine(workDir, "files");
         UpdateDownloadHelper.ExtractZip(zipPath, extractDir, progress);
 

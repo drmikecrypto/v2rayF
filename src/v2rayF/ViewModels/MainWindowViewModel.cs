@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using v2rayF.Models;
@@ -23,6 +25,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ProxyCoreService _proxyCore = new(AppServices.CoreEnvironment);
     private readonly LatencyService _latencyService = new(AppServices.CoreEnvironment);
     private readonly SmartConnectService _smartConnect;
+    private readonly AdaptiveSurviveService _adaptiveSurvive = new();
+    private readonly ProfileVault _vault = new();
     private readonly UpdateCheckService _updateCheck = new();
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private AppSettings _settings = new();
@@ -88,6 +92,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _enablePacketFragment;
 
     [ObservableProperty]
+    private bool _adaptiveSurviveEnabled = true;
+
+    [ObservableProperty]
     private bool _subscriptionViaProxy = true;
 
     [ObservableProperty]
@@ -95,6 +102,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _secureShareEndpoint = "";
+
+    [ObservableProperty]
+    private bool _revealSharePassword;
+
+    [ObservableProperty]
+    private bool _shareListenAllInterfaces;
+
+    [ObservableProperty]
+    private bool _vaultUnlocked;
+
+    [ObservableProperty]
+    private string _vaultPassphrase = "";
 
     [ObservableProperty]
     private bool _isConnected;
@@ -335,8 +354,11 @@ public partial class MainWindowViewModel : ViewModelBase
         DnsThroughProxy = settings.DnsThroughProxy;
         SecureShareEnabled = settings.SecureShareEnabled;
         EnablePacketFragment = settings.EnablePacketFragment;
+        AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled;
+        ShareListenAllInterfaces = settings.ShareListenAllInterfaces;
         SubscriptionViaProxy = settings.SubscriptionViaProxy;
         AndroidBypassPackages = settings.AndroidBypassPackages;
+        VaultUnlocked = _vault.IsUnlocked;
         UpdateTunStatus();
         UpdateSecureShareEndpoint();
     }
@@ -356,7 +378,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.BlockIpv6 = BlockIpv6;
         _settings.DnsThroughProxy = DnsThroughProxy;
         _settings.SecureShareEnabled = SecureShareEnabled;
+        _settings.ShareListenAllInterfaces = ShareListenAllInterfaces;
         _settings.EnablePacketFragment = EnablePacketFragment;
+        _settings.AdaptiveSurviveEnabled = AdaptiveSurviveEnabled;
         _settings.SubscriptionViaProxy = SubscriptionViaProxy;
         _settings.AndroidBypassPackages = AndroidBypassPackages;
         return _settings;
@@ -382,7 +406,14 @@ public partial class MainWindowViewModel : ViewModelBase
             EnableSystemProxy = false;
     }
 
-    partial void OnSecureShareEnabledChanged(bool value) => UpdateSecureShareEndpoint();
+    partial void OnSecureShareEnabledChanged(bool value)
+    {
+        if (value)
+            XrayConfigBuilder.EnsureShareCredentials(_settings);
+        UpdateSecureShareEndpoint();
+    }
+
+    partial void OnRevealSharePasswordChanged(bool value) => UpdateSecureShareEndpoint();
 
     private void UpdateCoreStatus()
     {
@@ -422,10 +453,14 @@ public partial class MainWindowViewModel : ViewModelBase
         var lan = AppServices.Platform.GetLanIPv4Address() ?? "LAN-IP";
         var port = _settings.ShareBindPort > 0 ? _settings.ShareBindPort : XrayConfigBuilder.DefaultSharePort;
         XrayConfigBuilder.EnsureShareCredentials(_settings);
+        var pass = RevealSharePassword && VaultUnlocked
+            ? _settings.ShareAuthPass
+            : "••••••••";
+        var bindHint = ShareListenAllInterfaces ? "listen: all interfaces" : $"listen: {lan}";
         SecureShareEndpoint =
-            $"socks5://{_settings.ShareAuthUser}:{_settings.ShareAuthPass}@{lan}:{port}\n" +
-            $"http://{_settings.ShareAuthUser}:{_settings.ShareAuthPass}@{lan}:{port + 1}\n" +
-            "Hotspot tip: point clients at these proxies (OEM Wi‑Fi hotspot may bypass VPN).";
+            $"socks5://{_settings.ShareAuthUser}:{pass}@{lan}:{port}\n" +
+            $"http://{_settings.ShareAuthUser}:{pass}@{lan}:{port + 1}\n" +
+            $"{bindHint} · Hotspot tip: OEM Wi‑Fi hotspot may bypass VPN — use these proxies.";
     }
 
     private static string GetAndroidVpnFailureMessage()
@@ -452,9 +487,15 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task CopySecureShareAsync()
     {
-        if (string.IsNullOrWhiteSpace(SecureShareEndpoint))
+        if (!SecureShareEnabled || !IsConnected)
         {
             StatusText = "Connect with Secure Share enabled first.";
+            return;
+        }
+
+        if (!VaultUnlocked)
+        {
+            StatusText = "Unlock vault to copy Secure Share credentials.";
             return;
         }
 
@@ -465,9 +506,158 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var firstLine = SecureShareEndpoint.Split('\n')[0];
-        await clipboard.SetTextAsync(firstLine);
-        StatusText = "Secure Share SOCKS endpoint copied.";
+        var lan = AppServices.Platform.GetLanIPv4Address() ?? "LAN-IP";
+        var port = _settings.ShareBindPort > 0 ? _settings.ShareBindPort : XrayConfigBuilder.DefaultSharePort;
+        XrayConfigBuilder.EnsureShareCredentials(_settings);
+        var line = $"socks5://{_settings.ShareAuthUser}:{_settings.ShareAuthPass}@{lan}:{port}";
+        await clipboard.SetTextAsync(line);
+        StatusText = "Secure Share SOCKS endpoint copied (once).";
+    }
+
+    [RelayCommand]
+    private async Task RotateSharePasswordAsync()
+    {
+        XrayConfigBuilder.RotateSharePassword(_settings);
+        RevealSharePassword = false;
+        await _settingsStore.SaveAsync(CollectSettings());
+        UpdateSecureShareEndpoint();
+        StatusText = "Secure Share password rotated. Reconnect to apply.";
+    }
+
+    [RelayCommand]
+    private void UnlockVault()
+    {
+        _vault.Unlock();
+        VaultUnlocked = true;
+        UpdateSecureShareEndpoint();
+        StatusText = "Vault unlocked for this session.";
+    }
+
+    [RelayCommand]
+    private void LockVault()
+    {
+        _vault.Lock();
+        VaultUnlocked = false;
+        RevealSharePassword = false;
+        VaultPassphrase = "";
+        UpdateSecureShareEndpoint();
+        StatusText = "Vault locked.";
+    }
+
+    [RelayCommand]
+    private async Task ExportVaultAsync()
+    {
+        if (!VaultUnlocked)
+        {
+            StatusText = "Unlock vault before exporting.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(VaultPassphrase) || VaultPassphrase.Length < 8)
+        {
+            StatusText = "Enter a vault passphrase (8+ chars) before export.";
+            return;
+        }
+
+        var top = GetTopLevel();
+        if (top?.StorageProvider is null)
+        {
+            StatusText = "File picker unavailable.";
+            return;
+        }
+
+        try
+        {
+            var file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export encrypted profiles",
+                SuggestedFileName = "profiles.v2rayf",
+                FileTypeChoices =
+                [
+                    new FilePickerFileType("v2rayF vault") { Patterns = ["*.v2rayf"] }
+                ]
+            }).ConfigureAwait(true);
+
+            if (file is null)
+                return;
+
+            var bytes = _vault.Export(Servers.ToList(), CollectSettings(), VaultPassphrase);
+            await using var stream = await file.OpenWriteAsync().ConfigureAwait(true);
+            await stream.WriteAsync(bytes).ConfigureAwait(true);
+            StatusText = "Encrypted vault exported.";
+            VaultPassphrase = "";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Vault export failed: {StatusSanitizer.Scrub(ex.Message)}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportVaultAsync()
+    {
+        if (string.IsNullOrWhiteSpace(VaultPassphrase) || VaultPassphrase.Length < 8)
+        {
+            StatusText = "Enter the vault passphrase (8+ chars) before import.";
+            return;
+        }
+
+        var top = GetTopLevel();
+        if (top?.StorageProvider is null)
+        {
+            StatusText = "File picker unavailable.";
+            return;
+        }
+
+        try
+        {
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import encrypted profiles",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("v2rayF vault") { Patterns = ["*.v2rayf"] }
+                ]
+            }).ConfigureAwait(true);
+
+            if (files.Count == 0)
+                return;
+
+            await using var stream = await files[0].OpenReadAsync().ConfigureAwait(true);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms).ConfigureAwait(true);
+            var payload = _vault.Import(ms.ToArray(), VaultPassphrase);
+            await MergeImportedAsync(payload.Servers).ConfigureAwait(true);
+            if (payload.Settings is not null)
+            {
+                // Merge routing / leak prefs without wiping share credentials on this device.
+                _settings.RoutingMode = payload.Settings.RoutingMode;
+                _settings.CustomDirectRules = payload.Settings.CustomDirectRules;
+                _settings.CustomProxyRules = payload.Settings.CustomProxyRules;
+                _settings.CustomBlockRules = payload.Settings.CustomBlockRules;
+                _settings.SmartConnectEnabled = payload.Settings.SmartConnectEnabled;
+                _settings.SmartMultipathEnabled = payload.Settings.SmartMultipathEnabled;
+                _settings.KillSwitchEnabled = payload.Settings.KillSwitchEnabled;
+                _settings.BlockIpv6 = payload.Settings.BlockIpv6;
+                _settings.DnsThroughProxy = payload.Settings.DnsThroughProxy;
+                _settings.EnablePacketFragment = payload.Settings.EnablePacketFragment;
+                _settings.AdaptiveSurviveEnabled = payload.Settings.AdaptiveSurviveEnabled;
+                if (!string.IsNullOrWhiteSpace(payload.Settings.SubscriptionUrl))
+                    _settings.SubscriptionUrl = payload.Settings.SubscriptionUrl;
+                ApplySettingsToView(_settings);
+                await _settingsStore.SaveAsync(_settings).ConfigureAwait(true);
+            }
+
+            _vault.Unlock();
+            VaultUnlocked = true;
+            VaultPassphrase = "";
+            StatusText = $"Imported {payload.Servers.Count} server(s) from vault.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Vault import failed: {StatusSanitizer.Scrub(ex.Message)}";
+        }
     }
 
     [RelayCommand]
@@ -500,19 +690,40 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "Testing latency for all servers…";
-        foreach (var server in Servers)
-            await MeasureLatencyAsync(server);
+        StatusText = "Testing TCP latency for all servers…";
+        try
+        {
+            var snapshot = Servers.ToList();
+            using var gate = new SemaphoreSlim(8, 8);
+            await Task.WhenAll(snapshot.Select(async server =>
+            {
+                await gate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    RunOnUiThread(() => server.SetLatency(null));
+                    var ms = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
+                    RunOnUiThread(() => server.SetLatency(ms));
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            })).ConfigureAwait(true);
 
-        await _serverStore.SaveAsync(Servers);
-        IsBusy = false;
-        StatusText = "Latency test complete.";
+            await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
+            StatusText = "TCP latency test complete.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private async Task MeasureLatencyAsync(ProxyServer server)
     {
         RunOnUiThread(() => server.SetLatency(null));
 
+        // Single-server Test still prefers proxy-path when core is available.
         var result = await _latencyService.MeasureAsync(server);
 
         RunOnUiThread(() => server.SetLatency(result));
@@ -679,62 +890,93 @@ public partial class MainWindowViewModel : ViewModelBase
             }
 
             Exception? lastError = null;
-            foreach (var server in candidates)
+            var connectSettings = settings;
+            var attempts = new List<(AppSettings Settings, string? Tactic, string? Reason)>
             {
-                token.ThrowIfCancellationRequested();
-                await SetOnUiAsync(() =>
-                {
-                    SelectedServer = server;
-                    StatusText = $"Connecting to {StatusSanitizer.Scrub(server.Name)}…";
-                }).ConfigureAwait(true);
+                (settings, null, null)
+            };
+            if (settings.AdaptiveSurviveEnabled && settings.SmartConnectEnabled)
+            {
+                foreach (var survive in _adaptiveSurvive.BuildRetryAttempts(settings))
+                    attempts.Add((survive.Settings, survive.Tactic, survive.StatusReason));
+            }
 
-                try
+            foreach (var (attemptSettings, tactic, reason) in attempts)
+            {
+                connectSettings = attemptSettings;
+                var waveCandidates = tactic is null
+                    ? candidates
+                    : candidates.Take(AdaptiveSurviveService.MaxSurviveCandidates).ToList();
+
+                if (!string.IsNullOrWhiteSpace(reason))
                 {
-                    IReadOnlyList<ProxyServer>? multipath = null;
-                    if (settings.SmartMultipathEnabled && Servers.Count > 1)
+                    await SetOnUiAsync(() => StatusText = reason!).ConfigureAwait(true);
+                }
+
+                foreach (var server in waveCandidates)
+                {
+                    token.ThrowIfCancellationRequested();
+                    await SetOnUiAsync(() =>
                     {
-                        if (_lastRanking.Count == 0)
+                        SelectedServer = server;
+                        StatusText = string.IsNullOrWhiteSpace(reason)
+                            ? $"Connecting to {StatusSanitizer.Scrub(server.Name)}…"
+                            : $"{reason} — {StatusSanitizer.Scrub(server.Name)}";
+                    }).ConfigureAwait(true);
+
+                    try
+                    {
+                        IReadOnlyList<ProxyServer>? multipath = null;
+                        if (connectSettings.SmartMultipathEnabled && Servers.Count > 1)
                         {
-                            var serversSnapshot = Servers.ToList();
-                            _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
-                            await ResumeOnUiAsync().ConfigureAwait(true);
+                            if (_lastRanking.Count == 0)
+                            {
+                                var serversSnapshot = Servers.ToList();
+                                _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                                await ResumeOnUiAsync().ConfigureAwait(true);
+                            }
+
+                            multipath = _smartConnect.PickMultipathPeers(_lastRanking, server);
                         }
 
-                        multipath = _smartConnect.PickMultipathPeers(_lastRanking, server);
+                        if (IsMobile)
+                            await ConnectAndroidAsync(server, connectSettings, multipath, token).ConfigureAwait(false);
+                        else
+                            await ConnectDesktopAsync(server, connectSettings, multipath, token).ConfigureAwait(false);
+
+                        await ResumeOnUiAsync().ConfigureAwait(true);
+                        settings.LastGoodServerId = server.Id.ToString();
+                        if (!string.IsNullOrWhiteSpace(tactic))
+                            settings.LastSurviveTactic = tactic;
+                        // Persist user prefs + last tactic hint only — not temporary fragment/sentinel overrides.
+                        await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+                        await _serverStore.SaveAsync(Servers).ConfigureAwait(false);
+                        await SetOnUiAsync(() =>
+                        {
+                            ConnectionState = ConnectionState.Connected;
+                            if (!string.IsNullOrWhiteSpace(reason))
+                                StatusText = $"{StatusText} · {reason}";
+                            UpdateSecureShareEndpoint();
+                        }).ConfigureAwait(true);
+                        return;
                     }
-
-                    if (IsMobile)
-                        await ConnectAndroidAsync(server, settings, multipath, token).ConfigureAwait(false);
-                    else
-                        await ConnectDesktopAsync(server, settings, multipath, token).ConfigureAwait(false);
-
-                    await ResumeOnUiAsync().ConfigureAwait(true);
-                    settings.LastGoodServerId = server.Id.ToString();
-                    await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
-                    await _serverStore.SaveAsync(Servers).ConfigureAwait(false);
-                    await SetOnUiAsync(() =>
+                    catch (OperationCanceledException)
                     {
-                        ConnectionState = ConnectionState.Connected;
-                        UpdateSecureShareEndpoint();
-                    }).ConfigureAwait(true);
-                    return;
-                }
-                catch (OperationCanceledException)
-                {
-                    await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
-                    await SetOnUiAsync(() =>
+                        await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+                        await SetOnUiAsync(() =>
+                        {
+                            StatusText = "Connect cancelled.";
+                            ConnectionState = ConnectionState.Idle;
+                        }).ConfigureAwait(true);
+                        return;
+                    }
+                    catch (Exception ex)
                     {
-                        StatusText = "Connect cancelled.";
-                        ConnectionState = ConnectionState.Idle;
-                    }).ConfigureAwait(true);
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    lastError = ex;
-                    // Keep kill switch armed across failover attempts (no clearnet window).
-                    await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(false);
-                    await ResumeOnUiAsync().ConfigureAwait(true);
+                        lastError = ex;
+                        // Keep kill switch armed across failover attempts (no clearnet window).
+                        await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(false);
+                        await ResumeOnUiAsync().ConfigureAwait(true);
+                    }
                 }
             }
 
@@ -1093,18 +1335,23 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private static IClipboard? GetClipboard()
     {
+        return GetTopLevel()?.Clipboard;
+    }
+
+    private static TopLevel? GetTopLevel()
+    {
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             if (desktop.MainWindow is null)
                 return null;
 
-            return TopLevel.GetTopLevel(desktop.MainWindow)?.Clipboard;
+            return TopLevel.GetTopLevel(desktop.MainWindow);
         }
 
         if (Application.Current?.ApplicationLifetime is ISingleViewApplicationLifetime singleView &&
             singleView.MainView is Control view)
         {
-            return TopLevel.GetTopLevel(view)?.Clipboard;
+            return TopLevel.GetTopLevel(view);
         }
 
         return null;

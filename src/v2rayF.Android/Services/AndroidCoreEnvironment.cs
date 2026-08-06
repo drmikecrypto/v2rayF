@@ -10,16 +10,35 @@ namespace v2rayF.Android.Services;
 public sealed class AndroidCoreEnvironment : ICoreEnvironment
 {
     private const string CoreLibraryName = "libxray.so";
+    private readonly SemaphoreSlim _ensureLock = new(1, 1);
+    private volatile bool _ensureComplete;
 
     public async Task EnsureCoreAsync(CancellationToken cancellationToken = default)
     {
-        var coresDir = GetCoresDirectory();
-        Directory.CreateDirectory(coresDir);
+        if (_ensureComplete)
+            return;
 
-        await ExtractAssetIfMissingAsync("geoip.dat", Path.Combine(coresDir, "geoip.dat"), cancellationToken).ConfigureAwait(false);
-        await ExtractAssetIfMissingAsync("geosite.dat", Path.Combine(coresDir, "geosite.dat"), cancellationToken).ConfigureAwait(false);
+        await _ensureLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_ensureComplete)
+                return;
 
-        RemoveLegacyCoreExtract(coresDir);
+            var coresDir = GetCoresDirectory();
+            Directory.CreateDirectory(coresDir);
+
+            await Task.WhenAll(
+                ExtractAssetIfMissingAsync("geoip.dat", Path.Combine(coresDir, "geoip.dat"), cancellationToken),
+                ExtractAssetIfMissingAsync("geosite.dat", Path.Combine(coresDir, "geosite.dat"), cancellationToken))
+                .ConfigureAwait(false);
+
+            RemoveLegacyCoreExtract(coresDir);
+            _ensureComplete = true;
+        }
+        finally
+        {
+            _ensureLock.Release();
+        }
     }
 
     public string GetCorePath()

@@ -15,6 +15,9 @@ public static class AppServices
 
     public static IKillSwitch KillSwitch { get; set; } = new NullKillSwitch();
 
+    /// <summary>Encrypts secrets at rest. Platform hosts replace the default passthrough.</summary>
+    public static ISecretProtector SecretProtector { get; set; } = new PassthroughSecretProtector();
+
     /// <summary>Called when the Android activity stops — tear down VPN so network is not left hijacked.</summary>
     public static Func<Task>? EmergencyDisconnectAsync { get; set; }
 

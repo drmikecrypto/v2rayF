@@ -20,6 +20,7 @@ public class V2rayApplication : AvaloniaAndroidApplication<v2rayF.App>
     public override void OnCreate()
     {
         AppServices.CoreEnvironment = new AndroidCoreEnvironment();
+        AppServices.SecretProtector = new AndroidSecretProtector(AppServices.CoreEnvironment);
         AppServices.Platform = new AndroidPlatformIntegration();
         AppServices.CoreProcessHost = new AndroidJavaCoreProcessHost();
         AppServices.KillSwitch = new AndroidKillSwitch();

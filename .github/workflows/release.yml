@@ -107,10 +107,17 @@ jobs:
       - name: List release assets
         run: find artifacts -type f -name "*.zip" -ls
 
+      - name: Generate SHA256SUMS
+        run: |
+          cd artifacts
+          sha256sum *.zip | tee SHA256SUMS
+
       - uses: softprops/action-gh-release@v2
         with:
           name: v2rayF ${{ github.ref_name }}
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.zip
+            artifacts/SHA256SUMS
           body_path: docs/releases/${{ github.ref_name }}.md
           generate_release_notes: false
           draft: false

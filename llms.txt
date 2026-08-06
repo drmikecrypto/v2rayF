@@ -13,12 +13,13 @@ This file helps LLMs and automated agents understand the project quickly. Humans
 - **UI:** Avalonia (.NET 10)
 - **Data plane:** Xray-core (bundled in release zips; not committed to git)
 - **Platforms:** Windows (x64/arm64), macOS (x64/arm64), Linux (x64/arm64), Android (arm64). No iOS product.
-- **Protocols:** VMess, VLESS (REALITY / Vision), Shadowsocks, Trojan, SOCKS
+- **Protocols:** VMess, VLESS (REALITY / Vision / Vision+TLS), Shadowsocks, Trojan, SOCKS — transports TCP/WS/gRPC/H2/HTTPUpgrade/xHTTP/mKCP/QUIC
 - **Latest downloads:** https://github.com/drmikecrypto/v2rayF/releases/latest
+- **1.4 highlights:** encrypted secrets at rest, `.v2rayf` vault export/import, Adaptive Survive, hardened updater (host allowlist + SHA256 + Zip-Slip), Secure Share LAN bind + vault-gated copy, agile Smart Connect probes, broad share-link/stream matrix
 
 ## What it is for
 
-Privacy and anti-censorship proxy use: import `vless://` / `vmess://` / `ss://` / `trojan://` links or HTTPS subscriptions, connect via system proxy or TUN/VPN, with optional Smart Connect, multipath balancing, DNS-through-proxy, IPv6 block, kill switch (Windows Firewall + Android VpnService hold), and Secure Share (LAN SOCKS/HTTP).
+Privacy and anti-censorship proxy use: import `vless://` / `vmess://` / `ss://` / `trojan://` links or HTTPS subscriptions, connect via system proxy or TUN/VPN, with optional Smart Connect, Adaptive Survive, multipath balancing, DNS-through-proxy, IPv6 block, kill switch (Windows Firewall + Android VpnService hold), Secure Share (LAN SOCKS/HTTP), and encrypted profile vault.
 
 ## Key paths
 

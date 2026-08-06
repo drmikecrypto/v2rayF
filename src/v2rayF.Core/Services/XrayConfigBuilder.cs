@@ -15,6 +15,8 @@ public static class XrayConfigBuilder
     public const int SpeedtestSocksPort = 10818;
     public const int DefaultSharePort = 10880;
 
+    private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
+
     public static string Build(
         ProxyServer server,
         AppSettings settings,
@@ -34,8 +36,9 @@ public static class XrayConfigBuilder
         {
             var sharePort = settings.ShareBindPort > 0 ? settings.ShareBindPort : DefaultSharePort;
             EnsureShareCredentials(settings);
-            inbounds.Add(BuildShareSocksInbound(sharePort, settings.ShareAuthUser, settings.ShareAuthPass));
-            inbounds.Add(BuildShareHttpInbound(sharePort + 1, settings.ShareAuthUser, settings.ShareAuthPass));
+            var listen = ResolveShareListenAddress(settings);
+            inbounds.Add(BuildShareSocksInbound(sharePort, settings.ShareAuthUser, settings.ShareAuthPass, listen));
+            inbounds.Add(BuildShareHttpInbound(sharePort + 1, settings.ShareAuthUser, settings.ShareAuthPass, listen));
         }
 
         if (settings.EnableTunMode)
@@ -156,7 +159,7 @@ public static class XrayConfigBuilder
             };
         }
 
-        return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        return config.ToJsonString(CompactJson);
     }
 
     public static string BuildSpeedtest(ProxyServer server, int socksPort = SpeedtestSocksPort)
@@ -195,7 +198,7 @@ public static class XrayConfigBuilder
             }
         };
 
-        return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        return config.ToJsonString(CompactJson);
     }
 
     public static void EnsureShareCredentials(AppSettings settings)
@@ -205,6 +208,23 @@ public static class XrayConfigBuilder
 
         if (string.IsNullOrWhiteSpace(settings.ShareAuthPass))
             settings.ShareAuthPass = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+    }
+
+    /// <summary>Regenerates the Secure Share password (call when user explicitly rotates).</summary>
+    public static void RotateSharePassword(AppSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.ShareAuthUser))
+            settings.ShareAuthUser = "v2rayf";
+        settings.ShareAuthPass = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+    }
+
+    public static string ResolveShareListenAddress(AppSettings settings)
+    {
+        if (settings.ShareListenAllInterfaces)
+            return "0.0.0.0";
+
+        var lan = AppServices.Platform?.GetLanIPv4Address();
+        return string.IsNullOrWhiteSpace(lan) ? "0.0.0.0" : lan;
     }
 
     private static List<ProxyServer> NormalizePeers(
@@ -453,11 +473,11 @@ public static class XrayConfigBuilder
         ["protocol"] = "http"
     };
 
-    private static JsonObject BuildShareSocksInbound(int port, string user, string pass) => new()
+    private static JsonObject BuildShareSocksInbound(int port, string user, string pass, string listen) => new()
     {
         ["tag"] = "share-socks",
         ["port"] = port,
-        ["listen"] = "0.0.0.0",
+        ["listen"] = listen,
         ["protocol"] = "socks",
         ["settings"] = new JsonObject
         {
@@ -479,11 +499,11 @@ public static class XrayConfigBuilder
         }
     };
 
-    private static JsonObject BuildShareHttpInbound(int port, string user, string pass) => new()
+    private static JsonObject BuildShareHttpInbound(int port, string user, string pass, string listen) => new()
     {
         ["tag"] = "share-http",
         ["port"] = port,
-        ["listen"] = "0.0.0.0",
+        ["listen"] = listen,
         ["protocol"] = "http",
         ["settings"] = new JsonObject
         {
@@ -548,7 +568,7 @@ public static class XrayConfigBuilder
                             {
                                 ["id"] = server.UserId,
                                 ["alterId"] = server.AlterId,
-                                ["security"] = "auto"
+                                ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher
                             }
                         }
                     }
@@ -562,10 +582,12 @@ public static class XrayConfigBuilder
 
     private static JsonObject BuildVlessOutbound(ProxyServer server, string tag)
     {
+        ShareLinkParser.NormalizeVisionFlow(server);
+
         var user = new JsonObject
         {
             ["id"] = server.UserId,
-            ["encryption"] = "none"
+            ["encryption"] = string.IsNullOrWhiteSpace(server.Encryption) ? "none" : server.Encryption
         };
 
         if (!string.IsNullOrWhiteSpace(server.Flow))
@@ -626,17 +648,7 @@ public static class XrayConfigBuilder
                 }
             }
         },
-        ["streamSettings"] = new JsonObject
-        {
-            ["network"] = server.Network,
-            ["security"] = "tls",
-            ["tlsSettings"] = new JsonObject
-            {
-                ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
-                ["allowInsecure"] = server.AllowInsecure,
-                ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint
-            }
-        }
+        ["streamSettings"] = BuildStreamSettings(server)
     };
 
     private static JsonObject BuildSocksOutbound(ProxyServer server, string tag)
@@ -670,61 +682,218 @@ public static class XrayConfigBuilder
         };
     }
 
-    private static JsonObject BuildStreamSettings(ProxyServer server)
+    /// <summary>
+    /// Builds Xray streamSettings for TCP/WS/gRPC/H2/HTTPUpgrade/xHTTP/KCP/QUIC
+    /// with none / TLS / REALITY (including Vision+REALITY and Vision+TLS).
+    /// </summary>
+    public static JsonObject BuildStreamSettings(ProxyServer server)
     {
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        var security = ShareLinkParser.NormalizeSecurity(server.Security);
+
         var stream = new JsonObject
         {
-            ["network"] = string.IsNullOrWhiteSpace(server.Network) ? "tcp" : server.Network
+            ["network"] = network
         };
 
-        switch (server.Security?.ToLowerInvariant())
+        ApplySecuritySettings(stream, server, security);
+        ApplyTransportSettings(stream, server, network);
+        return stream;
+    }
+
+    private static void ApplySecuritySettings(JsonObject stream, ProxyServer server, string security)
+    {
+        switch (security)
         {
             case "tls":
                 stream["security"] = "tls";
-                stream["tlsSettings"] = new JsonObject
-                {
-                    ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
-                    ["allowInsecure"] = server.AllowInsecure,
-                    ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint
-                };
+                stream["tlsSettings"] = BuildTlsSettings(server);
                 break;
 
             case "reality":
                 stream["security"] = "reality";
-                stream["realitySettings"] = new JsonObject
-                {
-                    ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
-                    ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint,
-                    ["publicKey"] = server.PublicKey,
-                    ["shortId"] = server.ShortId,
-                    ["spiderX"] = string.IsNullOrWhiteSpace(server.SpiderX) ? "/" : server.SpiderX
-                };
+                stream["realitySettings"] = BuildRealitySettings(server);
                 break;
 
             default:
                 stream["security"] = "none";
                 break;
         }
+    }
 
-        if (server.Network.Equals("ws", StringComparison.OrdinalIgnoreCase))
+    private static JsonObject BuildTlsSettings(ProxyServer server)
+    {
+        var tls = new JsonObject
         {
-            stream["wsSettings"] = new JsonObject
-            {
-                ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
-                ["headers"] = new JsonObject
+            ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
+            ["allowInsecure"] = server.AllowInsecure,
+            ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint
+        };
+
+        var alpn = SplitAlpn(server.Alpn);
+        if (alpn.Count > 0)
+            tls["alpn"] = alpn;
+
+        return tls;
+    }
+
+    private static JsonObject BuildRealitySettings(ProxyServer server)
+    {
+        var reality = new JsonObject
+        {
+            ["serverName"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
+            ["fingerprint"] = string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint,
+            ["publicKey"] = server.PublicKey,
+            ["shortId"] = server.ShortId ?? "",
+            ["spiderX"] = string.IsNullOrWhiteSpace(server.SpiderX) ? "/" : server.SpiderX
+        };
+
+        return reality;
+    }
+
+    private static void ApplyTransportSettings(JsonObject stream, ProxyServer server, string network)
+    {
+        switch (network)
+        {
+            case "ws":
+                stream["wsSettings"] = new JsonObject
                 {
-                    ["Host"] = string.IsNullOrWhiteSpace(server.Host) ? server.Sni : server.Host
-                }
-            };
-        }
-        else if (server.Network.Equals("grpc", StringComparison.OrdinalIgnoreCase))
-        {
-            stream["grpcSettings"] = new JsonObject
-            {
-                ["serviceName"] = server.Path
-            };
-        }
+                    ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
+                    ["headers"] = new JsonObject
+                    {
+                        ["Host"] = FirstHost(server)
+                    }
+                };
+                break;
 
-        return stream;
+            case "grpc":
+            {
+                var grpc = new JsonObject
+                {
+                    ["serviceName"] = !string.IsNullOrWhiteSpace(server.ServiceName)
+                        ? server.ServiceName
+                        : (server.Path ?? "")
+                };
+                if (server.Mode.Equals("multi", StringComparison.OrdinalIgnoreCase))
+                    grpc["multiMode"] = true;
+
+                stream["grpcSettings"] = grpc;
+                break;
+            }
+
+            case "h2":
+                stream["httpSettings"] = new JsonObject
+                {
+                    ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
+                    ["host"] = BuildHostArray(server)
+                };
+                break;
+
+            case "httpupgrade":
+                stream["httpupgradeSettings"] = new JsonObject
+                {
+                    ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
+                    ["host"] = FirstHost(server)
+                };
+                break;
+
+            case "xhttp":
+            {
+                var xhttp = new JsonObject
+                {
+                    ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
+                    ["host"] = FirstHost(server)
+                };
+                if (!string.IsNullOrWhiteSpace(server.Mode))
+                    xhttp["mode"] = server.Mode;
+                stream["xhttpSettings"] = xhttp;
+                break;
+            }
+
+            case "kcp":
+            {
+                var kcp = new JsonObject
+                {
+                    ["mtu"] = 1350,
+                    ["tti"] = 50,
+                    ["uplinkCapacity"] = 12,
+                    ["downlinkCapacity"] = 100,
+                    ["congestion"] = false,
+                    ["readBufferSize"] = 2,
+                    ["writeBufferSize"] = 2,
+                    ["header"] = new JsonObject
+                    {
+                        ["type"] = string.IsNullOrWhiteSpace(server.HeaderType) ? "none" : server.HeaderType
+                    }
+                };
+                if (!string.IsNullOrWhiteSpace(server.Seed))
+                    kcp["seed"] = server.Seed;
+                stream["kcpSettings"] = kcp;
+                break;
+            }
+
+            case "quic":
+                stream["quicSettings"] = new JsonObject
+                {
+                    ["security"] = "none",
+                    ["key"] = "",
+                    ["header"] = new JsonObject
+                    {
+                        ["type"] = string.IsNullOrWhiteSpace(server.HeaderType) ? "none" : server.HeaderType
+                    }
+                };
+                break;
+
+            default:
+                // TCP / raw — optional HTTP header camouflage
+                if (server.HeaderType.Equals("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    stream["tcpSettings"] = new JsonObject
+                    {
+                        ["header"] = new JsonObject
+                        {
+                            ["type"] = "http",
+                            ["request"] = new JsonObject
+                            {
+                                ["path"] = new JsonArray
+                                {
+                                    string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path
+                                },
+                                ["headers"] = new JsonObject
+                                {
+                                    ["Host"] = BuildHostArray(server)
+                                }
+                            }
+                        }
+                    };
+                }
+                break;
+        }
+    }
+
+    private static JsonArray SplitAlpn(string alpn)
+    {
+        var arr = new JsonArray();
+        if (string.IsNullOrWhiteSpace(alpn))
+            return arr;
+
+        foreach (var part in alpn.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            arr.Add(part);
+        return arr;
+    }
+
+    private static string FirstHost(ProxyServer server)
+    {
+        if (!string.IsNullOrWhiteSpace(server.Host))
+            return server.Host;
+        if (!string.IsNullOrWhiteSpace(server.Sni))
+            return server.Sni;
+        return server.Address;
+    }
+
+    private static JsonArray BuildHostArray(ProxyServer server)
+    {
+        var host = FirstHost(server);
+        return new JsonArray { host };
     }
 }

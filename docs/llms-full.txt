@@ -7,15 +7,18 @@ Canonical short index: /llms.txt
 
 v2rayF is an open-source GUI front-end around Xray-core. It is not a hosted VPN service; users bring their own servers/subscriptions. Synonyms people search for: v2ray GUI, xray GUI, vless client, reality client, shadowsocks client windows/android, trojan client, tun mode proxy, proxy kill switch.
 
-## Feature map (v1.3+)
+## Feature map (v1.4+)
 
-1. **Import** — clipboard / paste / HTTP(S) subscription → `ShareLinkParser`, `SubscriptionService`, `servers.json`.
+1. **Import** — clipboard / paste / HTTP(S) subscription → `ShareLinkParser`, `SubscriptionService`, encrypted `servers.json`.
 2. **Smart Connect** — TCP prefilter then proxy-path latency; connect order with failover; REALITY tie-break.
-3. **Smart Multipath** — multiple outbounds + burstObservatory + leastPing balancer in generated Xray JSON.
-4. **Routing modes** — Global (Sentinel), Bypass LAN, Bypass China (geo files), Custom Direct/Proxy/Block lists; Android per-app bypass packages.
-5. **Leak shield** — remove clearnet DNS from TUN; DoH servers tagged through proxy; IPv6 block; Windows kill switch after core ready; unexpected core death keeps kill switch armed until Disconnect.
-6. **Secure Share** — SOCKS/HTTP on 0.0.0.0 with password auth when enabled; OEM Wi-Fi hotspot may bypass VpnService — document proxy path for clients.
-7. **Connect lifecycle** — Connecting/Connected/Disconnecting/Failed; timeouts; single-flight gate; health watchdog on SOCKS port.
+3. **Adaptive Survive** — after Smart Connect wave fails, temporary fragment then Sentinel DNS/IPv6/Global retries; persists only `LastSurviveTactic` hint.
+4. **Smart Multipath** — multiple outbounds + burstObservatory + leastPing balancer in generated Xray JSON.
+5. **Routing modes** — Global (Sentinel), Bypass LAN, Bypass China (geo files), Custom Direct/Proxy/Block lists; Android per-app bypass packages.
+6. **Leak shield** — remove clearnet DNS from TUN; DoH servers tagged through proxy; IPv6 block; Windows kill switch after core ready; unexpected core death keeps kill switch armed until Disconnect.
+7. **Secure Share** — SOCKS/HTTP auth on LAN IPv4 by default (`ShareListenAllInterfaces` for 0.0.0.0); vault-gated reveal/copy; password rotate.
+8. **Encrypted vault** — `ISecretProtector` / AES-GCM at rest; `.v2rayf` PBKDF2 export/import; session lock.
+9. **Updates** — GitHub host allowlist, SHA256 (digest/`SHA256SUMS`), Zip-Slip-safe extract; Android APK signature check.
+10. **Connect lifecycle** — Connecting/Connected/Disconnecting/Failed; timeouts; single-flight gate; health watchdog on SOCKS port.
 
 ## Config generation
 
@@ -30,4 +33,4 @@ v2rayF is an open-source GUI front-end around Xray-core. It is not a hosted VPN 
 
 ## Release artifacts
 
-Zip names: `v2rayF-win-x64.zip`, `v2rayF-win-arm64.zip`, `v2rayF-linux-x64.zip`, `v2rayF-linux-arm64.zip`, `v2rayF-osx-x64.zip`, `v2rayF-osx-arm64.zip`, `v2rayF-android-arm64.zip` (contains APK).
+Zip names: `v2rayF-win-x64.zip`, `v2rayF-win-arm64.zip`, `v2rayF-linux-x64.zip`, `v2rayF-linux-arm64.zip`, `v2rayF-osx-x64.zip`, `v2rayF-osx-arm64.zip`, `v2rayF-android-arm64.zip` (contains APK), plus `SHA256SUMS`.

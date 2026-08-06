@@ -19,14 +19,14 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
 
     public event EventHandler? UnexpectedExited;
 
-    public Task StartAsync(
+    public async Task StartAsync(
         string corePath,
         string configPath,
         string workingDirectory,
         int? tunFd = null,
         CancellationToken cancellationToken = default)
     {
-        StopAsync(cancellationToken).GetAwaiter().GetResult();
+        await StopAsync(cancellationToken).ConfigureAwait(false);
 
         lock (_stderrLock)
         {
@@ -49,7 +49,6 @@ public sealed class ManagedCoreProcessHost : ICoreProcessHost
         });
 
         _ = DrainOutputAsync(_process);
-        return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

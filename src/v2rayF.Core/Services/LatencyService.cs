@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
@@ -23,6 +25,8 @@ public sealed class LatencyService
     private readonly SemaphoreSlim _speedtestLock = new(1, 1);
 
     public const int TimeoutMs = 10000;
+    /// <summary>Per-probe budget during Smart Connect ranking (keeps connect agile).</summary>
+    public const int RankProbeTimeoutMs = 4500;
 
     public LatencyService(ICoreEnvironment environment)
     {
@@ -114,7 +118,7 @@ public sealed class LatencyService
 
     private async Task WaitForCoreReadyAsync(CancellationToken cancellationToken)
     {
-        for (var i = 0; i < 20; i++)
+        for (var i = 0; i < 40; i++)
         {
             if (_speedtestHost.HasExited)
                 return;
@@ -123,10 +127,8 @@ public sealed class LatencyService
                     .ConfigureAwait(false))
                 return;
 
-            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
         }
-
-        await Task.Delay(300, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<bool> IsPortOpenAsync(string host, int port, CancellationToken cancellationToken)
@@ -135,7 +137,7 @@ public sealed class LatencyService
         {
             using var client = new TcpClient();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(200);
+            timeout.CancelAfter(150);
             await client.ConnectAsync(host, port, timeout.Token).ConfigureAwait(false);
             return true;
         }
@@ -145,43 +147,65 @@ public sealed class LatencyService
         }
     }
 
+    /// <summary>Returns on first successful generate_204 (does not wait for every URL).</summary>
     private static async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeoutMs);
+        using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
 
         var handler = new SocketsHttpHandler
         {
             Proxy = new WebProxy($"socks5h://127.0.0.1:{socksPort}"),
             UseProxy = true,
-            ConnectTimeout = TimeSpan.FromSeconds(5)
+            ConnectTimeout = TimeSpan.FromSeconds(4)
         };
 
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeoutMs) };
 
-        int? best = null;
-        foreach (var url in PingUrls)
+        var tasks = new Task<(bool Ok, int Ms)>[PingUrls.Length];
+        for (var i = 0; i < PingUrls.Length; i++)
         {
-            try
-            {
-                var sw = Stopwatch.StartNew();
-                using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token)
-                    .ConfigureAwait(false);
-                sw.Stop();
+            var url = PingUrls[i];
+            tasks[i] = ProbeOneAsync(client, url, raceCts.Token);
+        }
 
-                if (response.IsSuccessStatusCode || (int)response.StatusCode == 204)
-                {
-                    var ms = (int)sw.ElapsedMilliseconds;
-                    best = best is null ? ms : Math.Min(best.Value, ms);
-                }
-            }
-            catch
+        var pending = tasks.ToList();
+        while (pending.Count > 0)
+        {
+            var finished = await Task.WhenAny(pending).ConfigureAwait(false);
+            pending.Remove(finished);
+            var (ok, ms) = await finished.ConfigureAwait(false);
+            if (ok)
             {
-                // Try next URL.
+                raceCts.Cancel();
+                return ms;
             }
         }
 
-        return best ?? -1;
+        return -1;
+    }
+
+    private static async Task<(bool Ok, int Ms)> ProbeOneAsync(
+        HttpClient client,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            sw.Stop();
+            if (response.IsSuccessStatusCode || (int)response.StatusCode == 204)
+                return (true, (int)sw.ElapsedMilliseconds);
+        }
+        catch
+        {
+            // Rival URL or timeout.
+        }
+
+        return (false, -1);
     }
 
     private static async Task<int?> MeasureTcpAsync(ProxyServer server, CancellationToken cancellationToken)
@@ -191,7 +215,7 @@ public sealed class LatencyService
         {
             using var client = new TcpClient();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(5000);
+            timeout.CancelAfter(3500);
 
             await client.ConnectAsync(server.Address, server.Port, timeout.Token).ConfigureAwait(false);
             sw.Stop();

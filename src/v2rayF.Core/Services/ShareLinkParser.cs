@@ -77,6 +77,16 @@ public static class ShareLinkParser
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
+        var network = NormalizeNetwork(GetString(root, "net") ?? "tcp");
+        var security = MapTls(GetString(root, "tls") ?? GetString(root, "security"));
+        var path = GetString(root, "path") ?? "";
+        var host = GetString(root, "host") ?? "";
+        var serviceName = GetString(root, "serviceName") ?? "";
+        if (string.IsNullOrWhiteSpace(serviceName) &&
+            network.Equals("grpc", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(path))
+            serviceName = path;
+
         return new ProxyServer
         {
             Protocol = ProxyProtocol.VMess,
@@ -85,11 +95,23 @@ public static class ShareLinkParser
             Port = GetInt(root, "port"),
             UserId = GetString(root, "id") ?? "",
             AlterId = GetInt(root, "aid"),
-            Network = GetString(root, "net") ?? "tcp",
-            Security = MapTls(GetString(root, "tls")),
-            Host = GetString(root, "host") ?? "",
-            Path = GetString(root, "path") ?? "",
-            Sni = GetString(root, "sni") ?? GetString(root, "host") ?? "",
+            Cipher = GetString(root, "scy") ?? "auto",
+            Network = network,
+            Security = security,
+            Flow = GetString(root, "flow") ?? "",
+            Host = host,
+            Path = path,
+            Sni = GetString(root, "sni") ?? host,
+            Fingerprint = FirstNonEmpty(GetString(root, "fp"), GetString(root, "fingerprint"), "chrome")!,
+            PublicKey = GetString(root, "pbk") ?? "",
+            ShortId = GetString(root, "sid") ?? "",
+            SpiderX = GetString(root, "spx") ?? "",
+            Alpn = NormalizeAlpn(GetString(root, "alpn")),
+            HeaderType = GetString(root, "type") ?? "",
+            ServiceName = serviceName,
+            Mode = GetString(root, "mode") ?? "",
+            Seed = GetString(root, "seed") ?? "",
+            AllowInsecure = GetString(root, "allowInsecure") is "1" or "true",
             RawLink = link
         };
     }
@@ -104,26 +126,20 @@ public static class ShareLinkParser
         if (string.IsNullOrWhiteSpace(name))
             name = "VLESS";
 
-        return new ProxyServer
+        var server = new ProxyServer
         {
             Protocol = ProxyProtocol.VLESS,
             Name = name,
             Address = uri.Host,
             Port = uri.Port > 0 ? uri.Port : 443,
             UserId = Uri.UnescapeDataString(uri.UserInfo),
-            Network = GetQuery(query, "type") ?? "tcp",
-            Security = GetQuery(query, "security") ?? "none",
-            Flow = GetQuery(query, "flow") ?? "",
-            Sni = GetQuery(query, "sni") ?? GetQuery(query, "peer") ?? "",
-            Host = GetQuery(query, "host") ?? "",
-            Path = GetQuery(query, "path") ?? "",
-            Fingerprint = GetQuery(query, "fp") ?? "chrome",
-            PublicKey = GetQuery(query, "pbk") ?? "",
-            ShortId = GetQuery(query, "sid") ?? "",
-            SpiderX = GetQuery(query, "spx") ?? "",
-            AllowInsecure = GetQuery(query, "allowInsecure") == "1",
+            Encryption = GetQuery(query, "encryption") ?? "none",
             RawLink = link
         };
+
+        ApplyStreamFromQuery(server, query, defaultSecurity: "none");
+        NormalizeVisionFlow(server);
+        return server;
     }
 
     private static ProxyServer ParseShadowsocks(string link)
@@ -202,19 +218,18 @@ public static class ShareLinkParser
         if (string.IsNullOrWhiteSpace(name))
             name = "Trojan";
 
-        return new ProxyServer
+        var server = new ProxyServer
         {
             Protocol = ProxyProtocol.Trojan,
             Name = name,
             Address = uri.Host,
             Port = uri.Port > 0 ? uri.Port : 443,
             Password = Uri.UnescapeDataString(uri.UserInfo),
-            Sni = GetQuery(query, "sni") ?? GetQuery(query, "peer") ?? uri.Host,
-            AllowInsecure = GetQuery(query, "allowInsecure") == "1",
-            Network = GetQuery(query, "type") ?? "tcp",
-            Security = "tls",
             RawLink = link
         };
+
+        ApplyStreamFromQuery(server, query, defaultSecurity: "tls");
+        return server;
     }
 
     private static ProxyServer ParseSocks(string link)
@@ -237,6 +252,103 @@ public static class ShareLinkParser
         };
     }
 
+    /// <summary>Maps common share-link query keys onto stream fields (VLESS / Trojan / compatible).</summary>
+    private static void ApplyStreamFromQuery(
+        ProxyServer server,
+        Dictionary<string, string> query,
+        string defaultSecurity)
+    {
+        server.Network = NormalizeNetwork(GetQuery(query, "type") ?? GetQuery(query, "net") ?? "tcp");
+        server.Security = NormalizeSecurity(GetQuery(query, "security") ?? defaultSecurity);
+        server.Flow = GetQuery(query, "flow") ?? "";
+        server.Sni = GetQuery(query, "sni") ?? GetQuery(query, "peer") ?? "";
+        server.Host = GetQuery(query, "host") ?? "";
+        server.Path = GetQuery(query, "path") ?? "";
+        server.Fingerprint = FirstNonEmpty(GetQuery(query, "fp"), GetQuery(query, "fingerprint"), "chrome")!;
+        server.PublicKey = GetQuery(query, "pbk") ?? "";
+        server.ShortId = GetQuery(query, "sid") ?? "";
+        server.SpiderX = GetQuery(query, "spx") ?? "";
+        server.Alpn = NormalizeAlpn(GetQuery(query, "alpn"));
+        server.HeaderType = GetQuery(query, "headerType") ?? GetQuery(query, "header") ?? "";
+        server.ServiceName = GetQuery(query, "serviceName") ?? GetQuery(query, "servicename") ?? "";
+        server.Mode = GetQuery(query, "mode") ?? "";
+        server.Seed = GetQuery(query, "seed") ?? "";
+        server.AllowInsecure =
+            GetQuery(query, "allowInsecure") is "1" or "true" ||
+            GetQuery(query, "insecure") is "1" or "true";
+
+        if (string.IsNullOrWhiteSpace(server.Sni) && !string.IsNullOrWhiteSpace(server.Host))
+            server.Sni = server.Host;
+
+        // gRPC often puts service name in path when serviceName is absent.
+        if (string.IsNullOrWhiteSpace(server.ServiceName) &&
+            server.Network.Equals("grpc", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(server.Path))
+            server.ServiceName = server.Path;
+    }
+
+    /// <summary>Vision only applies on TCP — clear flow on other transports.</summary>
+    internal static void NormalizeVisionFlow(ProxyServer server)
+    {
+        if (string.IsNullOrWhiteSpace(server.Flow))
+            return;
+
+        if (!server.Network.Equals("tcp", StringComparison.OrdinalIgnoreCase) &&
+            !server.Network.Equals("raw", StringComparison.OrdinalIgnoreCase))
+        {
+            server.Flow = "";
+            return;
+        }
+
+        // Normalize common aliases to Xray's Vision flow names.
+        if (server.Flow.Equals("vision", StringComparison.OrdinalIgnoreCase) ||
+            server.Flow.Equals("xtls-rprx-vision", StringComparison.OrdinalIgnoreCase))
+            server.Flow = "xtls-rprx-vision";
+        else if (server.Flow.Equals("xtls-rprx-vision-udp443", StringComparison.OrdinalIgnoreCase))
+            server.Flow = "xtls-rprx-vision-udp443";
+    }
+
+    internal static string NormalizeNetwork(string? network)
+    {
+        if (string.IsNullOrWhiteSpace(network))
+            return "tcp";
+
+        return network.Trim().ToLowerInvariant() switch
+        {
+            "tcp" or "raw" => "tcp",
+            "ws" or "websocket" => "ws",
+            "grpc" or "gun" => "grpc",
+            "h2" or "http" => "h2",
+            "httpupgrade" or "http_upgrade" => "httpupgrade",
+            "xhttp" or "splithttp" => "xhttp",
+            "kcp" or "mkcp" => "kcp",
+            "quic" => "quic",
+            _ => network.Trim().ToLowerInvariant()
+        };
+    }
+
+    internal static string NormalizeSecurity(string? security)
+    {
+        if (string.IsNullOrWhiteSpace(security) || security.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return "none";
+        if (security.Equals("reality", StringComparison.OrdinalIgnoreCase))
+            return "reality";
+        if (security.Equals("tls", StringComparison.OrdinalIgnoreCase) ||
+            security.Equals("xtls", StringComparison.OrdinalIgnoreCase))
+            return "tls";
+        return security.Trim().ToLowerInvariant();
+    }
+
+    private static string NormalizeAlpn(string? alpn)
+    {
+        if (string.IsNullOrWhiteSpace(alpn))
+            return "";
+        return alpn.Replace('|', ',').Trim();
+    }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
     private static void ParseHostPort(string hostPart, out string host, out int port)
     {
         if (hostPart.StartsWith('['))
@@ -255,8 +367,14 @@ public static class ShareLinkParser
         port = int.Parse(hostPart[(colon + 1)..]);
     }
 
-    private static string MapTls(string? tls) =>
-        string.IsNullOrWhiteSpace(tls) || tls == "none" ? "none" : "tls";
+    private static string MapTls(string? tls)
+    {
+        if (string.IsNullOrWhiteSpace(tls) || tls.Equals("none", StringComparison.OrdinalIgnoreCase))
+            return "none";
+        if (tls.Equals("reality", StringComparison.OrdinalIgnoreCase))
+            return "reality";
+        return "tls";
+    }
 
     private static string? GetString(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) ? value.GetString() : null;

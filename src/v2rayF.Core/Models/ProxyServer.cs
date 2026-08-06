@@ -42,6 +42,24 @@ public partial class ProxyServer : ObservableObject
 
     public string SpiderX { get; set; } = "";
 
+    /// <summary>Comma-separated ALPN list (e.g. h2,http/1.1).</summary>
+    public string Alpn { get; set; } = "";
+
+    /// <summary>TCP header type: none | http.</summary>
+    public string HeaderType { get; set; } = "";
+
+    /// <summary>gRPC service name (falls back to Path when empty).</summary>
+    public string ServiceName { get; set; } = "";
+
+    /// <summary>Transport mode (gRPC multi, xHTTP mode, etc.).</summary>
+    public string Mode { get; set; } = "";
+
+    /// <summary>mKCP seed.</summary>
+    public string Seed { get; set; } = "";
+
+    /// <summary>VLESS encryption (usually none).</summary>
+    public string Encryption { get; set; } = "none";
+
     public string Cipher { get; set; } = "";
 
     public bool AllowInsecure { get; set; }

@@ -21,6 +21,19 @@ public sealed class DesktopAppUpdater : IAppUpdater
 
         await UpdateDownloadHelper.DownloadAsync(offer.DownloadUrl, zipPath, progress, cancellationToken)
             .ConfigureAwait(false);
+
+        if (!string.IsNullOrWhiteSpace(offer.Sha256))
+        {
+            progress?.Report("Verifying SHA256…");
+            UpdateDownloadHelper.VerifySha256(zipPath, offer.Sha256);
+        }
+        else
+        {
+            progress?.Report("Warning: release has no SHA256 — install refused.");
+            throw new InvalidOperationException(
+                "Update package has no SHA256 checksum (digest or SHA256SUMS). Refusing to install.");
+        }
+
         UpdateDownloadHelper.ExtractZip(zipPath, extractDir, progress);
 
         var appDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

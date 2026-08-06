@@ -12,6 +12,10 @@ public sealed class SmartConnectService
     public const int MaxFailoverCandidates = 5;
     public const int MaxMultipathCandidates = 3;
     public const int TcpPrefilterLimit = 8;
+    /// <summary>Stop proxy-path probes once this many working paths are found.</summary>
+    public const int EarlyExitGoodPeers = 3;
+    /// <summary>Hard cap on expensive proxy-path probes per rank pass.</summary>
+    public const int MaxProxyPathProbes = 6;
 
     private readonly LatencyService _latency;
 
@@ -24,6 +28,7 @@ public sealed class SmartConnectService
 
     /// <summary>
     /// Two-phase: concurrent TCP prefilter, then proxy-path probe on the top candidates only.
+    /// Early-exits once <see cref="EarlyExitGoodPeers"/> proxy-path OK results are collected.
     /// </summary>
     public async Task<IReadOnlyList<RankedServer>> RankAsync(
         IReadOnlyList<ProxyServer> servers,
@@ -41,14 +46,18 @@ public sealed class SmartConnectService
             tcpResults[index] = (server, ms is > 0 ? ms.Value : int.MaxValue);
         })).ConfigureAwait(false);
 
-        var shortlist = tcpResults
+        var reachable = tcpResults
+            .Where(t => t.TcpMs < int.MaxValue)
             .OrderBy(t => t.TcpMs)
-            .Take(Math.Min(TcpPrefilterLimit, servers.Count))
+            .ToList();
+
+        var shortlist = reachable
+            .Take(Math.Min(TcpPrefilterLimit, reachable.Count))
             .Select(t => t.Server)
             .ToList();
 
-        // Always include preferred-looking REALITY nodes that TCP could reach.
-        foreach (var server in servers)
+        // Prefer REALITY among reachable nodes that did not make the TCP top-N.
+        foreach (var (server, _) in reachable)
         {
             if (shortlist.Count >= TcpPrefilterLimit)
                 break;
@@ -58,12 +67,30 @@ public sealed class SmartConnectService
                 shortlist.Add(server);
         }
 
-        // Phase 2 — proxy path (serialized inside LatencyService) on shortlist only.
+        // Phase 2 — proxy path on shortlist; early-exit when enough good peers found.
         var ranked = new List<RankedServer>(shortlist.Count);
+        var goodCount = 0;
+        var probed = 0;
         foreach (var server in shortlist)
         {
+            if (probed >= MaxProxyPathProbes || goodCount >= EarlyExitGoodPeers)
+                break;
+
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await _latency.MeasureDetailedAsync(server, cancellationToken).ConfigureAwait(false);
+            probed++;
+
+            LatencyService.LatencyResult result;
+            try
+            {
+                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                probeCts.CancelAfter(LatencyService.RankProbeTimeoutMs);
+                result = await _latency.MeasureDetailedAsync(server, probeCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                result = new LatencyService.LatencyResult(-1, false);
+            }
+
             var latency = result.LatencyMs is > 0 ? result.LatencyMs.Value : int.MaxValue;
             var realityBonus = string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) ? 5 : 0;
             var score = result.ProxyPathOk ? Math.Max(0, latency - realityBonus) : int.MaxValue - 1;
@@ -72,9 +99,20 @@ public sealed class SmartConnectService
                 score,
                 latency == int.MaxValue ? -1 : latency,
                 result.ProxyPathOk));
+
+            if (result.ProxyPathOk)
+                goodCount++;
         }
 
-        // Append TCP-only leftovers so failover still has options if all proxy probes fail.
+        // Append remaining shortlist / TCP leftovers as TCP-only ranks (no more core boots).
+        foreach (var server in shortlist)
+        {
+            if (ranked.Any(r => r.Server.Id == server.Id))
+                continue;
+            var tcpMs = tcpResults.First(t => t.Server.Id == server.Id).TcpMs;
+            ranked.Add(new RankedServer(server, int.MaxValue - 1, tcpMs == int.MaxValue ? -1 : tcpMs, false));
+        }
+
         foreach (var (server, tcpMs) in tcpResults.OrderBy(t => t.TcpMs))
         {
             if (ranked.Any(r => r.Server.Id == server.Id))

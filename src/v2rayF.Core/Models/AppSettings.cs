@@ -36,6 +36,12 @@ public sealed class AppSettings
 
     public string ShareAuthPass { get; set; } = "";
 
+    /// <summary>
+    /// When false (default), Secure Share binds to the primary LAN IPv4 only.
+    /// When true, listens on 0.0.0.0 (all interfaces).
+    /// </summary>
+    public bool ShareListenAllInterfaces { get; set; }
+
     /// <summary>DPI evasion via TLS hello fragment (speed cost; off by default).</summary>
     public bool EnablePacketFragment { get; set; }
 
@@ -46,4 +52,13 @@ public sealed class AppSettings
     public string AndroidBypassPackages { get; set; } = "";
 
     public string LastGoodServerId { get; set; } = "";
+
+    /// <summary>Escalate fragment / Sentinel DNS tactics when Smart Connect failover exhausts.</summary>
+    public bool AdaptiveSurviveEnabled { get; set; } = true;
+
+    /// <summary>Hint from last successful Adaptive Survive session (fragment / sentinel).</summary>
+    public string LastSurviveTactic { get; set; } = "";
+
+    /// <summary>Storage schema version (2 = encrypted sensitive fields). Default 1 = legacy plaintext.</summary>
+    public int StorageVersion { get; set; } = 1;
 }

@@ -121,14 +121,16 @@ Each desktop package includes **Xray-core** and geo data (`geoip.dat`, `geosite.
 
 ## Features
 
-- **Protocols** — VMess, VLESS (incl. REALITY / Vision), Shadowsocks, Trojan, SOCKS
-- **Import** — clipboard, paste box, subscription URL (`https://…`)
+- **Protocols** — VMess, VLESS (incl. REALITY / Vision / Vision+TLS), Shadowsocks, Trojan, SOCKS
+- **Import** — clipboard, paste box, subscription URL (`https://…`); transports TCP/WS/gRPC/H2/HTTPUpgrade/xHTTP/mKCP/QUIC
 - **Smart Connect** — auto-pick the fastest *working* node; failover on failure
+- **Adaptive Survive** — escalate fragment / Sentinel tactics when Smart Connect cannot stay up
 - **Smart Multipath** — balance across top servers (Xray observatory)
 - **Latency test** — per server or test all (proxy-path preferred)
 - **Routing** — Global/Sentinel, Bypass LAN, Bypass China, Custom Direct / Proxy / Block
 - **Leak shield** — DNS through proxy, IPv6 block, kill switch, crash-aware teardown
-- **Secure Share** — LAN SOCKS/HTTP gateway for phone↔PC / hotspot clients
+- **Secure Share** — LAN SOCKS/HTTP gateway (LAN-bind by default) for phone↔PC / hotspot clients
+- **Encrypted vault** — secrets at rest + `.v2rayf` export/import between devices
 - **TUN / VPN mode** — full-device capture (Admin on Windows; VPN permission on Android)
 - **System proxy** — Windows, macOS, GNOME, KDE, XFCE (desktop only)
 - **Tray icon** — status at a glance; minimize to tray while connected
@@ -221,7 +223,7 @@ A cross-platform GUI client for Xray-core that speaks VLESS, VMess, Shadowsocks,
 It can run in **TUN / VPN mode** (full-device capture) or set the **system HTTP proxy**. The data plane is still your Xray outbound (e.g. VLESS+REALITY), not a proprietary VPN protocol.
 
 **Does it support VLESS REALITY?**  
-Yes. Import `vless://` links with REALITY (`security=reality`, `pbk`, `sid`, optional Vision `flow`).
+Yes. Import `vless://` links with REALITY (`security=reality`, `pbk`, `sid`) and optional Vision (`flow=xtls-rprx-vision`). Vision also works with `security=tls`. Transports include TCP, WS, gRPC, H2, HTTPUpgrade, xHTTP, mKCP, and QUIC.
 
 **How do I stop DNS leaks?**  
 Enable **DNS through proxy** (default in Sentinel profile) and prefer TUN/VPN mode. On Windows, enable the **kill switch** so clearnet is blocked if the core drops.

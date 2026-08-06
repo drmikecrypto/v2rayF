@@ -45,14 +45,14 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
 
     public event EventHandler? UnexpectedExited;
 
-    public Task StartAsync(
+    public async Task StartAsync(
         string corePath,
         string configPath,
         string workingDirectory,
         int? tunFd = null,
         CancellationToken cancellationToken = default)
     {
-        StopAsync(cancellationToken).GetAwaiter().GetResult();
+        await StopAsync(cancellationToken).ConfigureAwait(false);
 
         if (!System.IO.File.Exists(corePath))
             throw new System.IO.FileNotFoundException("Xray core not found.", corePath);
@@ -102,8 +102,6 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
                 $"Xray core failed to start: {ex.Message}. Reinstall the app or check that your device is ARM64.",
                 ex);
         }
-
-        return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken = default)
