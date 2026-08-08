@@ -95,12 +95,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         if (ProcessHost.HasExited)
         {
+            // Let async stdout/stderr drainers finish before reading the error buffer.
+            await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
             var error = ProcessHost.GetRecentError();
             await StopAsync(cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(error)
-                    ? "Xray core exited immediately after start."
-                    : FormatStartupError(error));
+            throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
         }
 
         ActiveServer = server;
@@ -185,7 +184,14 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
     }
 
-    private void OnUnexpectedExited(object? sender, EventArgs e) => RaiseUnexpectedStop();
+    private void OnUnexpectedExited(object? sender, EventArgs e)
+    {
+        // Startup failures are handled by StartAsync; avoid racing VPN teardown on Connect.
+        if (ActiveServer is null)
+            return;
+
+        RaiseUnexpectedStop();
+    }
 
     private void RaiseUnexpectedStop()
     {
@@ -233,24 +239,4 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
     }
 
-    private static string FormatStartupError(string stderr)
-    {
-        if (stderr.Contains("10808", StringComparison.Ordinal) ||
-            stderr.Contains("10809", StringComparison.Ordinal) ||
-            stderr.Contains("bind:", StringComparison.OrdinalIgnoreCase) ||
-            stderr.Contains("Only one usage of each socket address", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Local proxy ports 10808/10809 are already in use. Close v2rayN (or another proxy client) and try again.";
-        }
-
-        if (string.IsNullOrWhiteSpace(stderr))
-            return "Xray core exited immediately after start.";
-
-        var lastLine = stderr;
-        var newline = stderr.LastIndexOf('\n');
-        if (newline >= 0 && newline < stderr.Length - 1)
-            lastLine = stderr[(newline + 1)..].Trim();
-
-        return StatusSanitizer.Scrub(lastLine);
-    }
 }

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-08-08
+
+### Fixed
+
+- Windows TUN start no longer fails silently — ship `wintun.dll` with cores and surface real Xray stdout (missing WinTun / access denied / port conflicts) instead of generic “exited immediately”
+- Android Connect stability — VpnService returns the system binder, excludes the app from the tunnel, uses gVisor when a TUN fd is provided, and ignores unexpected-exit teardown during startup so failed connects do not race-crash the UI
+- Desktop CA1416: guard Windows-only admin check behind `OperatingSystem.IsWindows()`
+
 ## [1.4.1] - 2026-08-06
 
 ### Fixed
@@ -230,6 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.2]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.2
 [1.4.1]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.1
 [1.4.0]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.0
 [1.1.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.1.6

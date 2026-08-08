@@ -77,6 +77,16 @@ public class V2rayVpnService : VpnService
             builder.AddRoute("0.0.0.0", 0);
             builder.AddDnsServer("172.19.0.1");
 
+            try
+            {
+                // Keep app + libxray outbound off the tunnel (avoids routing loops).
+                builder.AddDisallowedApplication(PackageName!);
+            }
+            catch
+            {
+                // Ignore if package lookup fails on exotic OEMs.
+            }
+
             if (blockIpv6)
             {
                 try
@@ -154,7 +164,7 @@ public class V2rayVpnService : VpnService
         base.OnDestroy();
     }
 
-    public override IBinder? OnBind(Intent? intent) => null;
+    public override IBinder? OnBind(Intent? intent) => base.OnBind(intent);
 
     public static void Disconnect(Context? context = null)
     {

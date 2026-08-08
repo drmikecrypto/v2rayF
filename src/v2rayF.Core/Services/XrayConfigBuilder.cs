@@ -48,7 +48,8 @@ public static class XrayConfigBuilder
                 ["name"] = TunConstants.InterfaceName,
                 ["MTU"] = 1280,
                 ["inet4_address"] = "172.19.0.1/30",
-                ["stack"] = "system"
+                // Android VpnService fd path uses gVisor; Windows WinTun uses system stack.
+                ["stack"] = tunFd is int ? "gvisor" : "system"
             };
 
             if (!settings.BlockIpv6)

@@ -131,7 +131,7 @@ On Linux/macOS, `ApplicationData` maps to `~/.config/` or equivalent.
 | “Xray core missing” | Ensure `cores/xray` or `cores/xray.exe` is next to the app |
 | Connect fails | Check server link, firewall, VPS port |
 | Bypass China fails | Confirm `geoip.dat` and `geosite.dat` exist in `cores/` |
-| TUN fails | Run with Admin / sudo |
+| TUN fails | Run as Admin; ensure `wintun.dll` is next to `xray.exe` in `cores/` |
 | Connected + TUN + offline | Update past the TUN kill-switch fix; or turn kill switch off, or use system proxy instead of TUN |
 | Linux proxy not set | Use TUN, or set manual proxy `127.0.0.1:10809` |
 | macOS blocked | `xattr -cr` on the folder |

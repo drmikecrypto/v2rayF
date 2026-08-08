@@ -20,7 +20,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
 
     public bool IsMobile => false;
 
-    public bool CanUseTunMode => IsWindowsAdministrator();
+    public bool CanUseTunMode =>
+        OperatingSystem.IsWindows() && IsWindowsAdministrator();
 
     public string TunRequirementMessage =>
         "TUN mode requires running v2rayF as Administrator.";

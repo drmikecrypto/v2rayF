@@ -55,7 +55,14 @@ function Get-XrayBundle {
         if ($geo) { $geoFiles += $geo.FullName }
     }
 
-    return @{ Binary = $binary.FullName; GeoFiles = $geoFiles }
+    # WinTun is required for Windows TUN mode; present only in Windows Xray zips.
+    $extras = @()
+    foreach ($extraName in @("wintun.dll", "LICENSE-wintun.txt")) {
+        $extra = Get-ChildItem -Path $extractDir -Recurse -File -Filter $extraName | Select-Object -First 1
+        if ($extra) { $extras += $extra.FullName }
+    }
+
+    return @{ Binary = $binary.FullName; GeoFiles = $geoFiles; Extras = $extras }
 }
 
 function Install-CoresBundle {
@@ -64,6 +71,11 @@ function Install-CoresBundle {
     Copy-Item -Path $Bundle.Binary -Destination (Join-Path $DestDir $CoreName) -Force
     foreach ($geo in $Bundle.GeoFiles) {
         Copy-Item -Path $geo -Destination (Join-Path $DestDir (Split-Path $geo -Leaf)) -Force
+    }
+    foreach ($extra in @($Bundle.Extras)) {
+        if ($extra) {
+            Copy-Item -Path $extra -Destination (Join-Path $DestDir (Split-Path $extra -Leaf)) -Force
+        }
     }
 }
 

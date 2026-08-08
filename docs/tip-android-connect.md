@@ -7,6 +7,7 @@ If **Connect** closes the app or fails on Samsung / Android 12 devices:
 3. Use a **Compat** VLESS link — avoid `flow=xtls-rprx-vision` on phones.
 4. Tap **Connect** and allow the **VPN** permission when prompted.
 5. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
+6. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
 
 ## Still broken?
 

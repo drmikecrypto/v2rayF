@@ -150,6 +150,50 @@ public class StreamSettingsBuilderTests
     }
 
     [Fact]
+    public void Build_WithTunFd_UsesGvisorStack()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            Network = "tcp",
+            Security = "reality",
+            PublicKey = "pk"
+        };
+
+        var settings = new AppSettings { EnableTunMode = true };
+        var json = XrayConfigBuilder.Build(server, settings, tunFd: 42);
+        var root = JsonNode.Parse(json)!.AsObject();
+        var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Equal("gvisor", tun["settings"]!["stack"]!.GetValue<string>());
+        Assert.Equal(42, tun["settings"]!["fd"]!.GetValue<int>());
+        Assert.False(tun["settings"]!["auto_route"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Build_WindowsTunWithoutFd_UsesSystemStack()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            Network = "tcp",
+            Security = "none"
+        };
+
+        var settings = new AppSettings { EnableTunMode = true };
+        var json = XrayConfigBuilder.Build(server, settings, tunFd: null);
+        var root = JsonNode.Parse(json)!.AsObject();
+        var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Equal("system", tun["settings"]!["stack"]!.GetValue<string>());
+        Assert.True(tun["settings"]!["auto_route"]!.GetValue<bool>());
+    }
+
+    [Fact]
     public void BuildStream_GrpcMulti_AndWsTlsAlpn()
     {
         var grpc = new ProxyServer
