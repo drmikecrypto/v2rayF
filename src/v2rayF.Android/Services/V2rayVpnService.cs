@@ -24,6 +24,7 @@ public class V2rayVpnService : VpnService
     private const string ExtraBypassPackages = "bypass_packages";
 
     private static ParcelFileDescriptor? _interface;
+    private static int _tunFd = -1;
     private static TaskCompletionSource<int?>? _establishTcs;
 
     public static Task<int?> EstablishAsync(
@@ -32,7 +33,11 @@ public class V2rayVpnService : VpnService
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default)
     {
-        Disconnect(context);
+        // In-process teardown only — never StartService(DISCONNECT) before ESTABLISH
+        // (that races FGS and can force-close with RemoteServiceException).
+        _establishTcs?.TrySetResult(null);
+        TearDownInterface();
+
         _establishTcs = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var intent = new Intent(context, typeof(V2rayVpnService));
@@ -51,19 +56,21 @@ public class V2rayVpnService : VpnService
 
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
-        if (string.Equals(intent?.Action, ActionDisconnect, StringComparison.Ordinal))
-        {
-            TearDownInterface();
-            StopForeground(true);
-            StopSelf();
-            return StartCommandResult.NotSticky;
-        }
+        var isDisconnect = string.Equals(intent?.Action, ActionDisconnect, StringComparison.Ordinal);
 
         try
         {
             EnsureChannel();
-            var notification = BuildNotification("Establishing VPN…");
-            StartVpnForeground(notification);
+            // Always promote to foreground first (Android 8+ FGS contract).
+            StartVpnForeground(BuildNotification(isDisconnect ? "Stopping VPN…" : "Establishing VPN…"));
+
+            if (isDisconnect)
+            {
+                TearDownInterface();
+                StopForeground(true);
+                StopSelf();
+                return StartCommandResult.NotSticky;
+            }
 
             TearDownInterface();
 
@@ -91,7 +98,6 @@ public class V2rayVpnService : VpnService
             {
                 try
                 {
-                    // Capture IPv6 so it cannot leak around the tunnel.
                     builder.AddAddress("fd00:1:fd00:1:fd00:1:fd00:1", 126);
                     builder.AddRoute("::", 0);
                 }
@@ -132,6 +138,7 @@ public class V2rayVpnService : VpnService
             }
 
             var fd = _interface.DetachFd();
+            _interface = null;
             if (fd < 0)
             {
                 AndroidPlatformIntegration.ReportEstablishError("VPN file descriptor is invalid.");
@@ -141,10 +148,10 @@ public class V2rayVpnService : VpnService
                 return StartCommandResult.NotSticky;
             }
 
+            _tunFd = fd;
             _establishTcs?.TrySetResult(fd);
 
-            var active = BuildNotification("Proxy connection active");
-            StartVpnForeground(active);
+            StartVpnForeground(BuildNotification("Proxy connection active"));
         }
         catch (Exception ex)
         {
@@ -174,16 +181,31 @@ public class V2rayVpnService : VpnService
         if (context is null)
             return;
 
-        var stopIntent = new Intent(context, typeof(V2rayVpnService));
-        context.StopService(stopIntent);
-
         var disconnectIntent = new Intent(context, typeof(V2rayVpnService));
         disconnectIntent.SetAction(ActionDisconnect);
-        context.StartService(disconnectIntent);
+        // Use FGS start so OnStartCommand can satisfy startForeground before StopSelf.
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+            context.StartForegroundService(disconnectIntent);
+        else
+            context.StartService(disconnectIntent);
     }
 
     private static void TearDownInterface()
     {
+        if (_tunFd >= 0)
+        {
+            try
+            {
+                AndroidJavaCoreProcessHost.CloseFd(_tunFd);
+            }
+            catch
+            {
+                // Best effort.
+            }
+
+            _tunFd = -1;
+        }
+
         try
         {
             _interface?.Close();

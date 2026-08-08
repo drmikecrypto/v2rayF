@@ -1,6 +1,6 @@
 #Requires -Version 7.0
 param(
-    [string]$XrayVersion = "v26.3.27",
+    [string]$XrayVersion = "v26.7.28",
     [string]$KeystorePath = "",
     [string]$KeyAlias = "",
     [string]$StorePassEnv = "ANDROID_KEYSTORE_PASSWORD",

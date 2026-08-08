@@ -29,6 +29,15 @@ public static class CoreStartupErrorFormatter
             return "TUN mode was denied access. Run v2rayF as Administrator, or turn off TUN and use system proxy.";
         }
 
+        if (output.Contains("bad file", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("SetNonblock", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("read Android Tun Fd", StringComparison.OrdinalIgnoreCase) ||
+            (output.Contains("invalid argument", StringComparison.OrdinalIgnoreCase) &&
+             output.Contains("tun", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Android VPN tunnel fd was lost. Disconnect, grant VPN permission again, then Connect.";
+        }
+
         var lastLine = output;
         var newline = output.LastIndexOf('\n');
         if (newline >= 0 && newline < output.Length - 1)

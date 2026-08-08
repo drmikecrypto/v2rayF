@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-08-08
+
+### Fixed
+
+- Windows **Global + TUN** no internet — bump Xray to **v26.7.28** and emit official TUN settings (`gateway`, `dns`, `autoSystemRoutingTable`, `autoOutboundsInterface`) instead of ignored sing-box fields
+- Android Connect force-close — always `startForeground` before disconnect handling; establish no longer races `DISCONNECT` via FGS
+- Android VPN TUN fd — start Xray with `posix_spawn` + `dup2` so the VpnService fd is inherited (ProcessBuilder closed it); track/`Os.Close` detached TUN fds
+- Unhandled Android exceptions marked handled so they log instead of force-closing the app
+- Remove marketing subtitle (“Anti-censorship proxy hub…” / “Android Sentinel — …”) from the main UI
+
 ## [1.4.2] - 2026-08-08
 
 ### Fixed
@@ -238,6 +248,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.3]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.3
 [1.4.2]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.2
 [1.4.1]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.1
 [1.4.0]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.0

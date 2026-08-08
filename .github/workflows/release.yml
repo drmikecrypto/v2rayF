@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 env:
-  XRAY_VERSION: v26.3.27
+  XRAY_VERSION: v26.7.28
 
 jobs:
   build:

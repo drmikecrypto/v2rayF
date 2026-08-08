@@ -43,27 +43,28 @@ public static class XrayConfigBuilder
 
         if (settings.EnableTunMode)
         {
+            // Xray TUN schema (not sing-box). Android only needs name/MTU — FD via env xray.tun.fd.
+            // Desktop uses gateway + autoSystemRoutingTable (requires Xray >= 26.4 / v26.7.28).
             var tunSettings = new JsonObject
             {
                 ["name"] = TunConstants.InterfaceName,
-                ["MTU"] = 1280,
-                ["inet4_address"] = "172.19.0.1/30",
-                // Android VpnService fd path uses gVisor; Windows WinTun uses system stack.
-                ["stack"] = tunFd is int ? "gvisor" : "system"
+                ["MTU"] = 1280
             };
 
-            if (!settings.BlockIpv6)
-                tunSettings["inet6_address"] = "fdfe:dcba:9876::1/126";
+            if (tunFd is null)
+            {
+                var gateway = new JsonArray { "172.19.0.1/30" };
+                var routes = new JsonArray { "0.0.0.0/0" };
+                if (!settings.BlockIpv6)
+                {
+                    gateway.Add("fdfe:dcba:9876::1/126");
+                    routes.Add("::/0");
+                }
 
-            if (tunFd is int fd)
-            {
-                tunSettings["fd"] = fd;
-                tunSettings["auto_route"] = false;
-            }
-            else
-            {
-                tunSettings["auto_route"] = true;
-                tunSettings["strict_route"] = true;
+                tunSettings["gateway"] = gateway;
+                tunSettings["dns"] = new JsonArray { "172.19.0.1" };
+                tunSettings["autoSystemRoutingTable"] = routes;
+                tunSettings["autoOutboundsInterface"] = "auto";
             }
 
             inbounds.Add(new JsonObject

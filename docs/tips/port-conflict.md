@@ -8,6 +8,6 @@ If connect fails with a port-in-use message:
 2. Restart v2rayF and try again.
 3. On Windows, check listeners: `netstat -ano | findstr 10808`
 
-On Windows TUN, also ensure `wintun.dll` is present in the app `cores/` folder (shipped with the package). Missing WinTun surfaces as a TUN/wintun error rather than a port conflict.
+On Windows TUN, also ensure `wintun.dll` is present in the app `cores/` folder and the bundled Xray supports `gateway` / `autoSystemRoutingTable` (v1.4.3+). Missing WinTun or an old core surfaces as a TUN error or Connected-with-no-internet when kill switch is on.
 
 You can change ports in the generated Xray config under **Settings** if your workflow requires different values.

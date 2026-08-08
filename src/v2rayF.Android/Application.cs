@@ -26,8 +26,18 @@ public class V2rayApplication : AvaloniaAndroidApplication<v2rayF.App>
         AppServices.KillSwitch = new AndroidKillSwitch();
         AppServices.Updater = new AndroidAppUpdater();
         TryOverrideAppVersion();
+
         AndroidEnvironment.UnhandledExceptionRaiser += (_, e) =>
+        {
             global::Android.Util.Log.Error("v2rayF", e.Exception?.ToString() ?? "Unhandled exception");
+            e.Handled = true;
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            global::Android.Util.Log.Error("v2rayF", e.Exception?.ToString() ?? "Unobserved task exception");
+            e.SetObserved();
+        };
+
         base.OnCreate();
         _ = WarmupAsync();
     }
@@ -52,12 +62,9 @@ public class V2rayApplication : AvaloniaAndroidApplication<v2rayF.App>
         {
             await AppServices.CoreEnvironment.EnsureCoreAsync().ConfigureAwait(false);
         }
-        catch
+        catch (Exception ex)
         {
-            // Warmup is best-effort; connect will retry extraction.
+            global::Android.Util.Log.Warn("v2rayF", $"Core warmup failed: {ex}");
         }
     }
-
-    protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
-        base.CustomizeAppBuilder(builder).WithInterFont();
 }

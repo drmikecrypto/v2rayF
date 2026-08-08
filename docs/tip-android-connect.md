@@ -1,6 +1,6 @@
 # Tip: Android Connect troubleshooting
 
-If **Connect** closes the app or fails on Samsung / Android 12 devices:
+If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 
 1. Install the latest **v2rayF-android-arm64.apk** from [Releases](https://github.com/drmikecrypto/v2rayF/releases).
 2. **Uninstall** older versions first (clears bad VPN/core state).
@@ -14,12 +14,17 @@ If **Connect** closes the app or fails on Samsung / Android 12 devices:
 With USB debugging enabled:
 
 ```bash
-adb logcat -s v2rayF
+adb logcat -s v2rayF AndroidRuntime
 ```
 
-Tap Connect and check for `XRAY_TUN_FD`, `libxray.so`, or VPN errors.
+Tap Connect and look for:
 
-## Technical notes (v1.1.8+)
+- `RemoteServiceException` / `startForeground` — fixed in 1.4.3+ (foreground must start before disconnect)
+- `read Android Tun Fd` / `bad file` / `SetNonblock` — TUN fd was not inherited by Xray (1.4.3+ uses posix_spawn + dup2)
+- Missing `libxray.so` — reinstall the ARM64 APK
 
-- Xray on Android reads the VPN TUN fd from the `XRAY_TUN_FD` environment variable.
-- The core runs from `libxray.so` in native libs with `LD_LIBRARY_PATH` set at launch.
+## Technical notes (v1.4.3+)
+
+- Xray on Android reads the VPN TUN fd from `xray.tun.fd` / `XRAY_TUN_FD` (inherited as fd **3**).
+- The core is started with libc `posix_spawn` so the TUN fd is not closed (Java `ProcessBuilder` closes non-stdio fds).
+- The core binary is `libxray.so` under the app native lib dir with `LD_LIBRARY_PATH` set at launch.

@@ -1,7 +1,7 @@
 #Requires -Version 7.0
 param(
     [string[]]$Rid = @(),
-    [string]$XrayVersion = "v26.3.27"
+    [string]$XrayVersion = "v26.7.28"
 )
 
 $ErrorActionPreference = "Stop"

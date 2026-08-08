@@ -23,8 +23,6 @@
                         Padding="12,8"
                         MinWidth="96"/>
             </Grid>
-            <TextBlock Text="Android Sentinel — Smart Connect, leak shield, Secure Share."
-                       Opacity="0.75" TextWrapping="Wrap"/>
 
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" PlaceholderText="Subscription URL"

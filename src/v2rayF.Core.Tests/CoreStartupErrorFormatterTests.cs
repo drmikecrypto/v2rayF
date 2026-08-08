@@ -35,4 +35,11 @@ public class CoreStartupErrorFormatterTests
         var msg = CoreStartupErrorFormatter.Format("Failed to start: main: failed to create server > Access is denied.");
         Assert.Contains("Administrator", msg);
     }
+
+    [Fact]
+    public void Format_AndroidTunFdLost_ReturnsFriendlyMessage()
+    {
+        var msg = CoreStartupErrorFormatter.Format("read Android Tun Fd 57 bad file descriptor SetNonblock");
+        Assert.Contains("VPN tunnel fd", msg);
+    }
 }

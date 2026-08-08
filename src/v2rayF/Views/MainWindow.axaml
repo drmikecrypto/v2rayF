@@ -40,9 +40,6 @@
                         Padding="14,8"
                         MinWidth="100"/>
             </Grid>
-            <TextBlock Text="Anti-censorship proxy hub — Smart Connect, leak shield, multipath, Secure Share."
-                       Opacity="0.75"
-                       TextWrapping="Wrap"/>
 
             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0"

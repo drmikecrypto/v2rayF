@@ -150,7 +150,7 @@ public class StreamSettingsBuilderTests
     }
 
     [Fact]
-    public void Build_WithTunFd_UsesGvisorStack()
+    public void Build_WithTunFd_UsesMinimalAndroidTunSettings()
     {
         var server = new ProxyServer
         {
@@ -167,13 +167,19 @@ public class StreamSettingsBuilderTests
         var json = XrayConfigBuilder.Build(server, settings, tunFd: 42);
         var root = JsonNode.Parse(json)!.AsObject();
         var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
-        Assert.Equal("gvisor", tun["settings"]!["stack"]!.GetValue<string>());
-        Assert.Equal(42, tun["settings"]!["fd"]!.GetValue<int>());
-        Assert.False(tun["settings"]!["auto_route"]!.GetValue<bool>());
+        var tunSettings = tun["settings"]!.AsObject();
+        Assert.Equal(TunConstants.InterfaceName, tunSettings["name"]!.GetValue<string>());
+        Assert.Equal(1280, tunSettings["MTU"]!.GetValue<int>());
+        Assert.Null(tunSettings["fd"]);
+        Assert.Null(tunSettings["stack"]);
+        Assert.Null(tunSettings["inet4_address"]);
+        Assert.Null(tunSettings["auto_route"]);
+        Assert.Null(tunSettings["gateway"]);
+        Assert.Null(tunSettings["autoSystemRoutingTable"]);
     }
 
     [Fact]
-    public void Build_WindowsTunWithoutFd_UsesSystemStack()
+    public void Build_WindowsTunWithoutFd_UsesOfficialXraySchema()
     {
         var server = new ProxyServer
         {
@@ -185,12 +191,19 @@ public class StreamSettingsBuilderTests
             Security = "none"
         };
 
-        var settings = new AppSettings { EnableTunMode = true };
+        var settings = new AppSettings { EnableTunMode = true, BlockIpv6 = true };
         var json = XrayConfigBuilder.Build(server, settings, tunFd: null);
         var root = JsonNode.Parse(json)!.AsObject();
         var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
-        Assert.Equal("system", tun["settings"]!["stack"]!.GetValue<string>());
-        Assert.True(tun["settings"]!["auto_route"]!.GetValue<bool>());
+        var tunSettings = tun["settings"]!.AsObject();
+        Assert.Equal("172.19.0.1/30", tunSettings["gateway"]![0]!.GetValue<string>());
+        Assert.Equal("172.19.0.1", tunSettings["dns"]![0]!.GetValue<string>());
+        Assert.Equal("0.0.0.0/0", tunSettings["autoSystemRoutingTable"]![0]!.GetValue<string>());
+        Assert.Equal("auto", tunSettings["autoOutboundsInterface"]!.GetValue<string>());
+        Assert.Null(tunSettings["auto_route"]);
+        Assert.Null(tunSettings["stack"]);
+        Assert.Single(tunSettings["gateway"]!.AsArray());
+        Assert.Single(tunSettings["autoSystemRoutingTable"]!.AsArray());
     }
 
     [Fact]
