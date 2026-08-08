@@ -33,6 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private UpdateOffer? _pendingUpdate;
     private CancellationTokenSource? _connectCts;
     private IReadOnlyList<SmartConnectService.RankedServer> _lastRanking = [];
+    private DateTimeOffset _lastUpdateCheckUtc = DateTimeOffset.MinValue;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -150,11 +151,34 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public string AppVersionLabel => AppVersion.Current;
 
-    public string UpdateButtonText => string.IsNullOrWhiteSpace(UpdateLabel)
-        ? "Update"
-        : $"Update {UpdateLabel}";
+    /// <summary>Desktop always shows Check/Update; Android only when an update is available.</summary>
+    public bool ShowUpdateChrome => !IsMobile || UpdateAvailable;
 
-    partial void OnUpdateLabelChanged(string value) => OnPropertyChanged(nameof(UpdateButtonText));
+    public string UpdateButtonText
+    {
+        get
+        {
+            if (IsUpdating)
+                return "Updating…";
+            if (UpdateAvailable && !string.IsNullOrWhiteSpace(UpdateLabel))
+                return $"Update {UpdateLabel}";
+            return "Check for updates";
+        }
+    }
+
+    partial void OnUpdateLabelChanged(string value)
+    {
+        OnPropertyChanged(nameof(UpdateButtonText));
+        OnPropertyChanged(nameof(ShowUpdateChrome));
+    }
+
+    partial void OnUpdateAvailableChanged(bool value)
+    {
+        OnPropertyChanged(nameof(UpdateButtonText));
+        OnPropertyChanged(nameof(ShowUpdateChrome));
+    }
+
+    partial void OnIsUpdatingChanged(bool value) => OnPropertyChanged(nameof(UpdateButtonText));
 
     public bool ShowCustomRules => SelectedRoutingMode?.Mode == RoutingMode.CustomDirect;
 
@@ -224,7 +248,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
 
-        AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync();
+        AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
         AppServices.ReportStatus = msg => RunOnUiThread(() => StatusText = msg);
 
         UpdateCoreStatus();
@@ -268,17 +292,41 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         UpdateCoreStatus();
-        _ = CheckForUpdatesQuietlyAsync();
+        _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
     }
 
-    private async Task CheckForUpdatesQuietlyAsync()
+    /// <summary>Called when the main window is activated (desktop) — recheck for updates.</summary>
+    public void OnMainWindowActivated()
+    {
+        if (IsMobile || IsUpdating)
+            return;
+        if (DateTimeOffset.UtcNow - _lastUpdateCheckUtc < TimeSpan.FromMinutes(30))
+            return;
+        _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
+    }
+
+    private async Task CheckForUpdatesQuietlyAsync(bool userInitiated = false)
     {
         if (AppServices.Updater is null)
+        {
+            if (userInitiated)
+            {
+                await SetOnUiAsync(() => StatusText = "Updates are not available in this build.")
+                    .ConfigureAwait(true);
+            }
             return;
+        }
 
         try
         {
+            if (userInitiated)
+            {
+                await SetOnUiAsync(() => StatusText = "Checking for updates…").ConfigureAwait(true);
+            }
+
             var offer = await _updateCheck.CheckAsync(AppServices.Updater.ReleaseAssetFileName).ConfigureAwait(true);
+            _lastUpdateCheckUtc = DateTimeOffset.UtcNow;
+
             if (offer is null)
             {
                 await SetOnUiAsync(() =>
@@ -286,6 +334,9 @@ public partial class MainWindowViewModel : ViewModelBase
                     _pendingUpdate = null;
                     UpdateAvailable = false;
                     UpdateLabel = "";
+                    OnPropertyChanged(nameof(ShowUpdateChrome));
+                    if (userInitiated)
+                        StatusText = $"You are on v{AppVersion.Current} (latest).";
                 }).ConfigureAwait(true);
                 return;
             }
@@ -295,14 +346,33 @@ public partial class MainWindowViewModel : ViewModelBase
                 _pendingUpdate = offer;
                 UpdateAvailable = true;
                 UpdateLabel = offer.Version;
+                OnPropertyChanged(nameof(ShowUpdateChrome));
                 if (!IsBusy && !IsUpdating)
                     StatusText = $"v{offer.Version} is available — tap Update.";
             }).ConfigureAwait(true);
         }
-        catch
+        catch (Exception ex)
         {
-            // Offline or GitHub rate limit — ignore quietly.
+            _lastUpdateCheckUtc = DateTimeOffset.UtcNow;
+            await SetOnUiAsync(() =>
+            {
+                OnPropertyChanged(nameof(ShowUpdateChrome));
+                if (userInitiated)
+                    StatusText = $"Update check failed: {StatusSanitizer.Scrub(ex.Message)}";
+            }).ConfigureAwait(true);
         }
+    }
+
+    [RelayCommand]
+    private async Task UpdateChromeAsync()
+    {
+        if (IsUpdating)
+            return;
+
+        if (UpdateAvailable && _pendingUpdate is not null)
+            await ApplyUpdateAsync().ConfigureAwait(true);
+        else
+            await CheckForUpdatesQuietlyAsync(userInitiated: true).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -321,7 +391,9 @@ public partial class MainWindowViewModel : ViewModelBase
             var progress = new Progress<string>(msg => RunOnUiThread(() => StatusText = msg));
             await AppServices.Updater.ApplyUpdateAsync(_pendingUpdate, progress).ConfigureAwait(true);
             await SetOnUiAsync(() =>
-                StatusText = "Confirm the system Install prompt, then return here.").ConfigureAwait(true);
+                StatusText = IsMobile
+                    ? "Confirm the system Install prompt, then return here."
+                    : "Installing update and restarting…").ConfigureAwait(true);
         }
         catch (Exception ex)
         {

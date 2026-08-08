@@ -11,6 +11,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Activated += (_, _) =>
+        {
+            if (DataContext is MainWindowViewModel vm)
+                vm.OnMainWindowActivated();
+        };
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

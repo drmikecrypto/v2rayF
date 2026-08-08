@@ -26,6 +26,7 @@ sealed class Program
         AppServices.Platform = new DesktopPlatformIntegration();
         AppServices.KillSwitch = new DesktopKillSwitch();
         AppServices.Updater = new DesktopAppUpdater();
+        AppVersion.TryOverrideFromEntryExecutable();
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }

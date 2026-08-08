@@ -15,8 +15,8 @@
                 </StackPanel>
                 <Button Grid.Column="1"
                         Content="{Binding UpdateButtonText}"
-                        Command="{Binding ApplyUpdateCommand}"
-                        IsVisible="{Binding UpdateAvailable}"
+                        Command="{Binding UpdateChromeCommand}"
+                        IsVisible="{Binding ShowUpdateChrome}"
                         IsEnabled="{Binding !IsUpdating}"
                         Classes="accent"
                         VerticalAlignment="Center"

@@ -37,12 +37,30 @@ public sealed class DesktopAppUpdater : IAppUpdater
         UpdateDownloadHelper.ExtractZip(zipPath, extractDir, progress);
 
         var appDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        EnsureAppDirectoryWritable(appDir);
+
         var exePath = ResolveExecutablePath(appDir);
         var scriptPath = WriteUpdaterScript(appDir, extractDir, exePath);
 
         progress?.Report("Restarting with new version…");
         LaunchDetached(scriptPath);
         Environment.Exit(0);
+    }
+
+    private static void EnsureAppDirectoryWritable(string appDir)
+    {
+        try
+        {
+            var probe = Path.Combine(appDir, $".v2rayf-write-test-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "ok");
+            File.Delete(probe);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot write to the install folder ({appDir}). Move v2rayF to a user-writable folder (e.g. Downloads) and try Update again. {ex.Message}",
+                ex);
+        }
     }
 
     private static string GetRuntimeIdentifier()
@@ -59,18 +77,29 @@ public sealed class DesktopAppUpdater : IAppUpdater
     private static string ResolveExecutablePath(string appDir)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return Path.Combine(appDir, "v2rayF.exe");
+        {
+            var renamed = Path.Combine(appDir, "v2rayF.exe");
+            if (File.Exists(renamed))
+                return renamed;
+            var desktop = Path.Combine(appDir, "v2rayF.Desktop.exe");
+            if (File.Exists(desktop))
+                return desktop;
+            return renamed;
+        }
 
         var direct = Path.Combine(appDir, "v2rayF");
         if (File.Exists(direct))
             return direct;
 
-        var desktop = Path.Combine(appDir, "v2rayF.Desktop");
-        if (File.Exists(desktop))
-            return desktop;
+        var desktopUnix = Path.Combine(appDir, "v2rayF.Desktop");
+        if (File.Exists(desktopUnix))
+            return desktopUnix;
 
         return direct;
     }
+
+    private static string PsLiteral(string path) =>
+        "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
 
     private static string WriteUpdaterScript(string appDir, string stageDir, string exePath)
     {
@@ -86,8 +115,10 @@ public sealed class DesktopAppUpdater : IAppUpdater
 $ErrorActionPreference = 'Stop'
 Start-Sleep -Seconds 2
 while (Get-Process -Name '{processName}' -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 400 }}
-Copy-Item -LiteralPath '{stageDir}\*' -Destination '{appDir}' -Recurse -Force
-Start-Process -FilePath '{exePath}'
+$src = {PsLiteral(stageDir)}
+$dst = {PsLiteral(appDir)}
+Copy-Item -Path (Join-Path $src '*') -Destination $dst -Recurse -Force
+Start-Process -FilePath {PsLiteral(exePath)}
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
 ";
             File.WriteAllText(ps1, content);

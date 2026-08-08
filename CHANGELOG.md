@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-08-08
+
+### Fixed
+
+- Windows in-app updates — always show **Check for updates** / **Update x.y.z** on desktop; recheck when the window is activated; clearer status when already latest or the check fails
+- Version compare treats `1.4.3` and `1.4.3.0` as equal; desktop reads executable product/file version
+- Desktop updater refuses install when the app folder is not writable and escapes PowerShell paths safely
+
 ## [1.4.3] - 2026-08-08
 
 ### Fixed
@@ -248,6 +256,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.4]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.4
 [1.4.3]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.3
 [1.4.2]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.2
 [1.4.1]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.1
