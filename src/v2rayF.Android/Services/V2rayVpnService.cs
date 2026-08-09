@@ -318,7 +318,7 @@ public class V2rayVpnService : VpnService
 
                 manager.Notify(NotificationId, BuildNotification(text));
             }
-            catch (OperationCanceledException)
+            catch (System.OperationCanceledException)
             {
                 return;
             }
