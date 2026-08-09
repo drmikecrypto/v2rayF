@@ -14,6 +14,8 @@ public static class XrayConfigBuilder
     public const int HttpPort = 10809;
     public const int SpeedtestSocksPort = 10818;
     public const int DefaultSharePort = 10880;
+    public const int ApiPort = 10085;
+    public const string GooglePingUrl = "https://www.google.com/generate_204";
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
@@ -29,7 +31,8 @@ public static class XrayConfigBuilder
         var inbounds = new JsonArray
         {
             BuildLocalSocksInbound("socks-in", SocksPort, "127.0.0.1"),
-            BuildLocalHttpInbound("http-in", HttpPort, "127.0.0.1")
+            BuildLocalHttpInbound("http-in", HttpPort, "127.0.0.1"),
+            BuildApiInbound()
         };
 
         if (settings.SecureShareEnabled)
@@ -129,7 +132,21 @@ public static class XrayConfigBuilder
             ["dns"] = BuildDns(settings),
             ["inbounds"] = inbounds,
             ["outbounds"] = outbounds,
-            ["routing"] = BuildRouting(settings, useBalancer)
+            ["routing"] = BuildRouting(settings, useBalancer),
+            ["stats"] = new JsonObject(),
+            ["api"] = new JsonObject
+            {
+                ["tag"] = "api",
+                ["services"] = new JsonArray { "StatsService" }
+            },
+            ["policy"] = new JsonObject
+            {
+                ["system"] = new JsonObject
+                {
+                    ["statsOutboundUplink"] = true,
+                    ["statsOutboundDownlink"] = true
+                }
+            }
         };
 
         if (useBalancer)
@@ -143,7 +160,7 @@ public static class XrayConfigBuilder
                 ["subjectSelector"] = selector.DeepClone(),
                 ["pingConfig"] = new JsonObject
                 {
-                    ["destination"] = "https://www.gstatic.com/generate_204",
+                    ["destination"] = GooglePingUrl,
                     ["interval"] = "1m",
                     ["sampling"] = 2,
                     ["timeout"] = "5s"
@@ -283,9 +300,26 @@ public static class XrayConfigBuilder
         return dns;
     }
 
+    private static JsonObject BuildApiInbound() => new()
+    {
+        ["tag"] = "api",
+        ["listen"] = "127.0.0.1",
+        ["port"] = ApiPort,
+        ["protocol"] = "dokodemo-door",
+        ["settings"] = new JsonObject { ["address"] = "127.0.0.1" }
+    };
+
     private static JsonObject BuildRouting(AppSettings settings, bool useBalancer)
     {
-        var rules = new JsonArray();
+        var rules = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "field",
+                ["inboundTag"] = new JsonArray { "api" },
+                ["outboundTag"] = "api"
+            }
+        };
 
         // Xray DNS module traffic → proxy (or balancer).
         if (settings.DnsThroughProxy)

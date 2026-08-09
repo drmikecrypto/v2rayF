@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-08-09
+
+### Added
+
+- Live ↑/↓ traffic totals while connected (Xray Stats API), shown on desktop and phone UI
+- Android ongoing notification shows clean upload/download session totals
+
+### Changed
+
+- Server list on phone scrolls independently so large subscription lists stay usable
+- Desktop server list uses virtualization for large configs
+- Latency **Test** / **Test All** measure proxy-path RTT to `www.google.com`
+- In-app **Update** button is hidden until a newer GitHub release with SHA256 is available (desktop + Android)
+
+### Fixed
+
+- Update offer requires SHA256 before the Update button appears, so Apply always has a verifiable package
+
 ## [1.4.4] - 2026-08-08
 
 ### Fixed
@@ -256,6 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.5]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.5
 [1.4.4]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.4
 [1.4.3]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.3
 [1.4.2]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.2

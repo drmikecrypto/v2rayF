@@ -74,6 +74,11 @@
                     <ListBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
                              SelectionMode="Single"
                              DoubleTapped="ServerList_DoubleTapped">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="models:ProxyServer">
                                 <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
@@ -188,6 +193,11 @@
         <Border Grid.Row="2" Padding="12" CornerRadius="8"
                 Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}">
             <StackPanel Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="20"
+                            IsVisible="{Binding ShowTrafficStats}">
+                    <TextBlock Text="{Binding UploadTrafficText}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding DownloadTrafficText}" FontWeight="SemiBold"/>
+                </StackPanel>
                 <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>
             </StackPanel>

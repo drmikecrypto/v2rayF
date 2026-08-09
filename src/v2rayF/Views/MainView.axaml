@@ -5,8 +5,8 @@
              x:Class="v2rayF.Views.MainView"
              x:DataType="vm:MainWindowViewModel">
 
-    <ScrollViewer Padding="16">
-        <StackPanel Spacing="12">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="16" RowSpacing="12">
+        <StackPanel Grid.Row="0" Spacing="12">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="v2rayF" FontSize="26" FontWeight="SemiBold"/>
@@ -45,104 +45,122 @@
                     IsEnabled="{Binding CanToggleConnection}"
                     HorizontalAlignment="Stretch" MinHeight="48"/>
 
+            <StackPanel Orientation="Horizontal" Spacing="16"
+                        IsVisible="{Binding ShowTrafficStats}"
+                        HorizontalAlignment="Center">
+                <TextBlock Text="{Binding UploadTrafficText}" FontWeight="SemiBold" FontSize="14"/>
+                <TextBlock Text="{Binding DownloadTrafficText}" FontWeight="SemiBold" FontSize="14"/>
+            </StackPanel>
+
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="Test" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
                 <Button Content="Test All" Command="{Binding TestAllLatencyCommand}"/>
                 <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
             </StackPanel>
-
-            <ListBox x:Name="ServerList"
-                     ItemsSource="{Binding Servers}"
-                     SelectedItem="{Binding SelectedServer}"
-                     MinHeight="220"
-                     SelectionMode="Single"
-                     Tapped="ServerList_Tapped">
-                <ListBox.ItemTemplate>
-                    <DataTemplate DataType="models:ProxyServer">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-                            <Border Padding="6,3" CornerRadius="4" Background="{DynamicResource SystemAccentColor}">
-                                <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
-                            </Border>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
-                            </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="3"
-                                    Content="×"
-                                    ToolTip.Tip="Remove this server"
-                                    Padding="10,4"
-                                    MinWidth="44"
-                                    MinHeight="36"
-                                    FontSize="18"
-                                    VerticalAlignment="Center"
-                                    Tag="{Binding}"
-                                    Click="RemoveServer_Click"/>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-            <Border Padding="12" CornerRadius="8" BorderThickness="1">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Settings" FontWeight="SemiBold"/>
-                    <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"/>
-                    <CheckBox Content="Smart Connect" IsChecked="{Binding SmartConnectEnabled}"/>
-                    <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"/>
-                    <CheckBox Content="Secure Share gateway" IsChecked="{Binding SecureShareEnabled}"/>
-                    <CheckBox Content="Listen on all interfaces" IsChecked="{Binding ShareListenAllInterfaces}"
-                              IsVisible="{Binding SecureShareEnabled}"/>
-                    <ComboBox ItemsSource="{Binding RoutingModes}" SelectedItem="{Binding SelectedRoutingMode}"/>
-                    <StackPanel Spacing="6" IsVisible="{Binding ShowCustomRules}">
-                        <TextBlock Text="Direct" FontSize="12" Opacity="0.8"/>
-                        <TextBox AcceptsReturn="True" MinHeight="48" Text="{Binding CustomDirectRules}" TextWrapping="Wrap"/>
-                        <TextBlock Text="Proxy" FontSize="12" Opacity="0.8"/>
-                        <TextBox AcceptsReturn="True" MinHeight="40" Text="{Binding CustomProxyRules}" TextWrapping="Wrap"/>
-                        <TextBlock Text="Block" FontSize="12" Opacity="0.8"/>
-                        <TextBox AcceptsReturn="True" MinHeight="40" Text="{Binding CustomBlockRules}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                    <Expander Header="Advanced" IsExpanded="False">
-                        <StackPanel Spacing="6" Margin="0,8,0,0">
-                            <CheckBox Content="DNS through proxy" IsChecked="{Binding DnsThroughProxy}"/>
-                            <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
-                            <CheckBox Content="Packet fragment (DPI)" IsChecked="{Binding EnablePacketFragment}"/>
-                            <CheckBox Content="Adaptive Survive" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
-                            <TextBlock Text="Per-app bypass (package names)" FontSize="12" Opacity="0.8"
-                                       IsVisible="{Binding ShowAndroidBypass}"/>
-                            <TextBox AcceptsReturn="True" MinHeight="48"
-                                     Text="{Binding AndroidBypassPackages}"
-                                     IsVisible="{Binding ShowAndroidBypass}"
-                                     PlaceholderText="com.example.app"
-                                     TextWrapping="Wrap"/>
-                            <TextBlock Text="Profile vault" FontWeight="SemiBold" Margin="0,8,0,0"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="Unlock" Command="{Binding UnlockVaultCommand}" IsVisible="{Binding !VaultUnlocked}"/>
-                                <Button Content="Lock" Command="{Binding LockVaultCommand}" IsVisible="{Binding VaultUnlocked}"/>
-                            </StackPanel>
-                            <TextBox PlaceholderText="Vault passphrase"
-                                     Text="{Binding VaultPassphrase}"
-                                     PasswordChar="•"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Content="Export" Command="{Binding ExportVaultCommand}"/>
-                                <Button Content="Import" Command="{Binding ImportVaultCommand}"/>
-                            </StackPanel>
-                        </StackPanel>
-                    </Expander>
-                    <TextBlock Text="{Binding TunStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
-                    <TextBlock Text="{Binding SecureShareEndpoint}" FontSize="11" Opacity="0.8" TextWrapping="Wrap"
-                               IsVisible="{Binding SecureShareEnabled}"/>
-                    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SecureShareEnabled}">
-                        <CheckBox Content="Reveal" IsChecked="{Binding RevealSharePassword}"
-                                  IsEnabled="{Binding VaultUnlocked}"/>
-                        <Button Content="Copy Share" Command="{Binding CopySecureShareCommand}"/>
-                        <Button Content="Rotate" Command="{Binding RotateSharePasswordCommand}"/>
-                    </StackPanel>
-                    <Button Content="Save settings" Command="{Binding SaveSettingsCommand}"/>
-                </StackPanel>
-            </Border>
-
-            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
         </StackPanel>
-    </ScrollViewer>
+
+        <ListBox Grid.Row="1"
+                 x:Name="ServerList"
+                 ItemsSource="{Binding Servers}"
+                 SelectedItem="{Binding SelectedServer}"
+                 SelectionMode="Single"
+                 Tapped="ServerList_Tapped">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="models:ProxyServer">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                        <Border Padding="6,3" CornerRadius="4" Background="{DynamicResource SystemAccentColor}">
+                            <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
+                        </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
+                        <Button Grid.Column="3"
+                                Content="×"
+                                ToolTip.Tip="Remove this server"
+                                Padding="10,4"
+                                MinWidth="44"
+                                MinHeight="36"
+                                FontSize="18"
+                                VerticalAlignment="Center"
+                                Tag="{Binding}"
+                                Click="RemoveServer_Click"/>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <DockPanel Grid.Row="2" LastChildFill="True">
+            <StackPanel DockPanel.Dock="Bottom" Spacing="4" Margin="0,8,0,0">
+                <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <Border Padding="12" CornerRadius="8" BorderThickness="1" MaxHeight="280">
+                <ScrollViewer>
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Settings" FontWeight="SemiBold"/>
+                        <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"/>
+                        <CheckBox Content="Smart Connect" IsChecked="{Binding SmartConnectEnabled}"/>
+                        <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"/>
+                        <CheckBox Content="Secure Share gateway" IsChecked="{Binding SecureShareEnabled}"/>
+                        <CheckBox Content="Listen on all interfaces" IsChecked="{Binding ShareListenAllInterfaces}"
+                                  IsVisible="{Binding SecureShareEnabled}"/>
+                        <ComboBox ItemsSource="{Binding RoutingModes}" SelectedItem="{Binding SelectedRoutingMode}"/>
+                        <StackPanel Spacing="6" IsVisible="{Binding ShowCustomRules}">
+                            <TextBlock Text="Direct" FontSize="12" Opacity="0.8"/>
+                            <TextBox AcceptsReturn="True" MinHeight="48" Text="{Binding CustomDirectRules}" TextWrapping="Wrap"/>
+                            <TextBlock Text="Proxy" FontSize="12" Opacity="0.8"/>
+                            <TextBox AcceptsReturn="True" MinHeight="40" Text="{Binding CustomProxyRules}" TextWrapping="Wrap"/>
+                            <TextBlock Text="Block" FontSize="12" Opacity="0.8"/>
+                            <TextBox AcceptsReturn="True" MinHeight="40" Text="{Binding CustomBlockRules}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <Expander Header="Advanced" IsExpanded="False">
+                            <StackPanel Spacing="6" Margin="0,8,0,0">
+                                <CheckBox Content="DNS through proxy" IsChecked="{Binding DnsThroughProxy}"/>
+                                <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
+                                <CheckBox Content="Packet fragment (DPI)" IsChecked="{Binding EnablePacketFragment}"/>
+                                <CheckBox Content="Adaptive Survive" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
+                                <TextBlock Text="Per-app bypass (package names)" FontSize="12" Opacity="0.8"
+                                           IsVisible="{Binding ShowAndroidBypass}"/>
+                                <TextBox AcceptsReturn="True" MinHeight="48"
+                                         Text="{Binding AndroidBypassPackages}"
+                                         IsVisible="{Binding ShowAndroidBypass}"
+                                         PlaceholderText="com.example.app"
+                                         TextWrapping="Wrap"/>
+                                <TextBlock Text="Profile vault" FontWeight="SemiBold" Margin="0,8,0,0"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Unlock" Command="{Binding UnlockVaultCommand}" IsVisible="{Binding !VaultUnlocked}"/>
+                                    <Button Content="Lock" Command="{Binding LockVaultCommand}" IsVisible="{Binding VaultUnlocked}"/>
+                                </StackPanel>
+                                <TextBox PlaceholderText="Vault passphrase"
+                                         Text="{Binding VaultPassphrase}"
+                                         PasswordChar="•"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="Export" Command="{Binding ExportVaultCommand}"/>
+                                    <Button Content="Import" Command="{Binding ImportVaultCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Expander>
+                        <TextBlock Text="{Binding TunStatus}" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding SecureShareEndpoint}" FontSize="11" Opacity="0.8" TextWrapping="Wrap"
+                                   IsVisible="{Binding SecureShareEnabled}"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SecureShareEnabled}">
+                            <CheckBox Content="Reveal" IsChecked="{Binding RevealSharePassword}"
+                                      IsEnabled="{Binding VaultUnlocked}"/>
+                            <Button Content="Copy Share" Command="{Binding CopySecureShareCommand}"/>
+                            <Button Content="Rotate" Command="{Binding RotateSharePasswordCommand}"/>
+                        </StackPanel>
+                        <Button Content="Save settings" Command="{Binding SaveSettingsCommand}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </DockPanel>
+    </Grid>
 </UserControl>

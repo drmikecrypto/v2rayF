@@ -24,6 +24,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly SubscriptionService _subscriptionService = new();
     private readonly ProxyCoreService _proxyCore = new(AppServices.CoreEnvironment);
     private readonly LatencyService _latencyService = new(AppServices.CoreEnvironment);
+    private readonly TrafficStatsService _trafficStats = new(AppServices.CoreEnvironment);
     private readonly SmartConnectService _smartConnect;
     private readonly AdaptiveSurviveService _adaptiveSurvive = new();
     private readonly ProfileVault _vault = new();
@@ -32,6 +33,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private AppSettings _settings = new();
     private UpdateOffer? _pendingUpdate;
     private CancellationTokenSource? _connectCts;
+    private CancellationTokenSource? _trafficCts;
     private IReadOnlyList<SmartConnectService.RankedServer> _lastRanking = [];
     private DateTimeOffset _lastUpdateCheckUtc = DateTimeOffset.MinValue;
 
@@ -149,10 +151,19 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isUpdating;
 
+    [ObservableProperty]
+    private string _uploadTrafficText = "↑ 0 B";
+
+    [ObservableProperty]
+    private string _downloadTrafficText = "↓ 0 B";
+
+    [ObservableProperty]
+    private bool _showTrafficStats;
+
     public string AppVersionLabel => AppVersion.Current;
 
-    /// <summary>Desktop always shows Check/Update; Android only when an update is available.</summary>
-    public bool ShowUpdateChrome => !IsMobile || UpdateAvailable;
+    /// <summary>Shown only when a newer GitHub release is available (or an update is applying).</summary>
+    public bool ShowUpdateChrome => UpdateAvailable || IsUpdating;
 
     public string UpdateButtonText
     {
@@ -162,7 +173,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 return "Updating…";
             if (UpdateAvailable && !string.IsNullOrWhiteSpace(UpdateLabel))
                 return $"Update {UpdateLabel}";
-            return "Check for updates";
+            return "Update";
         }
     }
 
@@ -178,7 +189,11 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowUpdateChrome));
     }
 
-    partial void OnIsUpdatingChanged(bool value) => OnPropertyChanged(nameof(UpdateButtonText));
+    partial void OnIsUpdatingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(UpdateButtonText));
+        OnPropertyChanged(nameof(ShowUpdateChrome));
+    }
 
     public bool ShowCustomRules => SelectedRoutingMode?.Mode == RoutingMode.CustomDirect;
 
@@ -204,7 +219,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnIsBusyChanged(bool value) => OnPropertyChanged(nameof(CanToggleConnection));
 
-    partial void OnConnectionStateChanged(ConnectionState value) => OnPropertyChanged(nameof(CanToggleConnection));
+    partial void OnConnectionStateChanged(ConnectionState value)
+    {
+        OnPropertyChanged(nameof(CanToggleConnection));
+        if (value == ConnectionState.Connected)
+            StartTrafficPolling();
+        else
+            StopTrafficPolling();
+    }
 
     public MainWindowViewModel()
     {
@@ -369,10 +391,14 @@ public partial class MainWindowViewModel : ViewModelBase
         if (IsUpdating)
             return;
 
+        // Button is only visible when an update is available — always apply.
         if (UpdateAvailable && _pendingUpdate is not null)
+        {
             await ApplyUpdateAsync().ConfigureAwait(true);
-        else
-            await CheckForUpdatesQuietlyAsync(userInitiated: true).ConfigureAwait(true);
+            return;
+        }
+
+        await CheckForUpdatesQuietlyAsync(userInitiated: true).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -762,18 +788,18 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "Testing TCP latency for all servers…";
+        StatusText = "Testing www.google.com latency for all servers…";
         try
         {
             var snapshot = Servers.ToList();
-            using var gate = new SemaphoreSlim(8, 8);
+            using var gate = new SemaphoreSlim(2, 2);
             await Task.WhenAll(snapshot.Select(async server =>
             {
                 await gate.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     RunOnUiThread(() => server.SetLatency(null));
-                    var ms = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
+                    var ms = await _latencyService.MeasureAsync(server).ConfigureAwait(false);
                     RunOnUiThread(() => server.SetLatency(ms));
                 }
                 finally
@@ -783,7 +809,7 @@ public partial class MainWindowViewModel : ViewModelBase
             })).ConfigureAwait(true);
 
             await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
-            StatusText = "TCP latency test complete.";
+            StatusText = "Google latency test complete.";
         }
         finally
         {
@@ -1419,6 +1445,81 @@ public partial class MainWindowViewModel : ViewModelBase
     private static IClipboard? GetClipboard()
     {
         return GetTopLevel()?.Clipboard;
+    }
+
+    private void StartTrafficPolling()
+    {
+        StopTrafficPolling();
+        RunOnUiThread(() =>
+        {
+            ShowTrafficStats = true;
+            UploadTrafficText = TrafficStatsService.FormatUpload(0);
+            DownloadTrafficText = TrafficStatsService.FormatDownload(0);
+        });
+
+        _trafficCts = new CancellationTokenSource();
+        var token = _trafficCts.Token;
+        _ = Task.Run(() => TrafficPollLoopAsync(token), CancellationToken.None);
+    }
+
+    private void StopTrafficPolling()
+    {
+        try
+        {
+            _trafficCts?.Cancel();
+            _trafficCts?.Dispose();
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        _trafficCts = null;
+        RunOnUiThread(() =>
+        {
+            ShowTrafficStats = false;
+            UploadTrafficText = TrafficStatsService.FormatUpload(0);
+            DownloadTrafficText = TrafficStatsService.FormatDownload(0);
+        });
+    }
+
+    private async Task TrafficPollLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var snap = await _trafficStats.QueryAsync(cancellationToken).ConfigureAwait(false);
+                if (snap is { } traffic)
+                {
+                    RunOnUiThread(() =>
+                    {
+                        UploadTrafficText = TrafficStatsService.FormatUpload(traffic.UplinkBytes);
+                        DownloadTrafficText = TrafficStatsService.FormatDownload(traffic.DownlinkBytes);
+                        ShowTrafficStats = true;
+                    });
+
+                    AppServices.OnTrafficStats?.Invoke(traffic.UplinkBytes, traffic.DownlinkBytes);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch
+            {
+                // Keep polling.
+            }
+
+            try
+            {
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
     }
 
     private static TopLevel? GetTopLevel()

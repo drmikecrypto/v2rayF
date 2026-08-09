@@ -1,12 +1,15 @@
 # Latency testing
 
-**Test** (selected server) prefers a **proxy-path** probe when Xray is available (generate_204 through a temporary SOCKS), then falls back to TCP RTT.
+**Test** (selected server) and **Test All** measure **proxy-path RTT to `www.google.com`** when Xray is available (HTTP through a temporary local SOCKS). If the proxy path fails, the result falls back to TCP connect RTT to the node's address/port.
 
-**Test All** measures **TCP round-trip time** only, in parallel (bounded), so large lists stay agile — matching the node RTT most clients show (v2rayNG, Hiddify, Nekoray, etc.).
+Probe URLs (first success wins):
+
+1. `https://www.google.com/generate_204`
+2. `https://www.google.com/`
 
 ## Smart Connect
 
-Smart Connect uses a TCP prefilter, then proxy-path probes on a shortlist. It **early-exits** after a few working proxy paths and bounds each probe so ranking cannot stall the connect button for minutes.
+Smart Connect uses a TCP prefilter, then proxy-path probes to Google on a shortlist. It **early-exits** after a few working proxy paths and bounds each probe so ranking cannot stall the connect button for minutes.
 
 ## Results
 

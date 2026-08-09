@@ -9,6 +9,7 @@ using Android.Content.PM;
 using Android.Net;
 using Android.OS;
 using AndroidX.Core.App;
+using v2rayF.Services;
 
 namespace v2rayF.Android.Services;
 
@@ -26,6 +27,9 @@ public class V2rayVpnService : VpnService
     private static ParcelFileDescriptor? _interface;
     private static int _tunFd = -1;
     private static TaskCompletionSource<int?>? _establishTcs;
+
+    private CancellationTokenSource? _trafficCts;
+    private readonly TrafficStatsService _trafficStats = new(AppServices.CoreEnvironment);
 
     public static Task<int?> EstablishAsync(
         Context context,
@@ -66,6 +70,7 @@ public class V2rayVpnService : VpnService
 
             if (isDisconnect)
             {
+                StopTrafficNotificationUpdates();
                 TearDownInterface();
                 StopForeground(true);
                 StopSelf();
@@ -151,10 +156,12 @@ public class V2rayVpnService : VpnService
             _tunFd = fd;
             _establishTcs?.TrySetResult(fd);
 
-            StartVpnForeground(BuildNotification("Proxy connection active"));
+            StartVpnForeground(BuildNotification(TrafficStatsService.FormatNotificationLine(0, 0)));
+            StartTrafficNotificationUpdates();
         }
         catch (Exception ex)
         {
+            StopTrafficNotificationUpdates();
             AndroidPlatformIntegration.ReportEstablishError(ex.Message);
             _establishTcs?.TrySetResult(null);
             StopForeground(true);
@@ -166,6 +173,7 @@ public class V2rayVpnService : VpnService
 
     public override void OnDestroy()
     {
+        StopTrafficNotificationUpdates();
         TearDownInterface();
         StopForeground(true);
         base.OnDestroy();
@@ -269,5 +277,55 @@ public class V2rayVpnService : VpnService
             .SetContentText(text)
             .SetSmallIcon(Resource.Drawable.Icon)
             .SetOngoing(true)
+            .SetOnlyAlertOnce(true)
             .Build();
+
+    private void StartTrafficNotificationUpdates()
+    {
+        StopTrafficNotificationUpdates();
+        _trafficCts = new CancellationTokenSource();
+        var token = _trafficCts.Token;
+        _ = Task.Run(() => TrafficNotificationLoopAsync(token), CancellationToken.None);
+    }
+
+    private void StopTrafficNotificationUpdates()
+    {
+        try
+        {
+            _trafficCts?.Cancel();
+            _trafficCts?.Dispose();
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        _trafficCts = null;
+    }
+
+    private async Task TrafficNotificationLoopAsync(CancellationToken cancellationToken)
+    {
+        var manager = NotificationManagerCompat.From(this);
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
+                var snap = await _trafficStats.QueryAsync(cancellationToken).ConfigureAwait(false);
+                var text = snap is { } traffic
+                    ? TrafficStatsService.FormatNotificationLine(traffic.UplinkBytes, traffic.DownlinkBytes)
+                    : TrafficStatsService.FormatNotificationLine(0, 0);
+
+                manager.Notify(NotificationId, BuildNotification(text));
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch
+            {
+                // Keep updating when possible.
+            }
+        }
+    }
 }

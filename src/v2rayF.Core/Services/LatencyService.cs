@@ -16,9 +16,12 @@ public sealed class LatencyService
 {
     private static readonly string[] PingUrls =
     [
-        "https://www.gstatic.com/generate_204",
-        "https://cp.cloudflare.com/generate_204"
+        "https://www.google.com/generate_204",
+        "https://www.google.com/"
     ];
+
+    /// <summary>Proxy-path destination used for latency probes and multipath observatory.</summary>
+    public const string GoogleProbeUrl = "https://www.google.com/generate_204";
 
     private readonly ICoreEnvironment _environment;
     private readonly ICoreProcessHost _speedtestHost;
@@ -51,7 +54,7 @@ public sealed class LatencyService
     public readonly record struct LatencyResult(int? LatencyMs, bool ProxyPathOk);
 
     /// <summary>
-    /// Prefer proxy-path RTT; fall back to TCP. ProxyPathOk is true only when generate_204 via the node succeeded.
+    /// Prefer proxy-path RTT to www.google.com; fall back to TCP. ProxyPathOk is true only when Google via the node succeeded.
     /// </summary>
     public async Task<LatencyResult> MeasureDetailedAsync(ProxyServer server, CancellationToken cancellationToken = default)
     {
@@ -147,7 +150,7 @@ public sealed class LatencyService
         }
     }
 
-    /// <summary>Returns on first successful generate_204 (does not wait for every URL).</summary>
+    /// <summary>Returns on first successful response from www.google.com via the node (does not wait for every URL).</summary>
     private static async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

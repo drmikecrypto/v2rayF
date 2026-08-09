@@ -89,6 +89,10 @@ public sealed class UpdateCheckService
                 .ConfigureAwait(false);
         }
 
+        // In-app Update button only surfaces installs we can verify.
+        if (string.IsNullOrWhiteSpace(sha256))
+            return null;
+
         return new UpdateOffer
         {
             Tag = tag,

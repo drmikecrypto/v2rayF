@@ -26,4 +26,7 @@ public static class AppServices
 
     /// <summary>Surface updater / PackageInstaller status into the UI status line.</summary>
     public static Action<string>? ReportStatus { get; set; }
+
+    /// <summary>Live proxy traffic totals (uplink, downlink) for Android notification updates.</summary>
+    public static Action<long, long>? OnTrafficStats { get; set; }
 }
