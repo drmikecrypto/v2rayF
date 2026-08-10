@@ -123,6 +123,7 @@ public sealed class ProfileVault
         CustomBlockRules = s.CustomBlockRules,
         SmartConnectEnabled = s.SmartConnectEnabled,
         SmartMultipathEnabled = s.SmartMultipathEnabled,
+        SelectedServerId = s.SelectedServerId,
         KillSwitchEnabled = s.KillSwitchEnabled,
         BlockIpv6 = s.BlockIpv6,
         DnsThroughProxy = s.DnsThroughProxy,

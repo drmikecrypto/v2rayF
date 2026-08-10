@@ -1,6 +1,14 @@
 # Latency testing
 
-**Test** (selected server) and **Test All** measure **proxy-path RTT to `www.google.com`** when Xray is available (HTTP through a temporary local SOCKS). If the proxy path fails, the result falls back to TCP connect RTT to the node's address/port.
+**Test delay** (selected server) and **Test All** measure **proxy-path RTT to `www.google.com`** through a temporary local SOCKS (HTTP via Xray). Results are **not** TCP ping to the VPS port.
+
+| Result | Meaning |
+|--------|---------|
+| `123 ms` | The node successfully proxied traffic to Google |
+| `timeout` | Proxy path failed (even if the TCP port is open) |
+| `—` | Not tested yet / in progress |
+
+If a VPS is powered off or the protocol handshake fails, you should see **`timeout`** — never a false “230 ms” from a bare TCP connect.
 
 Probe URLs (first success wins):
 
@@ -9,14 +17,4 @@ Probe URLs (first success wins):
 
 ## Smart Connect
 
-Smart Connect uses a TCP prefilter, then proxy-path probes to Google on a shortlist. It **early-exits** after a few working proxy paths and bounds each probe so ranking cannot stall the connect button for minutes.
-
-## Results
-
-| Display | Meaning |
-|---------|---------|
-| `123 ms` | Successful measurement |
-| `timeout` | No response within the probe budget |
-| `—` | Test in progress or not run yet |
-
-After **Test All**, results are saved with your server list.
+Smart Connect uses a cheap TCP prefilter only to shortlist candidates, then **proxy-path** probes. Only peers that pass the proxy-path check are connected. TCP-only reachability is shown as `timeout` in the list after ranking.

@@ -41,23 +41,27 @@
                         MinWidth="100"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0"
                          PlaceholderText="Subscription URL (https://...)"
                          Text="{Binding SubscriptionUrl}"/>
                 <Button Grid.Column="1" Content="Import URL" Command="{Binding ImportFromSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
                 <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
                 <Button Grid.Column="3" Content="Clipboard" Command="{Binding ImportFromClipboardCommand}" IsEnabled="{Binding !IsBusy}"/>
-                <Button Grid.Column="4" Content="{Binding ConnectButtonText}" Classes="accent"
+                <Button Grid.Column="4" Content="File" Command="{Binding ImportConfigFileCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="5" Content="{Binding ConnectButtonText}" Classes="accent"
                         Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding CanToggleConnection}" MinWidth="120"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56" MaxHeight="80"
-                         PlaceholderText="Paste share links (vmess://, vless://, ss://, trojan://) or base64 subscription"
+                         PlaceholderText="Paste share links, Xray JSON, or bulk list (vmess/vless/ss/trojan)"
                          Text="{Binding ImportText}" TextWrapping="Wrap"/>
                 <Button Grid.Column="1" VerticalAlignment="Stretch" Content="Import"
                         Command="{Binding ImportFromTextCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="96"/>
+                <Button Grid.Column="2" VerticalAlignment="Stretch" Content="QR"
+                        Command="{Binding ScanQrCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="64"
+                        ToolTip.Tip="Scan QR or open QR image (bulk OK)"/>
             </Grid>
         </StackPanel>
 
@@ -66,7 +70,7 @@
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
                         <TextBlock Text="Servers" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Button Content="Test" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+                        <Button Content="Test delay" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
                         <Button Content="Test All" Command="{Binding TestAllLatencyCommand}" IsEnabled="{Binding !IsBusy}"/>
                         <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
                     </StackPanel>
@@ -197,6 +201,7 @@
                             IsVisible="{Binding ShowTrafficStats}">
                     <TextBlock Text="{Binding UploadTrafficText}" FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding DownloadTrafficText}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding ConnectedPingText}" FontWeight="SemiBold"/>
                 </StackPanel>
                 <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>

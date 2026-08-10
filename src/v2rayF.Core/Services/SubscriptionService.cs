@@ -36,6 +36,6 @@ public sealed class SubscriptionService
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        return ShareLinkParser.ParseBulk(body);
+        return ConfigImportParser.Parse(body);
     }
 }

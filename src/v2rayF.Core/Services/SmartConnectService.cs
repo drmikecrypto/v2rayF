@@ -132,21 +132,21 @@ public sealed class SmartConnectService
         ProxyServer? preferred,
         string? lastGoodServerId)
     {
-        var live = ranked.Where(r => r.ProxyPathOk).Select(r => r.Server).Take(MaxFailoverCandidates).ToList();
-        var ordered = live.Count > 0
-            ? live
-            : ranked.Where(r => r.LatencyMs >= 0).Select(r => r.Server).Take(MaxFailoverCandidates).ToList();
+        // Only proxy-path OK peers are connectable winners (TCP-only is not a working tunnel).
+        var ordered = ranked
+            .Where(r => r.ProxyPathOk)
+            .Select(r => r.Server)
+            .Take(MaxFailoverCandidates)
+            .ToList();
 
         if (ordered.Count == 0)
-            ordered = ranked.Select(r => r.Server).Take(MaxFailoverCandidates).ToList();
+            return [];
 
         ProxyServer? boost = null;
-        if (!string.IsNullOrWhiteSpace(lastGoodServerId))
-            boost = ordered.FirstOrDefault(s => s.Id.ToString() == lastGoodServerId)
-                    ?? ranked.FirstOrDefault(r => r.Server.Id.ToString() == lastGoodServerId && r.ProxyPathOk)?.Server;
-        boost ??= preferred is not null
-            ? ordered.FirstOrDefault(s => s.Id == preferred.Id)
-            : null;
+        if (preferred is not null && ordered.Any(s => s.Id == preferred.Id))
+            boost = preferred;
+        else if (!string.IsNullOrWhiteSpace(lastGoodServerId))
+            boost = ordered.FirstOrDefault(s => s.Id.ToString() == lastGoodServerId);
 
         if (boost is not null)
         {

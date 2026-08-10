@@ -45,16 +45,25 @@ public sealed class LatencyService
         return await MeasureTcpAsync(server, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Proxy-path delay only. Returns -1 when the node does not successfully proxy to Google
+    /// (TCP-only reachability is never reported as a successful ping).
+    /// </summary>
     public async Task<int?> MeasureAsync(ProxyServer server, CancellationToken cancellationToken = default)
     {
         var detailed = await MeasureDetailedAsync(server, cancellationToken).ConfigureAwait(false);
-        return detailed.LatencyMs;
+        if (detailed.ProxyPathOk && detailed.LatencyMs is >= 0)
+            return detailed.LatencyMs;
+
+        return -1;
     }
 
     public readonly record struct LatencyResult(int? LatencyMs, bool ProxyPathOk);
 
     /// <summary>
-    /// Prefer proxy-path RTT to www.google.com; fall back to TCP. ProxyPathOk is true only when Google via the node succeeded.
+    /// Prefer proxy-path RTT to www.google.com. When the proxy path fails, LatencyMs may still
+    /// contain a TCP fallback for Smart Connect prefilter scoring, but ProxyPathOk is false.
+    /// UI Test/Test All must use <see cref="MeasureAsync"/> so TCP-only never looks like a ping.
     /// </summary>
     public async Task<LatencyResult> MeasureDetailedAsync(ProxyServer server, CancellationToken cancellationToken = default)
     {

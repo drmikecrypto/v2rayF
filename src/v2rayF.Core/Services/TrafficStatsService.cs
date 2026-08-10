@@ -109,8 +109,19 @@ public sealed class TrafficStatsService
 
     public static string FormatDownload(long bytes) => $"↓ {FormatBytes(bytes)}";
 
+    public static string FormatRate(long bytesPerSecond) => $"{FormatBytes(Math.Max(0, bytesPerSecond))}/s";
+
+    public static string FormatUploadRate(long bps) => $"↑ {FormatRate(bps)}";
+
+    public static string FormatDownloadRate(long bps) => $"↓ {FormatRate(bps)}";
+
     public static string FormatNotificationLine(long uplink, long downlink) =>
         $"{FormatUpload(uplink)}  ·  {FormatDownload(downlink)}";
+
+    public static string FormatNotificationLine(long uplinkBps, long downlinkBps, int? pingMs) =>
+        pingMs is > 0
+            ? $"{FormatUploadRate(uplinkBps)}  ·  {FormatDownloadRate(downlinkBps)}  ·  {pingMs}"
+            : $"{FormatUploadRate(uplinkBps)}  ·  {FormatDownloadRate(downlinkBps)}";
 
     private static long ReadStatValue(JsonElement item)
     {

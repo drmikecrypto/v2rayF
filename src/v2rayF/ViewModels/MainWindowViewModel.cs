@@ -24,7 +24,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly SubscriptionService _subscriptionService = new();
     private readonly ProxyCoreService _proxyCore = new(AppServices.CoreEnvironment);
     private readonly LatencyService _latencyService = new(AppServices.CoreEnvironment);
-    private readonly TrafficStatsService _trafficStats = new(AppServices.CoreEnvironment);
     private readonly SmartConnectService _smartConnect;
     private readonly AdaptiveSurviveService _adaptiveSurvive = new();
     private readonly ProfileVault _vault = new();
@@ -33,9 +32,10 @@ public partial class MainWindowViewModel : ViewModelBase
     private AppSettings _settings = new();
     private UpdateOffer? _pendingUpdate;
     private CancellationTokenSource? _connectCts;
-    private CancellationTokenSource? _trafficCts;
+    private CancellationTokenSource? _pingCts;
     private IReadOnlyList<SmartConnectService.RankedServer> _lastRanking = [];
     private DateTimeOffset _lastUpdateCheckUtc = DateTimeOffset.MinValue;
+    private bool _suppressSelectionPersist;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -74,7 +74,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _enableSystemProxy = true;
 
     [ObservableProperty]
-    private bool _smartConnectEnabled;
+    private bool _smartConnectEnabled = true;
 
     [ObservableProperty]
     private bool _smartMultipathEnabled;
@@ -152,10 +152,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isUpdating;
 
     [ObservableProperty]
-    private string _uploadTrafficText = "↑ 0 B";
+    private string _uploadTrafficText = "↑ 0 B/s";
 
     [ObservableProperty]
-    private string _downloadTrafficText = "↓ 0 B";
+    private string _downloadTrafficText = "↓ 0 B/s";
+
+    [ObservableProperty]
+    private string _connectedPingText = "";
 
     [ObservableProperty]
     private bool _showTrafficStats;
@@ -213,7 +216,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnSelectedRoutingModeChanged(RoutingModeOption? value) => OnPropertyChanged(nameof(ShowCustomRules));
 
-    partial void OnSelectedServerChanged(ProxyServer? value) => OnPropertyChanged(nameof(HasSelectedServer));
+    partial void OnSelectedServerChanged(ProxyServer? value)
+    {
+        OnPropertyChanged(nameof(HasSelectedServer));
+        if (_suppressSelectionPersist)
+            return;
+
+        _settings.SelectedServerId = value?.Id.ToString() ?? "";
+        _ = PersistSelectedServerAsync();
+    }
 
     partial void OnSubscriptionUrlChanged(string value) => OnPropertyChanged(nameof(HasSavedSubscription));
 
@@ -226,6 +237,18 @@ public partial class MainWindowViewModel : ViewModelBase
             StartTrafficPolling();
         else
             StopTrafficPolling();
+    }
+
+    private async Task PersistSelectedServerAsync()
+    {
+        try
+        {
+            await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort — selection still works in-session.
+        }
     }
 
     public MainWindowViewModel()
@@ -302,7 +325,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var servers = await serversTask.ConfigureAwait(true);
         Servers = new ObservableCollection<ProxyServer>(servers);
-        SelectedServer ??= Servers.FirstOrDefault();
+        RestoreSelectedServer();
 
         try
         {
@@ -315,6 +338,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
         UpdateCoreStatus();
         _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
+    }
+
+    private void RestoreSelectedServer()
+    {
+        _suppressSelectionPersist = true;
+        try
+        {
+            ProxyServer? match = null;
+            if (!string.IsNullOrWhiteSpace(_settings.SelectedServerId))
+                match = Servers.FirstOrDefault(s => s.Id.ToString() == _settings.SelectedServerId);
+
+            SelectedServer = match ?? Servers.FirstOrDefault();
+            if (SelectedServer is not null)
+                _settings.SelectedServerId = SelectedServer.Id.ToString();
+        }
+        finally
+        {
+            _suppressSelectionPersist = false;
+        }
     }
 
     /// <summary>Called when the main window is activated (desktop) — recheck for updates.</summary>
@@ -472,6 +514,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.SubscriptionUrl = SubscriptionUrl.Trim();
         _settings.SmartConnectEnabled = SmartConnectEnabled;
         _settings.SmartMultipathEnabled = SmartMultipathEnabled;
+        _settings.SelectedServerId = SelectedServer?.Id.ToString() ?? _settings.SelectedServerId;
         _settings.KillSwitchEnabled = KillSwitchEnabled;
         _settings.BlockIpv6 = BlockIpv6;
         _settings.DnsThroughProxy = DnsThroughProxy;
@@ -763,7 +806,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var servers = await _serverStore.LoadAsync();
         Servers = new ObservableCollection<ProxyServer>(servers);
-        SelectedServer ??= Servers.FirstOrDefault();
+        RestoreSelectedServer();
     }
 
     [RelayCommand]
@@ -771,11 +814,15 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (SelectedServer is null)
         {
-            StatusText = "Select a server to test latency.";
+            StatusText = "Select a server to test proxy delay.";
             return;
         }
 
+        StatusText = "Testing proxy delay to Google…";
         await MeasureLatencyAsync(SelectedServer);
+        StatusText = SelectedServer.LatencyMs is > 0
+            ? $"Proxy delay: {SelectedServer.LatencyMs} ms"
+            : "Proxy delay: timeout (node did not reach Google)";
     }
 
     [RelayCommand]
@@ -788,7 +835,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "Testing www.google.com latency for all servers…";
+        StatusText = "Testing proxy delay to Google for all servers…";
         try
         {
             var snapshot = Servers.ToList();
@@ -799,6 +846,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 try
                 {
                     RunOnUiThread(() => server.SetLatency(null));
+                    // MeasureAsync reports proxy-path only (-1 when TCP-only).
                     var ms = await _latencyService.MeasureAsync(server).ConfigureAwait(false);
                     RunOnUiThread(() => server.SetLatency(ms));
                 }
@@ -809,7 +857,8 @@ public partial class MainWindowViewModel : ViewModelBase
             })).ConfigureAwait(true);
 
             await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
-            StatusText = "Google latency test complete.";
+            var ok = Servers.Count(s => s.LatencyMs is > 0);
+            StatusText = $"Proxy delay test complete — {ok}/{Servers.Count} reachable.";
         }
         finally
         {
@@ -821,7 +870,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         RunOnUiThread(() => server.SetLatency(null));
 
-        // Single-server Test still prefers proxy-path when core is available.
         var result = await _latencyService.MeasureAsync(server);
 
         RunOnUiThread(() => server.SetLatency(result));
@@ -958,13 +1006,23 @@ public partial class MainWindowViewModel : ViewModelBase
                 await SetOnUiAsync(() =>
                 {
                     foreach (var ranked in _lastRanking)
-                        ranked.Server.SetLatency(ranked.LatencyMs < 0 ? -1 : ranked.LatencyMs);
+                        ranked.Server.SetLatency(ranked.ProxyPathOk ? ranked.LatencyMs : -1);
                 }).ConfigureAwait(true);
 
                 candidates = _smartConnect.SelectConnectOrder(
                     _lastRanking,
                     SelectedServer,
                     settings.LastGoodServerId);
+
+                if (candidates.Count == 0)
+                {
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = "Smart Connect: no working proxy paths (all timed out).";
+                        ConnectionState = ConnectionState.Failed;
+                    }).ConfigureAwait(true);
+                    return;
+                }
             }
             else
             {
@@ -1373,7 +1431,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task ImportParsedAsync(string text)
     {
         if (Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri) &&
-            uri.Scheme is "http" or "https")
+            uri.Scheme is "http" or "https" &&
+            !text.Contains('\n') &&
+            !text.TrimStart().StartsWith('{') &&
+            !text.Contains("vmess://", StringComparison.OrdinalIgnoreCase) &&
+            !text.Contains("vless://", StringComparison.OrdinalIgnoreCase))
         {
             SubscriptionUrl = text.Trim();
             if (await TryImportSubscriptionAsync())
@@ -1381,16 +1443,146 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var imported = ShareLinkParser.ParseBulk(text);
+        var imported = ConfigImportParser.Parse(text);
         if (imported.Count == 0)
         {
-            StatusText = "No valid proxy links found.";
+            StatusText = "No valid proxy configs found (share links, Xray JSON, or bulk list).";
             return;
         }
 
         await MergeImportedAsync(imported);
         ImportText = "";
         StatusText = $"Imported {imported.Count} server(s).";
+    }
+
+    [RelayCommand]
+    private async Task ImportConfigFileAsync()
+    {
+        var top = GetTopLevel();
+        if (top?.StorageProvider is null)
+        {
+            StatusText = "File picker unavailable.";
+            return;
+        }
+
+        try
+        {
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import configs",
+                AllowMultiple = true,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Config files")
+                    {
+                        Patterns = ["*.txt", "*.json", "*.v2box", "*.npv", "*.conf", "*.yaml", "*.yml", "*.*"]
+                    },
+                    new FilePickerFileType("All files") { Patterns = ["*.*"] }
+                ]
+            }).ConfigureAwait(true);
+
+            if (files.Count == 0)
+                return;
+
+            IsBusy = true;
+            var all = new List<ProxyServer>();
+            foreach (var file in files)
+            {
+                await using var stream = await file.OpenReadAsync().ConfigureAwait(true);
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms).ConfigureAwait(true);
+                all.AddRange(ConfigImportParser.ParseBytes(ms.ToArray(), file.Name));
+            }
+
+            if (all.Count == 0)
+            {
+                StatusText = "No valid proxy configs found in the selected file(s).";
+                return;
+            }
+
+            await MergeImportedAsync(all).ConfigureAwait(true);
+            StatusText = $"Imported {all.Count} server(s) from file(s).";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Import failed: {StatusSanitizer.Scrub(ex.Message)}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportQrImageAsync()
+    {
+        var top = GetTopLevel();
+        if (top?.StorageProvider is null)
+        {
+            StatusText = "File picker unavailable.";
+            return;
+        }
+
+        try
+        {
+            var files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Import from QR image",
+                AllowMultiple = false,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Images") { Patterns = ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp", "*.gif"] }
+                ]
+            }).ConfigureAwait(true);
+
+            if (files.Count == 0)
+                return;
+
+            await using var stream = await files[0].OpenReadAsync().ConfigureAwait(true);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms).ConfigureAwait(true);
+            var payload = QrCodeDecoder.DecodeFromImageBytes(ms.ToArray());
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                StatusText = "No QR code found in the image.";
+                return;
+            }
+
+            await ImportParsedAsync(payload).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"QR import failed: {StatusSanitizer.Scrub(ex.Message)}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ScanQrAsync()
+    {
+        if (AppServices.CaptureQrTextAsync is not null)
+        {
+            try
+            {
+                StatusText = "Scanning QR…";
+                var payload = await AppServices.CaptureQrTextAsync().ConfigureAwait(true);
+                if (string.IsNullOrWhiteSpace(payload))
+                {
+                    StatusText = "QR scan cancelled or empty.";
+                    return;
+                }
+
+                await ImportParsedAsync(payload).ConfigureAwait(true);
+                return;
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"QR scan failed: {StatusSanitizer.Scrub(ex.Message)}";
+                return;
+            }
+        }
+
+        // Desktop / fallback: pick a QR image.
+        await ImportQrImageAsync().ConfigureAwait(true);
     }
 
     private async Task<bool> TryImportSubscriptionAsync()
@@ -1427,19 +1619,27 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task MergeImportedAsync(IReadOnlyList<ProxyServer> imported)
     {
+        var added = 0;
         foreach (var server in imported)
         {
             if (Servers.Any(existing =>
-                    existing.RawLink == server.RawLink &&
-                    existing.Address == server.Address &&
-                    existing.Port == server.Port))
+                    (!string.IsNullOrEmpty(existing.RawLink) && existing.RawLink == server.RawLink) ||
+                    (existing.Address == server.Address &&
+                     existing.Port == server.Port &&
+                     existing.Protocol == server.Protocol &&
+                     existing.UserId == server.UserId)))
                 continue;
 
             Servers.Add(server);
+            added++;
         }
 
-        SelectedServer ??= Servers.FirstOrDefault();
+        if (SelectedServer is null)
+            RestoreSelectedServer();
+
         await _serverStore.SaveAsync(Servers);
+        if (added != imported.Count)
+            StatusText = $"Imported {added} new server(s) ({imported.Count - added} duplicate(s) skipped).";
     }
 
     private static IClipboard? GetClipboard()
@@ -1450,56 +1650,90 @@ public partial class MainWindowViewModel : ViewModelBase
     private void StartTrafficPolling()
     {
         StopTrafficPolling();
+        TrafficStatsHub.Shared.Reset();
         RunOnUiThread(() =>
         {
             ShowTrafficStats = true;
-            UploadTrafficText = TrafficStatsService.FormatUpload(0);
-            DownloadTrafficText = TrafficStatsService.FormatDownload(0);
+            UploadTrafficText = TrafficStatsService.FormatUploadRate(0);
+            DownloadTrafficText = TrafficStatsService.FormatDownloadRate(0);
+            ConnectedPingText = SelectedServer?.LatencyMs is > 0 ? $"{SelectedServer.LatencyMs}" : "";
+            TrafficStatsHub.Shared.ConnectedPingMs = SelectedServer?.LatencyMs is > 0 ? SelectedServer.LatencyMs : null;
         });
 
-        _trafficCts = new CancellationTokenSource();
-        var token = _trafficCts.Token;
-        _ = Task.Run(() => TrafficPollLoopAsync(token), CancellationToken.None);
+        TrafficStatsHub.Shared.Updated += OnHubTrafficUpdated;
+        TrafficStatsHub.Shared.Subscribe();
+
+        _pingCts = new CancellationTokenSource();
+        var token = _pingCts.Token;
+        _ = Task.Run(() => ConnectedPingLoopAsync(token), CancellationToken.None);
     }
 
     private void StopTrafficPolling()
     {
+        TrafficStatsHub.Shared.Updated -= OnHubTrafficUpdated;
+        TrafficStatsHub.Shared.Unsubscribe();
+        TrafficStatsHub.Shared.Reset();
+
         try
         {
-            _trafficCts?.Cancel();
-            _trafficCts?.Dispose();
+            _pingCts?.Cancel();
+            _pingCts?.Dispose();
         }
         catch
         {
             // Best effort.
         }
 
-        _trafficCts = null;
+        _pingCts = null;
+        _lastRanking = [];
         RunOnUiThread(() =>
         {
             ShowTrafficStats = false;
-            UploadTrafficText = TrafficStatsService.FormatUpload(0);
-            DownloadTrafficText = TrafficStatsService.FormatDownload(0);
+            UploadTrafficText = TrafficStatsService.FormatUploadRate(0);
+            DownloadTrafficText = TrafficStatsService.FormatDownloadRate(0);
+            ConnectedPingText = "";
         });
     }
 
-    private async Task TrafficPollLoopAsync(CancellationToken cancellationToken)
+    private void OnHubTrafficUpdated(TrafficStatsHub.LiveTraffic traffic)
     {
+        RunOnUiThread(() =>
+        {
+            UploadTrafficText = TrafficStatsService.FormatUploadRate(traffic.UplinkBps);
+            DownloadTrafficText = TrafficStatsService.FormatDownloadRate(traffic.DownlinkBps);
+            ShowTrafficStats = true;
+            if (TrafficStatsHub.Shared.ConnectedPingMs is int ping and > 0)
+                ConnectedPingText = $"{ping}";
+        });
+
+        AppServices.OnLiveTraffic?.Invoke(
+            traffic.UplinkBps,
+            traffic.DownlinkBps,
+            TrafficStatsHub.Shared.ConnectedPingMs);
+    }
+
+    private async Task ConnectedPingLoopAsync(CancellationToken cancellationToken)
+    {
+        // Seed from last test if available.
+        if (SelectedServer?.LatencyMs is int seed and > 0)
+            TrafficStatsHub.Shared.ConnectedPingMs = seed;
+
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                var snap = await _trafficStats.QueryAsync(cancellationToken).ConfigureAwait(false);
-                if (snap is { } traffic)
+                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+                var ms = await _latencyService.MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, cancellationToken)
+                    .ConfigureAwait(false);
+                if (ms is >= 0)
                 {
+                    TrafficStatsHub.Shared.ConnectedPingMs = ms;
                     RunOnUiThread(() =>
                     {
-                        UploadTrafficText = TrafficStatsService.FormatUpload(traffic.UplinkBytes);
-                        DownloadTrafficText = TrafficStatsService.FormatDownload(traffic.DownlinkBytes);
-                        ShowTrafficStats = true;
+                        ConnectedPingText = $"{ms}";
+                        if (SelectedServer is not null)
+                            SelectedServer.SetLatency(ms);
                     });
-
-                    AppServices.OnTrafficStats?.Invoke(traffic.UplinkBytes, traffic.DownlinkBytes);
                 }
             }
             catch (OperationCanceledException)
@@ -1508,16 +1742,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             catch
             {
-                // Keep polling.
-            }
-
-            try
-            {
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
+                // Keep trying.
             }
         }
     }

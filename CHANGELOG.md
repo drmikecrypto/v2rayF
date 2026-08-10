@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-08-10
+
+### Added
+
+- Import config files (`.txt`, `.json`, `.v2box`, `.npv`, and related dumps) plus bulk share-link lists
+- Clipboard import of Xray JSON outbounds
+- QR import via camera (Android) or QR image (desktop), including bulk subscription payloads
+- Live ↑/↓ **speed rates** and connected ping number beside traffic meters (UI + Android notification)
+- Persisted server selection across app restarts
+
+### Changed
+
+- **Test delay** / **Test All** report proxy-path delay only — TCP-only reachability shows as `timeout` (no false ~230 ms pings)
+- Smart Connect defaults on; only working proxy-path peers are connect candidates
+- Shared traffic stats hub (~2.5s) so UI and notification no longer each spawn per-second `xray api` processes
+- Closing the Android app finishes VPN and clears the ongoing notification (Home still keeps the tunnel)
+
+### Fixed
+
+- Selecting a mid-list config no longer resets to the first server after import or relaunch
+
 ## [1.4.5] - 2026-08-09
 
 ### Added
@@ -274,6 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.6
 [1.4.5]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.5
 [1.4.4]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.4
 [1.4.3]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.3

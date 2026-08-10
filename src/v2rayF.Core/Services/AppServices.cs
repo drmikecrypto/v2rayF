@@ -18,8 +18,11 @@ public static class AppServices
     /// <summary>Encrypts secrets at rest. Platform hosts replace the default passthrough.</summary>
     public static ISecretProtector SecretProtector { get; set; } = new PassthroughSecretProtector();
 
-    /// <summary>Called when the Android activity stops — tear down VPN so network is not left hijacked.</summary>
+    /// <summary>Called when the Android activity finishes — tear down VPN so network is not left hijacked.</summary>
     public static Func<Task>? EmergencyDisconnectAsync { get; set; }
+
+    /// <summary>Platform camera QR capture (Android). Returns decoded text or null.</summary>
+    public static Func<Task<string?>>? CaptureQrTextAsync { get; set; }
 
     /// <summary>Re-check GitHub releases (e.g. after returning from the system package installer).</summary>
     public static Action? RefreshUpdateCheck { get; set; }
@@ -27,6 +30,6 @@ public static class AppServices
     /// <summary>Surface updater / PackageInstaller status into the UI status line.</summary>
     public static Action<string>? ReportStatus { get; set; }
 
-    /// <summary>Live proxy traffic totals (uplink, downlink) for Android notification updates.</summary>
-    public static Action<long, long>? OnTrafficStats { get; set; }
+    /// <summary>Live proxy traffic rates (uplink B/s, downlink B/s, optional ping ms) for notification updates.</summary>
+    public static Action<long, long, int?>? OnLiveTraffic { get; set; }
 }

@@ -28,8 +28,7 @@ public class V2rayVpnService : VpnService
     private static int _tunFd = -1;
     private static TaskCompletionSource<int?>? _establishTcs;
 
-    private CancellationTokenSource? _trafficCts;
-    private readonly TrafficStatsService _trafficStats = new(AppServices.CoreEnvironment);
+    private bool _subscribedTraffic;
 
     public static Task<int?> EstablishAsync(
         Context context,
@@ -72,7 +71,7 @@ public class V2rayVpnService : VpnService
             {
                 StopTrafficNotificationUpdates();
                 TearDownInterface();
-                StopForeground(true);
+                ClearNotification();
                 StopSelf();
                 return StartCommandResult.NotSticky;
             }
@@ -137,7 +136,7 @@ public class V2rayVpnService : VpnService
             {
                 AndroidPlatformIntegration.ReportEstablishError("VPN interface could not be created.");
                 _establishTcs?.TrySetResult(null);
-                StopForeground(true);
+                ClearNotification();
                 StopSelf();
                 return StartCommandResult.NotSticky;
             }
@@ -148,7 +147,7 @@ public class V2rayVpnService : VpnService
             {
                 AndroidPlatformIntegration.ReportEstablishError("VPN file descriptor is invalid.");
                 _establishTcs?.TrySetResult(null);
-                StopForeground(true);
+                ClearNotification();
                 StopSelf();
                 return StartCommandResult.NotSticky;
             }
@@ -156,7 +155,7 @@ public class V2rayVpnService : VpnService
             _tunFd = fd;
             _establishTcs?.TrySetResult(fd);
 
-            StartVpnForeground(BuildNotification(TrafficStatsService.FormatNotificationLine(0, 0)));
+            StartVpnForeground(BuildNotification(TrafficStatsService.FormatNotificationLine(0, 0, null)));
             StartTrafficNotificationUpdates();
         }
         catch (Exception ex)
@@ -164,7 +163,7 @@ public class V2rayVpnService : VpnService
             StopTrafficNotificationUpdates();
             AndroidPlatformIntegration.ReportEstablishError(ex.Message);
             _establishTcs?.TrySetResult(null);
-            StopForeground(true);
+            ClearNotification();
             StopSelf();
         }
 
@@ -175,7 +174,7 @@ public class V2rayVpnService : VpnService
     {
         StopTrafficNotificationUpdates();
         TearDownInterface();
-        StopForeground(true);
+        ClearNotification();
         base.OnDestroy();
     }
 
@@ -196,6 +195,34 @@ public class V2rayVpnService : VpnService
             context.StartForegroundService(disconnectIntent);
         else
             context.StartService(disconnectIntent);
+    }
+
+    private void ClearNotification()
+    {
+        try
+        {
+            StopForeground(StopForegroundFlags.Remove);
+        }
+        catch
+        {
+            try
+            {
+                StopForeground(true);
+            }
+            catch
+            {
+                // Best effort.
+            }
+        }
+
+        try
+        {
+            NotificationManagerCompat.From(this).Cancel(NotificationId);
+        }
+        catch
+        {
+            // Best effort.
+        }
     }
 
     private static void TearDownInterface()
@@ -283,49 +310,44 @@ public class V2rayVpnService : VpnService
     private void StartTrafficNotificationUpdates()
     {
         StopTrafficNotificationUpdates();
-        _trafficCts = new CancellationTokenSource();
-        var token = _trafficCts.Token;
-        _ = Task.Run(() => TrafficNotificationLoopAsync(token), CancellationToken.None);
+        // Prefer shared hub (UI may already be polling) — one statsquery process for all consumers.
+        TrafficStatsHub.Shared.Updated += OnHubUpdated;
+        TrafficStatsHub.Shared.Subscribe();
+        _subscribedTraffic = true;
+        AppServices.OnLiveTraffic = OnLiveTrafficFromUi;
     }
 
     private void StopTrafficNotificationUpdates()
     {
+        if (_subscribedTraffic)
+        {
+            TrafficStatsHub.Shared.Updated -= OnHubUpdated;
+            TrafficStatsHub.Shared.Unsubscribe();
+            _subscribedTraffic = false;
+        }
+
+        if (ReferenceEquals(AppServices.OnLiveTraffic, (Action<long, long, int?>)OnLiveTrafficFromUi))
+            AppServices.OnLiveTraffic = null;
+    }
+
+    private void OnHubUpdated(TrafficStatsHub.LiveTraffic traffic) =>
+        UpdateNotificationText(TrafficStatsService.FormatNotificationLine(
+            traffic.UplinkBps,
+            traffic.DownlinkBps,
+            TrafficStatsHub.Shared.ConnectedPingMs));
+
+    private void OnLiveTrafficFromUi(long upBps, long downBps, int? pingMs) =>
+        UpdateNotificationText(TrafficStatsService.FormatNotificationLine(upBps, downBps, pingMs));
+
+    private void UpdateNotificationText(string text)
+    {
         try
         {
-            _trafficCts?.Cancel();
-            _trafficCts?.Dispose();
+            NotificationManagerCompat.From(this).Notify(NotificationId, BuildNotification(text));
         }
         catch
         {
             // Best effort.
-        }
-
-        _trafficCts = null;
-    }
-
-    private async Task TrafficNotificationLoopAsync(CancellationToken cancellationToken)
-    {
-        var manager = NotificationManagerCompat.From(this);
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(1000, cancellationToken).ConfigureAwait(false);
-                var snap = await _trafficStats.QueryAsync(cancellationToken).ConfigureAwait(false);
-                var text = snap is { } traffic
-                    ? TrafficStatsService.FormatNotificationLine(traffic.UplinkBytes, traffic.DownlinkBytes)
-                    : TrafficStatsService.FormatNotificationLine(0, 0);
-
-                manager.Notify(NotificationId, BuildNotification(text));
-            }
-            catch (System.OperationCanceledException)
-            {
-                return;
-            }
-            catch
-            {
-                // Keep updating when possible.
-            }
         }
     }
 }

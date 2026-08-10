@@ -18,9 +18,13 @@ public sealed class AppSettings
 
     public string SubscriptionUrl { get; set; } = "";
 
-    public bool SmartConnectEnabled { get; set; }
+    /// <summary>When true, Connect ranks servers and prefers the fastest proxy-path peer.</summary>
+    public bool SmartConnectEnabled { get; set; } = true;
 
     public bool SmartMultipathEnabled { get; set; }
+
+    /// <summary>Persisted list selection (server Id GUID string).</summary>
+    public string SelectedServerId { get; set; } = "";
 
     public bool KillSwitchEnabled { get; set; } = true;
 

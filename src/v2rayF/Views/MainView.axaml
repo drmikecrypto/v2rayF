@@ -24,20 +24,22 @@
                         MinWidth="96"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" PlaceholderText="Subscription URL"
                          Text="{Binding SubscriptionUrl}"/>
                 <Button Grid.Column="1" Content="Import" Command="{Binding ImportFromSubscriptionCommand}"/>
                 <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}"
                         IsEnabled="{Binding HasSavedSubscription}"/>
+                <Button Grid.Column="3" Content="File" Command="{Binding ImportConfigFileCommand}"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56"
-                         PlaceholderText="Paste share link"
+                         PlaceholderText="Paste share link / JSON / bulk"
                          Text="{Binding ImportText}" TextWrapping="Wrap"/>
                 <Button Grid.Column="1" Content="Paste" Command="{Binding ImportFromClipboardCommand}"/>
                 <Button Grid.Column="2" Content="Add" Command="{Binding ImportFromTextCommand}"/>
+                <Button Grid.Column="3" Content="QR" Command="{Binding ScanQrCommand}"/>
             </Grid>
 
             <Button Content="{Binding ConnectButtonText}" Classes="accent"
@@ -50,10 +52,11 @@
                         HorizontalAlignment="Center">
                 <TextBlock Text="{Binding UploadTrafficText}" FontWeight="SemiBold" FontSize="14"/>
                 <TextBlock Text="{Binding DownloadTrafficText}" FontWeight="SemiBold" FontSize="14"/>
+                <TextBlock Text="{Binding ConnectedPingText}" FontWeight="SemiBold" FontSize="14"/>
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Test" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
+                <Button Content="Test delay" Command="{Binding TestLatencyCommand}" IsEnabled="{Binding HasSelectedServer}"/>
                 <Button Content="Test All" Command="{Binding TestAllLatencyCommand}"/>
                 <Button Content="Remove" Command="{Binding RemoveSelectedCommand}" IsEnabled="{Binding HasSelectedServer}"/>
             </StackPanel>

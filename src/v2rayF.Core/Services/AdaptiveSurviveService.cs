@@ -83,6 +83,7 @@ public sealed class AdaptiveSurviveService
         SubscriptionUrl = s.SubscriptionUrl,
         SmartConnectEnabled = s.SmartConnectEnabled,
         SmartMultipathEnabled = s.SmartMultipathEnabled,
+        SelectedServerId = s.SelectedServerId,
         KillSwitchEnabled = s.KillSwitchEnabled,
         BlockIpv6 = s.BlockIpv6,
         DnsThroughProxy = s.DnsThroughProxy,

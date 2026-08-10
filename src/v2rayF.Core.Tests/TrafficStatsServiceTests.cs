@@ -117,4 +117,12 @@ public class TrafficStatsServiceTests
     {
         Assert.Equal("↑ 1 KB  ·  ↓ 2 KB", TrafficStatsService.FormatNotificationLine(1024, 2048));
     }
+
+    [Fact]
+    public void FormatNotificationLine_WithRatesAndPing()
+    {
+        Assert.Equal(
+            "↑ 1 KB/s  ·  ↓ 2 KB/s  ·  42",
+            TrafficStatsService.FormatNotificationLine(1024, 2048, 42));
+    }
 }
