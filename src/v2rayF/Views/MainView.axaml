@@ -33,14 +33,17 @@
                 <Button Grid.Column="3" Content="File" Command="{Binding ImportConfigFileCommand}"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
-                <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56"
-                         PlaceholderText="Paste share link / JSON / bulk"
-                         Text="{Binding ImportText}" TextWrapping="Wrap"/>
-                <Button Grid.Column="1" Content="Paste" Command="{Binding ImportFromClipboardCommand}"/>
-                <Button Grid.Column="2" Content="Add" Command="{Binding ImportFromTextCommand}"/>
-                <Button Grid.Column="3" Content="QR" Command="{Binding ScanQrCommand}"/>
-            </Grid>
+            <TextBox AcceptsReturn="True" MinHeight="56" MaxHeight="96"
+                     PlaceholderText="Paste share link / JSON / bulk"
+                     Text="{Binding ImportText}" TextWrapping="Wrap"/>
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="Paste" Command="{Binding ImportFromClipboardCommand}"
+                        VerticalAlignment="Top" MinHeight="40"/>
+                <Button Content="Add" Command="{Binding ImportFromTextCommand}"
+                        VerticalAlignment="Top" MinHeight="40"/>
+                <Button Content="QR" Command="{Binding ScanQrCommand}"
+                        VerticalAlignment="Top" MinHeight="40"/>
+            </StackPanel>
 
             <Button Content="{Binding ConnectButtonText}" Classes="accent"
                     Command="{Binding ToggleConnectionCommand}"

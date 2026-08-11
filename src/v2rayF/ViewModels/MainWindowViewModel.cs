@@ -818,11 +818,11 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        StatusText = "Testing proxy delay to Google…";
+        StatusText = "Testing proxy delay…";
         await MeasureLatencyAsync(SelectedServer);
         StatusText = SelectedServer.LatencyMs is > 0
             ? $"Proxy delay: {SelectedServer.LatencyMs} ms"
-            : "Proxy delay: timeout (node did not reach Google)";
+            : "Proxy delay: timeout (proxy probe failed)";
     }
 
     [RelayCommand]
@@ -835,7 +835,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "Testing proxy delay to Google for all servers…";
+        StatusText = "Testing proxy delay for all servers…";
         try
         {
             var snapshot = Servers.ToList();
@@ -1565,23 +1565,19 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 StatusText = "Scanning QR…";
                 var payload = await AppServices.CaptureQrTextAsync().ConfigureAwait(true);
-                if (string.IsNullOrWhiteSpace(payload))
+                if (!string.IsNullOrWhiteSpace(payload))
                 {
-                    StatusText = "QR scan cancelled or empty.";
+                    await ImportParsedAsync(payload).ConfigureAwait(true);
                     return;
                 }
-
-                await ImportParsedAsync(payload).ConfigureAwait(true);
-                return;
             }
             catch (Exception ex)
             {
-                StatusText = $"QR scan failed: {StatusSanitizer.Scrub(ex.Message)}";
-                return;
+                StatusText = $"QR scan failed: {StatusSanitizer.Scrub(ex.Message)}. Trying image…";
             }
         }
 
-        // Desktop / fallback: pick a QR image.
+        // Desktop, cancel, or Play Services unavailable: pick a QR image.
         await ImportQrImageAsync().ConfigureAwait(true);
     }
 

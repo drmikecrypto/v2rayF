@@ -2,16 +2,18 @@ using Android;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
+using Android.Gms.Extensions;
 using Android.OS;
 using Android.Provider;
 using AndroidX.Core.App;
 using AndroidX.Core.Content;
 using Avalonia.Android;
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using v2rayF.Android.Services;
 using v2rayF.Services;
+using Xamarin.Google.MLKit.Vision.Barcode.Common;
+using Xamarin.Google.MLKit.Vision.CodeScanner;
 
 namespace v2rayF.Android;
 
@@ -26,16 +28,11 @@ public class MainActivity : AvaloniaMainActivity
 {
     public const int VpnRequestCode = 9001;
     public const int NotificationPermissionRequestCode = 9002;
-    public const int CameraPermissionRequestCode = 9003;
-    public const int QrCaptureRequestCode = 9004;
     public const string PackageInstalledAction = "com.drmikecrypto.v2rayf.PACKAGE_INSTALLED";
     public const string PackageInstalledSessionExtra = "session_id";
 
     public static MainActivity? Instance { get; private set; }
     public static TaskCompletionSource<bool>? VpnPermissionTcs { get; set; }
-
-    private TaskCompletionSource<string?>? _qrCaptureTcs;
-    private Java.IO.File? _qrCaptureFile;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -110,47 +107,34 @@ public class MainActivity : AvaloniaMainActivity
         ActivityCompat.RequestPermissions(this, [Manifest.Permission.PostNotifications], NotificationPermissionRequestCode);
     }
 
+    /// <summary>
+    /// Opens Google Play services Code Scanner (system QR UI). No CAMERA permission required.
+    /// Returns null on cancel / Play Services unavailable so the ViewModel can fall back to image pick.
+    /// </summary>
     private async Task<string?> CaptureQrTextAsync()
     {
-        if (ContextCompat.CheckSelfPermission(this, Manifest.Permission.Camera) != Permission.Granted)
-        {
-            var permTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            void Handler(object? s, PermissionEventArgs e)
-            {
-                if (e.RequestCode != CameraPermissionRequestCode)
-                    return;
-                PermissionResult -= Handler;
-                permTcs.TrySetResult(e.GrantResults is { Length: > 0 } && e.GrantResults[0] == Permission.Granted);
-            }
-
-            PermissionResult += Handler;
-            ActivityCompat.RequestPermissions(this, [Manifest.Permission.Camera], CameraPermissionRequestCode);
-            if (!await permTcs.Task.ConfigureAwait(true))
-                return null;
-        }
-
-        _qrCaptureTcs?.TrySetResult(null);
-        _qrCaptureTcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var cache = CacheDir ?? FilesDir;
-        _qrCaptureFile = new Java.IO.File(cache, $"qr_{DateTime.UtcNow.Ticks}.jpg");
-        var uri = FileProvider.GetUriForFile(this, $"{PackageName}.fileprovider", _qrCaptureFile);
-
-        var takePicture = new Intent(MediaStore.ActionImageCapture);
-        takePicture.PutExtra(MediaStore.ExtraOutput, uri);
-        takePicture.AddFlags(ActivityFlags.GrantWriteUriPermission | ActivityFlags.GrantReadUriPermission);
-
         try
         {
-            StartActivityForResult(takePicture, QrCaptureRequestCode);
+            var options = new GmsBarcodeScannerOptions.Builder()
+                .SetBarcodeFormats(Barcode.FormatQrCode)
+                .EnableAutoZoom()
+                .Build();
+
+            var scanner = GmsBarcodeScanning.GetClient(this, options);
+            var result = await scanner.StartScan();
+            if (result is Barcode barcode)
+            {
+                var value = barcode.RawValue;
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+
+            return null;
         }
         catch (Exception)
         {
-            _qrCaptureTcs.TrySetResult(null);
+            // Play Services missing, module downloading, or user cancelled — image-picker fallback.
             return null;
         }
-
-        return await _qrCaptureTcs.Task.ConfigureAwait(true);
     }
 
     public event EventHandler<PermissionEventArgs>? PermissionResult;
@@ -202,43 +186,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         base.OnActivityResult(requestCode, resultCode, data);
         if (requestCode == VpnRequestCode)
-        {
             VpnPermissionTcs?.TrySetResult(resultCode == Result.Ok);
-            return;
-        }
-
-        if (requestCode != QrCaptureRequestCode)
-            return;
-
-        try
-        {
-            if (resultCode != Result.Ok || _qrCaptureFile is null || !_qrCaptureFile.Exists())
-            {
-                _qrCaptureTcs?.TrySetResult(null);
-                return;
-            }
-
-            var bytes = File.ReadAllBytes(_qrCaptureFile.AbsolutePath);
-            var text = QrCodeDecoder.DecodeFromImageBytes(bytes);
-            _qrCaptureTcs?.TrySetResult(text);
-        }
-        catch
-        {
-            _qrCaptureTcs?.TrySetResult(null);
-        }
-        finally
-        {
-            try
-            {
-                _qrCaptureFile?.Delete();
-            }
-            catch
-            {
-                // Best effort.
-            }
-
-            _qrCaptureFile = null;
-        }
     }
 
     public sealed class PermissionEventArgs(int requestCode, Permission[] grantResults) : EventArgs

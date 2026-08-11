@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-08-11
+
+### Changed
+
+- Android QR uses Google Code Scanner (system QR UI) instead of the stock camera photo + ZXing path; falls back to image pick when Play Services is unavailable
+- Mobile paste box is height-capped with Paste/Add/QR on a fixed row so long bulk pastes no longer push Add off-screen
+- Latency Test / Test All probe Cloudflare and gstatic `generate_204` before Google; status text says “proxy probe failed” when the tunnel path fails
+
+### Fixed
+
+- Speedtest config now includes `1.1.1.1` / `8.8.8.8` DNS (routed direct) so domain-based nodes are not stuck on poisoned or offline system DNS during delay tests
+- Longer speedtest core-ready wait so Reality/domain handshakes can finish before the HTTPS probe
+
+### Tests
+
+- Sentinel multi-link paste regression (15 share links) covering Reality/Vision, WS, gRPC, HTTPUpgrade, Trojan, VMess, and Shadowsocks parse + Build/BuildSpeedtest JSON
+
 ## [1.4.6] - 2026-08-10
 
 ### Added
@@ -295,6 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.7]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.7
 [1.4.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.6
 [1.4.5]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.5
 [1.4.4]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.4

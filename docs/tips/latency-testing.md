@@ -1,10 +1,10 @@
 # Latency testing
 
-**Test delay** (selected server) and **Test All** measure **proxy-path RTT to `www.google.com`** through a temporary local SOCKS (HTTP via Xray). Results are **not** TCP ping to the VPS port.
+**Test delay** (selected server) and **Test All** measure **proxy-path RTT** through a temporary local SOCKS (HTTP via Xray). Results are **not** TCP ping to the VPS port.
 
 | Result | Meaning |
 |--------|---------|
-| `123 ms` | The node successfully proxied traffic to Google |
+| `123 ms` | The node successfully proxied an HTTPS probe |
 | `timeout` | Proxy path failed (even if the TCP port is open) |
 | `—` | Not tested yet / in progress |
 
@@ -12,8 +12,12 @@ If a VPS is powered off or the protocol handshake fails, you should see **`timeo
 
 Probe URLs (first success wins):
 
-1. `https://www.google.com/generate_204`
-2. `https://www.google.com/`
+1. `https://cp.cloudflare.com/generate_204`
+2. `https://www.gstatic.com/generate_204`
+3. `https://www.google.com/generate_204`
+4. `https://www.google.com/`
+
+Speedtest configs include DNS servers `1.1.1.1` / `8.8.8.8` (routed direct) so domain-based nodes resolve even when system DNS is poisoned or offline.
 
 ## Smart Connect
 

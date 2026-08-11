@@ -21,7 +21,7 @@ public static class AppServices
     /// <summary>Called when the Android activity finishes — tear down VPN so network is not left hijacked.</summary>
     public static Func<Task>? EmergencyDisconnectAsync { get; set; }
 
-    /// <summary>Platform camera QR capture (Android). Returns decoded text or null.</summary>
+    /// <summary>Platform QR scanner (Android Google Code Scanner). Returns decoded text or null.</summary>
     public static Func<Task<string?>>? CaptureQrTextAsync { get; set; }
 
     /// <summary>Re-check GitHub releases (e.g. after returning from the system package installer).</summary>

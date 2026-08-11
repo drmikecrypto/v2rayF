@@ -186,6 +186,14 @@ public static class XrayConfigBuilder
         var config = new JsonObject
         {
             ["log"] = new JsonObject { ["loglevel"] = "warning" },
+            // Resolve domain-based nodes via public DNS (direct), not poisoned system DNS
+            // and not through the proxy under test (chicken-and-egg).
+            ["dns"] = new JsonObject
+            {
+                ["servers"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
+                ["queryStrategy"] = "UseIPv4",
+                ["tag"] = "dns-module"
+            },
             ["inbounds"] = new JsonArray
             {
                 new JsonObject
@@ -200,13 +208,26 @@ public static class XrayConfigBuilder
             ["outbounds"] = new JsonArray
             {
                 BuildOutbound(server, "proxy", enableFragment: false),
-                new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" }
+                new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" },
+                new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" }
             },
             ["routing"] = new JsonObject
             {
                 ["domainStrategy"] = "AsIs",
                 ["rules"] = new JsonArray
                 {
+                    new JsonObject
+                    {
+                        ["type"] = "field",
+                        ["inboundTag"] = new JsonArray { "dns-module" },
+                        ["outboundTag"] = "direct"
+                    },
+                    new JsonObject
+                    {
+                        ["type"] = "field",
+                        ["ip"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
+                        ["outboundTag"] = "direct"
+                    },
                     new JsonObject
                     {
                         ["type"] = "field",
