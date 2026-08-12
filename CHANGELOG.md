@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-08-12
+
+### Removed
+
+- QR import (camera scan and QR image pick) on all platforms
+- Android `CAMERA` permission, Google Code Scanner / ML Kit barcode module, and related libraries (`ZXing.Net`, SkiaSharp QR path)
+
+### Changed
+
+- Android in-app Update opens the GitHub release page in the browser instead of sideloading an APK
+- Android no longer requests `REQUEST_INSTALL_PACKAGES` or uses PackageInstaller / FileProvider for updates
+
+### Security
+
+- Leaner Android permission surface for Play Protect / sideload friendliness (VPN/TUN permissions retained)
+
 ## [1.4.7] - 2026-08-11
 
 ### Changed
@@ -312,6 +328,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.8]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.8
 [1.4.7]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.7
 [1.4.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.6
 [1.4.5]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.5

@@ -53,15 +53,12 @@
                         Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding CanToggleConnection}" MinWidth="120"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0" AcceptsReturn="True" MinHeight="56" MaxHeight="80"
                          PlaceholderText="Paste share links, Xray JSON, or bulk list (vmess/vless/ss/trojan)"
                          Text="{Binding ImportText}" TextWrapping="Wrap"/>
                 <Button Grid.Column="1" VerticalAlignment="Stretch" Content="Import"
                         Command="{Binding ImportFromTextCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="96"/>
-                <Button Grid.Column="2" VerticalAlignment="Stretch" Content="QR"
-                        Command="{Binding ScanQrCommand}" IsEnabled="{Binding !IsBusy}" MinWidth="64"
-                        ToolTip.Tip="Scan QR or open QR image (bulk OK)"/>
             </Grid>
         </StackPanel>
 

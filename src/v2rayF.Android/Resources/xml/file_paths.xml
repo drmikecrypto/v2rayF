@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-  <cache-path name="updates" path="updates/" />
-  <cache-path name="qr" path="." />
-  <files-path name="files" path="." />
-</paths>

@@ -5,7 +5,7 @@ using v2rayF.Services;
 namespace v2rayF.Core.Tests;
 
 /// <summary>
-/// Regression: multi-line paste / .txt / QR payloads must split into separate servers
+/// Regression: multi-line paste / .txt payloads must split into separate servers
 /// and produce valid Xray Build + BuildSpeedtest JSON for common Sentinel-style links.
 /// </summary>
 public class SentinelBulkImportTests

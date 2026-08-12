@@ -41,8 +41,6 @@
                         VerticalAlignment="Top" MinHeight="40"/>
                 <Button Content="Add" Command="{Binding ImportFromTextCommand}"
                         VerticalAlignment="Top" MinHeight="40"/>
-                <Button Content="QR" Command="{Binding ScanQrCommand}"
-                        VerticalAlignment="Top" MinHeight="40"/>
             </StackPanel>
 
             <Button Content="{Binding ConnectButtonText}" Classes="accent"
