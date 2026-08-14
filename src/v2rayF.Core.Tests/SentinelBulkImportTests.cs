@@ -138,9 +138,9 @@ public class SentinelBulkImportTests
 
         var speed = JsonNode.Parse(XrayConfigBuilder.BuildSpeedtest(server))!.AsObject();
         Assert.NotNull(speed["dns"]);
-        var dnsServers = speed["dns"]!["servers"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
-        Assert.Contains("1.1.1.1", dnsServers);
-        Assert.Contains("8.8.8.8", dnsServers);
+        var dnsServers = speed["dns"]!["servers"]!.AsArray();
+        Assert.True(DnsServersInclude(dnsServers, "1.1.1.1"));
+        Assert.True(DnsServersInclude(dnsServers, "8.8.8.8"));
         var speedProxy = speed["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
         Assert.Equal("reality", speedProxy["streamSettings"]!["security"]!.GetValue<string>());
     }
@@ -178,4 +178,19 @@ public class SentinelBulkImportTests
             speedWs["outbounds"]!.AsArray(),
             o => o!["tag"]?.GetValue<string>() == "proxy");
     }
+
+    private static bool DnsServersInclude(JsonArray dnsServers, string address) =>
+        dnsServers.Any(n =>
+        {
+            if (n is JsonObject o)
+                return o["address"]?.GetValue<string>() == address;
+            try
+            {
+                return n?.GetValue<string>() == address;
+            }
+            catch
+            {
+                return false;
+            }
+        });
 }

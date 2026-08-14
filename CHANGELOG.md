@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-08-14
+
+### Fixed
+
+- **Test All / speedtest** now uses the same per-server outbound and DNS bootstrap as live Connect (`BuildServerRuntime`) — domain WS/gRPC/Trojan/VMess links no longer fail Test while Connect would work
+- **Smart Connect** shortlist covers transport families (WS, gRPC, Trojan, VMess, SS, plain TCP) instead of probing only TCP/Reality top-N; selected row is always shortlisted and probed first
+- Transport-aware SOCKS bind wait: gRPC/HTTPUpgrade 4s, WS 3s, Reality TCP 2.5s (was fixed 2s for all)
+
+### Changed
+
+- Mobile server list shows **protocol · network · security** (`DisplayTransport`) so deep_fix matrix rows are distinguishable
+- Smart Connect raises proxy-path probe cap to **10** when subscription has ≥10 servers
+- Regression tests: full 15-link deep_fix matrix (`DeepFixMatrixTests`)
+
 ## [1.4.10] - 2026-08-14
 
 ### Fixed

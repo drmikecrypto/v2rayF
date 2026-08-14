@@ -19,6 +19,89 @@ public static class XrayConfigBuilder
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
+    /// <summary>Options for minimal single-server Xray runtime (speedtest / probe).</summary>
+    public sealed class ServerRuntimeOptions
+    {
+        public int SocksPort { get; init; } = SpeedtestSocksPort;
+        public bool EnableFragment { get; init; }
+        public AppSettings Settings { get; init; } = new();
+    }
+
+    /// <summary>
+    /// Minimal per-server Xray JSON: same DNS bootstrap and outbound as live connect,
+    /// with a local SOCKS inbound for proxy-path probes.
+    /// </summary>
+    public static string BuildServerRuntime(ProxyServer server, ServerRuntimeOptions opts)
+    {
+        var useFragment = AdaptiveSurviveService.ShouldApplyFragmentForServer(server, opts.EnableFragment);
+        var outboundHosts = CollectOutboundDomainHosts([server]);
+        var outbounds = new JsonArray();
+
+        if (useFragment)
+        {
+            outbounds.Add(new JsonObject
+            {
+                ["tag"] = "fragment",
+                ["protocol"] = "freedom",
+                ["settings"] = new JsonObject
+                {
+                    ["fragment"] = new JsonObject
+                    {
+                        ["packets"] = "tlshello",
+                        ["length"] = "100-200",
+                        ["interval"] = "10-20"
+                    }
+                }
+            });
+        }
+
+        outbounds.Add(BuildOutbound(server, "proxy", useFragment));
+        outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
+        outbounds.Add(new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" });
+
+        var config = new JsonObject
+        {
+            ["log"] = new JsonObject { ["loglevel"] = "warning" },
+            ["dns"] = BuildDns(opts.Settings, outboundHosts),
+            ["inbounds"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["tag"] = "speedtest-in",
+                    ["port"] = opts.SocksPort,
+                    ["listen"] = "127.0.0.1",
+                    ["protocol"] = "socks",
+                    ["settings"] = new JsonObject { ["udp"] = false }
+                }
+            },
+            ["outbounds"] = outbounds,
+            ["routing"] = BuildServerRuntimeRouting()
+        };
+
+        return config.ToJsonString(CompactJson);
+    }
+
+    private static JsonObject BuildServerRuntimeRouting() => new()
+    {
+        ["domainStrategy"] = "AsIs",
+        ["rules"] = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "field",
+                ["inboundTag"] = new JsonArray { "dns-module" },
+                ["outboundTag"] = "direct"
+            },
+            PublicDnsDirectRule(),
+            new JsonObject
+            {
+                ["type"] = "field",
+                ["network"] = "tcp,udp",
+                ["outboundTag"] = "proxy"
+            }
+        }
+    };
+
     public static string Build(
         ProxyServer server,
         AppSettings settings,
@@ -186,79 +269,13 @@ public static class XrayConfigBuilder
     public static string BuildSpeedtest(
         ProxyServer server,
         int socksPort = SpeedtestSocksPort,
-        bool enableFragment = false)
-    {
-        var useFragment = AdaptiveSurviveService.ShouldApplyFragmentForServer(server, enableFragment);
-        var outbounds = new JsonArray();
-        if (useFragment)
+        bool enableFragment = false) =>
+        BuildServerRuntime(server, new ServerRuntimeOptions
         {
-            outbounds.Add(new JsonObject
-            {
-                ["tag"] = "fragment",
-                ["protocol"] = "freedom",
-                ["settings"] = new JsonObject
-                {
-                    ["fragment"] = new JsonObject
-                    {
-                        ["packets"] = "tlshello",
-                        ["length"] = "100-200",
-                        ["interval"] = "10-20"
-                    }
-                }
-            });
-        }
-
-        outbounds.Add(BuildOutbound(server, "proxy", useFragment));
-        outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
-        outbounds.Add(new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" });
-
-        var config = new JsonObject
-        {
-            ["log"] = new JsonObject { ["loglevel"] = "warning" },
-            // Resolve domain-based nodes via public DNS (direct), not poisoned system DNS
-            // and not through the proxy under test (chicken-and-egg).
-            ["dns"] = new JsonObject
-            {
-                ["servers"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
-                ["queryStrategy"] = "UseIPv4",
-                ["tag"] = "dns-module"
-            },
-            ["inbounds"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["tag"] = "speedtest-in",
-                    ["port"] = socksPort,
-                    ["listen"] = "127.0.0.1",
-                    ["protocol"] = "socks",
-                    ["settings"] = new JsonObject { ["udp"] = false }
-                }
-            },
-            ["outbounds"] = outbounds,
-            ["routing"] = new JsonObject
-            {
-                ["domainStrategy"] = "AsIs",
-                ["rules"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "field",
-                        ["inboundTag"] = new JsonArray { "dns-module" },
-                        ["outboundTag"] = "direct"
-                    },
-                    PublicDnsDirectRule(),
-                    new JsonObject
-                    {
-                        ["type"] = "field",
-                        ["network"] = "tcp,udp",
-                        ["outboundTag"] = "proxy"
-                    }
-                }
-            }
-        };
-
-        return config.ToJsonString(CompactJson);
-    }
+            SocksPort = socksPort,
+            EnableFragment = enableFragment,
+            Settings = new AppSettings { DnsThroughProxy = false }
+        });
 
     public static void EnsureShareCredentials(AppSettings settings)
     {

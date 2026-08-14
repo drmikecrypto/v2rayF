@@ -116,6 +116,33 @@ public class ConnectReliabilityConfigTests
         var speed = JsonNode.Parse(XrayConfigBuilder.BuildSpeedtest(server, enableFragment: true))!;
         Assert.DoesNotContain(speed["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
     }
+
+    [Fact]
+    public void BuildSpeedtest_DomainNode_IncludesOutboundHostDnsBootstrap()
+    {
+        var server = new ProxyServer
+        {
+            Name = "domain-ws",
+            Protocol = ProxyProtocol.VLESS,
+            Address = "rfau8vd61dcf.dop33.com",
+            Port = 2053,
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid().ToString(),
+            Security = "tls",
+            Network = "ws",
+            Host = "rfau8vd61dcf.dop33.com",
+            Path = "/ws"
+        };
+
+        var speed = JsonNode.Parse(XrayConfigBuilder.BuildSpeedtest(server))!.AsObject();
+        var dnsServers = speed["dns"]!["servers"]!.AsArray();
+        var bootstrap = dnsServers
+            .Select(n => n as JsonObject)
+            .FirstOrDefault(o => o?["domains"] is JsonArray);
+        Assert.NotNull(bootstrap);
+        var domains = bootstrap!["domains"]!.AsArray().Select(d => d!.GetValue<string>()).ToList();
+        Assert.Contains("full:rfau8vd61dcf.dop33.com", domains);
+    }
 }
 
 public class SmartConnectShortlistTests

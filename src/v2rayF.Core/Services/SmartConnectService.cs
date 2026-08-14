@@ -17,8 +17,10 @@ public sealed class SmartConnectService
     public const int ReservedRealitySlots = 2;
     /// <summary>Stop proxy-path probes once this many working paths are found.</summary>
     public const int EarlyExitGoodPeers = 3;
-    /// <summary>Hard cap on expensive proxy-path probes per rank pass.</summary>
+    /// <summary>Hard cap on expensive proxy-path probes per rank pass (small lists).</summary>
     public const int MaxProxyPathProbes = 6;
+    /// <summary>Raised probe cap for deep_fix-sized subscriptions (≥10 servers).</summary>
+    public const int MaxProxyPathProbesLargeList = 10;
 
     private readonly LatencyService _latency;
 
@@ -30,24 +32,23 @@ public sealed class SmartConnectService
     public sealed record RankedServer(ProxyServer Server, int Score, int LatencyMs, bool ProxyPathOk);
 
     /// <summary>
-    /// Two-phase: concurrent TCP prefilter, then proxy-path probe on the top candidates only.
-    /// Early-exits once <see cref="EarlyExitGoodPeers"/> proxy-path OK results are collected.
-    /// Domain addresses that fail system-DNS TCP still enter the shortlist.
+    /// Two-phase: concurrent TCP prefilter, then proxy-path probe on a transport-diverse shortlist.
+    /// When <paramref name="preferred"/> is set, that row is always shortlisted and probed first.
     /// </summary>
     public async Task<IReadOnlyList<RankedServer>> RankAsync(
         IReadOnlyList<ProxyServer> servers,
         CancellationToken cancellationToken = default,
-        bool enableFragment = false)
+        bool enableFragment = false,
+        ProxyServer? preferred = null)
     {
         if (servers.Count == 0)
             return [];
 
-        // Phase 1 — cheap TCP RTT for all (parallel).
         var tcpResults = new (ProxyServer Server, int TcpMs)[servers.Count];
         await Task.WhenAll(servers.Select(async (server, index) =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var ms = await _latency.MeasureTcpOnlyAsync(server, cancellationToken).ConfigureAwait(false);
+            var ms = await ProbeTcpPrefilterAsync(_latency, server, cancellationToken).ConfigureAwait(false);
             tcpResults[index] = (server, ms is > 0 ? ms.Value : int.MaxValue);
         })).ConfigureAwait(false);
 
@@ -56,15 +57,15 @@ public sealed class SmartConnectService
             .OrderBy(t => t.TcpMs)
             .ToList();
 
-        var shortlist = BuildShortlist(tcpResults, reachable);
+        var shortlist = BuildShortlist(tcpResults, reachable, preferred);
+        var maxProbes = servers.Count >= 10 ? MaxProxyPathProbesLargeList : MaxProxyPathProbes;
 
-        // Phase 2 — proxy path on shortlist; early-exit when enough good peers found.
         var ranked = new List<RankedServer>(shortlist.Count);
         var goodCount = 0;
         var probed = 0;
         foreach (var server in shortlist)
         {
-            if (probed >= MaxProxyPathProbes || goodCount >= EarlyExitGoodPeers)
+            if (probed >= maxProbes || goodCount >= EarlyExitGoodPeers)
                 break;
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -96,7 +97,6 @@ public sealed class SmartConnectService
                 goodCount++;
         }
 
-        // Append remaining shortlist / TCP leftovers as TCP-only ranks (no more core boots).
         foreach (var server in shortlist)
         {
             if (ranked.Any(r => r.Server.Id == server.Id))
@@ -120,47 +120,46 @@ public sealed class SmartConnectService
     }
 
     /// <summary>
-    /// Builds the proxy-path shortlist: TCP top-N, reserved Reality slots, and domain hosts
-    /// that failed system-DNS TCP (still worth probing via Xray DNS).
+    /// Transport-diverse shortlist: best TCP per protocol/network/security family, Reality reserve,
+    /// domain hosts that failed system TCP, and user-selected row always included + probed first.
     /// </summary>
     public static List<ProxyServer> BuildShortlist(
         (ProxyServer Server, int TcpMs)[] tcpResults,
-        List<(ProxyServer Server, int TcpMs)> reachable)
+        List<(ProxyServer Server, int TcpMs)> reachable,
+        ProxyServer? preferred = null)
     {
-        var tcpSlots = Math.Max(0, TcpPrefilterLimit - ReservedRealitySlots);
-        var shortlist = reachable
-            .Take(Math.Min(tcpSlots, reachable.Count))
-            .Select(t => t.Server)
-            .ToList();
+        var byTcp = reachable.OrderBy(t => t.TcpMs).ToList();
+        var shortlist = new List<ProxyServer>();
+        var seenIds = new HashSet<Guid>();
 
-        // Inject Reality peers (displace slowest TCP if needed).
-        var realityCandidates = tcpResults
-            .Select(t => t.Server)
-            .Where(s => string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase))
-            .DistinctBy(s => s.Id)
-            .ToList();
-
-        foreach (var reality in realityCandidates)
+        void TryAdd(ProxyServer server)
         {
-            if (shortlist.Count(s => string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase))
-                >= ReservedRealitySlots && shortlist.Count >= TcpPrefilterLimit)
-                break;
-            if (shortlist.Any(s => s.Id == reality.Id))
-                continue;
-            if (shortlist.Count >= TcpPrefilterLimit)
-            {
-                // Displace the last non-Reality peer.
-                var idx = shortlist.FindLastIndex(s =>
-                    !string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase));
-                if (idx < 0)
-                    break;
-                shortlist.RemoveAt(idx);
-            }
-
-            shortlist.Add(reality);
+            if (seenIds.Add(server.Id))
+                shortlist.Add(server);
         }
 
-        // Domain nodes that failed system DNS TCP still get a proxy-path chance.
+        if (preferred is not null)
+            TryAdd(preferred);
+
+        foreach (var entry in byTcp
+                     .GroupBy(x => TransportFamilyKey(x.Server))
+                     .Select(g => g.OrderBy(x => x.TcpMs).First())
+                     .OrderBy(x => x.TcpMs))
+            TryAdd(entry.Server);
+
+        foreach (var entry in byTcp
+                     .Where(x => string.Equals(x.Server.Security, "reality", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(x => x.TcpMs)
+                     .Take(ReservedRealitySlots))
+            TryAdd(entry.Server);
+
+        foreach (var entry in byTcp)
+        {
+            if (shortlist.Count >= TcpPrefilterLimit)
+                break;
+            TryAdd(entry.Server);
+        }
+
         foreach (var (server, tcpMs) in tcpResults)
         {
             if (tcpMs < int.MaxValue)
@@ -173,16 +172,54 @@ public sealed class SmartConnectService
             {
                 var idx = shortlist.FindLastIndex(s =>
                     !string.Equals(s.Security, "reality", StringComparison.OrdinalIgnoreCase) &&
-                    !IsDomainAddress(s.Address));
+                    !IsDomainAddress(s.Address) &&
+                    (preferred is null || s.Id != preferred.Id));
                 if (idx < 0)
                     break;
                 shortlist.RemoveAt(idx);
             }
 
             shortlist.Add(server);
+            seenIds.Add(server.Id);
+        }
+
+        if (preferred is not null)
+        {
+            var idx = shortlist.FindIndex(s => s.Id == preferred.Id);
+            if (idx > 0)
+            {
+                var item = shortlist[idx];
+                shortlist.RemoveAt(idx);
+                shortlist.Insert(0, item);
+            }
         }
 
         return shortlist;
+    }
+
+    internal static string TransportFamilyKey(ProxyServer server)
+    {
+        var protocol = server.Protocol.ToString().ToLowerInvariant();
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        var security = ShareLinkParser.NormalizeSecurity(server.Security);
+        if (string.IsNullOrEmpty(security))
+            security = "none";
+        return $"{protocol}/{network}/{security}";
+    }
+
+    internal static async Task<int?> ProbeTcpPrefilterAsync(
+        LatencyService latency,
+        ProxyServer server,
+        CancellationToken cancellationToken)
+    {
+        if (IPAddress.TryParse(server.Address, out _))
+            return await latency.MeasureTcpOnlyAsync(server, cancellationToken).ConfigureAwait(false);
+
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        if (network is "ws" or "grpc" or "httpupgrade" or "h2" or "xhttp")
+            return null;
+
+        return await latency.MeasureTcpOnlyAsync(server, cancellationToken).ConfigureAwait(false);
     }
 
     private static bool IsDomainAddress(string? address)
@@ -197,7 +234,6 @@ public sealed class SmartConnectService
         ProxyServer? preferred,
         string? lastGoodServerId)
     {
-        // Only proxy-path OK peers are connectable winners (TCP-only is not a working tunnel).
         var ordered = ranked
             .Where(r => r.ProxyPathOk)
             .Select(r => r.Server)
@@ -210,10 +246,6 @@ public sealed class SmartConnectService
         return BoostPreferred(ordered, preferred, lastGoodServerId);
     }
 
-    /// <summary>
-    /// When no proxy-path OK peers exist, pick TCP-best / Reality / domain candidates for
-    /// Adaptive Survive connect waves (fragment / Sentinel).
-    /// </summary>
     public IReadOnlyList<ProxyServer> SelectSurviveConnectOrder(
         IReadOnlyList<RankedServer> ranked,
         ProxyServer? preferred,

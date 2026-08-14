@@ -82,6 +82,7 @@
                         </Border>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding DisplayTransport}" FontSize="11" Opacity="0.85"/>
                             <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
                         </StackPanel>
                         <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>

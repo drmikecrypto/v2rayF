@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using v2rayF.Services;
 
 namespace v2rayF.Models;
 
@@ -83,6 +85,23 @@ public partial class ProxyServer : ObservableObject
 
     [JsonIgnore]
     public string DisplayEndpoint => string.IsNullOrWhiteSpace(Address) ? "" : $"{Address}:{Port}";
+
+    [JsonIgnore]
+    public string DisplayTransport
+    {
+        get
+        {
+            if (Protocol == ProxyProtocol.Shadowsocks)
+                return "SS · tcp";
+
+            var network = ShareLinkParser.NormalizeNetwork(Network);
+            var security = ShareLinkParser.NormalizeSecurity(Security);
+            var parts = new List<string> { DisplayProtocol, network };
+            if (!string.IsNullOrEmpty(security) && !string.Equals(security, "none", StringComparison.OrdinalIgnoreCase))
+                parts.Add(security);
+            return string.Join(" · ", parts);
+        }
+    }
 
     [JsonIgnore]
     public string DisplayLatency => LatencyMs switch

@@ -32,7 +32,7 @@ public sealed class LatencyService
     public const int TimeoutMs = 10000;
     /// <summary>Per-probe budget during Smart Connect ranking (matches manual Test).</summary>
     public const int RankProbeTimeoutMs = 10000;
-    /// <summary>Max wait for speedtest SOCKS to bind before probing.</summary>
+    /// <summary>Default max wait for speedtest SOCKS to bind before probing.</summary>
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Post-connect live SOCKS health probe budget.</summary>
     public const int ConnectHealthProbeMs = 10000;
@@ -138,7 +138,7 @@ public sealed class LatencyService
                 tunFd: null,
                 cancellationToken).ConfigureAwait(false);
 
-            await WaitForCoreReadyAsync(socksPort, cancellationToken).ConfigureAwait(false);
+            await WaitForCoreReadyAsync(socksPort, server, cancellationToken).ConfigureAwait(false);
             if (_speedtestHost.HasExited)
             {
                 await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
@@ -167,9 +167,23 @@ public sealed class LatencyService
         }
     }
 
-    private async Task WaitForCoreReadyAsync(int socksPort, CancellationToken cancellationToken)
+    /// <summary>Transport-aware SOCKS bind budget (WS/gRPC need longer than bare TCP).</summary>
+    public static int GetCoreReadyWaitMs(ProxyServer server)
     {
-        var iterations = Math.Max(1, CoreReadyWaitMs / 50);
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        return network switch
+        {
+            "grpc" or "httpupgrade" => 4000,
+            "ws" or "h2" or "xhttp" => 3000,
+            "tcp" when string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) => 2500,
+            _ => CoreReadyWaitMs
+        };
+    }
+
+    private async Task WaitForCoreReadyAsync(int socksPort, ProxyServer server, CancellationToken cancellationToken)
+    {
+        var waitMs = GetCoreReadyWaitMs(server);
+        var iterations = Math.Max(1, waitMs / 50);
         for (var i = 0; i < iterations; i++)
         {
             if (_speedtestHost.HasExited)

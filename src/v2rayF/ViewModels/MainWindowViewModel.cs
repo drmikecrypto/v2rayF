@@ -1015,7 +1015,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 _lastRanking = await _smartConnect.RankAsync(
                     serversSnapshot,
                     token,
-                    settings.EnablePacketFragment).ConfigureAwait(false);
+                    settings.EnablePacketFragment,
+                    SelectedServer).ConfigureAwait(false);
                 await ResumeOnUiAsync().ConfigureAwait(true);
                 await SetOnUiAsync(() =>
                 {
@@ -1071,7 +1072,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     _lastRanking = await _smartConnect.RankAsync(
                         serversSnapshot,
                         token,
-                        settings.EnablePacketFragment).ConfigureAwait(false);
+                        settings.EnablePacketFragment,
+                        SelectedServer).ConfigureAwait(false);
                     await ResumeOnUiAsync().ConfigureAwait(true);
                 }
             }
@@ -1119,7 +1121,11 @@ public partial class MainWindowViewModel : ViewModelBase
                             if (_lastRanking.Count == 0)
                             {
                                 var serversSnapshot = Servers.ToList();
-                                _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                                _lastRanking = await _smartConnect.RankAsync(
+                                    serversSnapshot,
+                                    token,
+                                    enableFragment: false,
+                                    preferred: SelectedServer).ConfigureAwait(false);
                                 await ResumeOnUiAsync().ConfigureAwait(true);
                             }
 
