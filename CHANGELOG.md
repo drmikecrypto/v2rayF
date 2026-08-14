@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-08-14
+
+### Fixed
+
+- Latency Test / Test All / Smart Connect / post-connect health probes no longer use unsupported `socks5h://` — .NET only allows `socks5`, so every config previously showed `timeout` even when Xray worked (same links OK in v2rayN / v2box)
+- Probe failures surface the real exception message instead of a generic timeout when the client rejects the proxy scheme
+
+### Changed
+
+- Android **Update** again downloads the release zip, verifies SHA256, and installs the APK on top of the existing app (PackageInstaller + FileProvider). Requires `REQUEST_INSTALL_PACKAGES` and “Install unknown apps” for this package (GitHub sideload; not Play Store–oriented)
+- Desktop Update path unchanged (in-app zip replace + restart)
+
 ## [1.4.9] - 2026-08-14
 
 ### Fixed
@@ -348,6 +360,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.10]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.10
 [1.4.9]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.9
 [1.4.8]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.8
 [1.4.7]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.7

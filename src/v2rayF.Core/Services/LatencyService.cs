@@ -212,8 +212,15 @@ public sealed class LatencyService
         }
     }
 
+    /// <summary>
+    /// SOCKS scheme for HttpClient probes. Must be <c>socks5</c> — .NET rejects <c>socks5h</c>
+    /// (<see cref="NotSupportedException"/>), which made every latency/connect probe look like a timeout.
+    /// On .NET, socks5 already sends the hostname to the proxy.
+    /// </summary>
+    public const string SocksProxyScheme = "socks5";
+
     /// <summary>Returns on first successful HTTPS probe via the node (does not wait for every URL).</summary>
-    private static async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken)
+    private async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeoutMs);
@@ -221,14 +228,14 @@ public sealed class LatencyService
 
         var handler = new SocketsHttpHandler
         {
-            Proxy = new WebProxy($"socks5h://127.0.0.1:{socksPort}"),
+            Proxy = new WebProxy($"{SocksProxyScheme}://127.0.0.1:{socksPort}"),
             UseProxy = true,
             ConnectTimeout = TimeSpan.FromSeconds(4)
         };
 
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeoutMs) };
 
-        var tasks = new Task<(bool Ok, int Ms)>[PingUrls.Length];
+        var tasks = new Task<(bool Ok, int Ms, Exception? Error)>[PingUrls.Length];
         for (var i = 0; i < PingUrls.Length; i++)
         {
             var url = PingUrls[i];
@@ -236,22 +243,28 @@ public sealed class LatencyService
         }
 
         var pending = tasks.ToList();
+        Exception? firstError = null;
         while (pending.Count > 0)
         {
             var finished = await Task.WhenAny(pending).ConfigureAwait(false);
             pending.Remove(finished);
-            var (ok, ms) = await finished.ConfigureAwait(false);
+            var (ok, ms, error) = await finished.ConfigureAwait(false);
             if (ok)
             {
                 raceCts.Cancel();
                 return ms;
             }
+
+            firstError ??= error;
         }
+
+        if (firstError is not null)
+            LastProbeError = StatusSanitizer.Scrub(firstError.Message);
 
         return -1;
     }
 
-    private static async Task<(bool Ok, int Ms)> ProbeOneAsync(
+    private static async Task<(bool Ok, int Ms, Exception? Error)> ProbeOneAsync(
         HttpClient client,
         string url,
         CancellationToken cancellationToken)
@@ -263,14 +276,18 @@ public sealed class LatencyService
                 .ConfigureAwait(false);
             sw.Stop();
             if (response.IsSuccessStatusCode || (int)response.StatusCode == 204)
-                return (true, (int)sw.ElapsedMilliseconds);
+                return (true, (int)sw.ElapsedMilliseconds, null);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            // Rival URL or timeout.
+            // Rival URL or overall timeout.
+        }
+        catch (Exception ex)
+        {
+            return (false, -1, ex);
         }
 
-        return (false, -1);
+        return (false, -1, null);
     }
 
     private static async Task<int?> MeasureTcpAsync(ProxyServer server, CancellationToken cancellationToken)

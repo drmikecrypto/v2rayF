@@ -24,6 +24,8 @@ public class MainActivity : AvaloniaMainActivity
 {
     public const int VpnRequestCode = 9001;
     public const int NotificationPermissionRequestCode = 9002;
+    public const string PackageInstalledAction = "com.drmikecrypto.v2rayf.PACKAGE_INSTALLED";
+    public const string PackageInstalledSessionExtra = "session_id";
 
     public static MainActivity? Instance { get; private set; }
     public static TaskCompletionSource<bool>? VpnPermissionTcs { get; set; }
@@ -33,12 +35,60 @@ public class MainActivity : AvaloniaMainActivity
         Instance = this;
         base.OnCreate(savedInstanceState);
         RequestNotificationPermissionIfNeeded();
+        HandlePackageInstallResult(Intent);
+    }
+
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+        Intent = intent;
+        HandlePackageInstallResult(intent);
     }
 
     protected override void OnResume()
     {
         base.OnResume();
         AppServices.RefreshUpdateCheck?.Invoke();
+    }
+
+    private static void HandlePackageInstallResult(Intent? intent)
+    {
+        if (intent?.Action != PackageInstalledAction)
+            return;
+
+        var status = intent.GetIntExtra(PackageInstaller.ExtraStatus, int.MinValue);
+        var message = intent.GetStringExtra(PackageInstaller.ExtraStatusMessage) ?? "";
+
+        switch ((PackageInstallStatus)status)
+        {
+            case PackageInstallStatus.PendingUserAction:
+            {
+                var confirm = intent.GetParcelableExtra(Intent.ExtraIntent) as Intent;
+                if (confirm is not null && Instance is not null)
+                    Instance.StartActivity(confirm);
+                AppServices.ReportStatus?.Invoke("Confirm the system Install prompt…");
+                break;
+            }
+            case PackageInstallStatus.Success:
+                AppServices.ReportStatus?.Invoke("Update installed — restart the app if the version label has not changed yet.");
+                AppServices.RefreshUpdateCheck?.Invoke();
+                break;
+            case PackageInstallStatus.FailureAborted:
+                AppServices.ReportStatus?.Invoke("Update cancelled.");
+                break;
+            case PackageInstallStatus.FailureConflict:
+            case PackageInstallStatus.FailureIncompatible:
+            case PackageInstallStatus.FailureInvalid:
+            case PackageInstallStatus.FailureStorage:
+            case PackageInstallStatus.Failure:
+            default:
+                if (status == int.MinValue)
+                    break;
+                var detail = string.IsNullOrWhiteSpace(message) ? ((PackageInstallStatus)status).ToString() : message;
+                AppServices.ReportStatus?.Invoke(
+                    $"Update install failed: {detail}. If this repeats, uninstall and install the latest APK from GitHub Releases once.");
+                break;
+        }
     }
 
     private void RequestNotificationPermissionIfNeeded()

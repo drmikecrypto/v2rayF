@@ -4,7 +4,8 @@
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:name=".V2rayApplication" android:label="v2rayF" android:icon="@drawable/Icon" android:allowBackup="false" android:extractNativeLibs="true">
+	<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+	<application android:name=".V2rayApplication" android:label="v2rayF" android:icon="@drawable/Icon" android:allowBackup="false" android:extractNativeLibs="true">
 		<service android:name=".Services.V2rayVpnService"
 		         android:permission="android.permission.BIND_VPN_SERVICE"
 		         android:exported="false"
@@ -19,5 +20,14 @@
 		<service android:name=".Services.V2rayForegroundService"
 		         android:exported="false"
 		         android:foregroundServiceType="specialUse" />
+		<provider
+			android:name="androidx.core.content.FileProvider"
+			android:authorities="${applicationId}.fileprovider"
+			android:exported="false"
+			android:grantUriPermissions="true">
+			<meta-data
+				android:name="android.support.FILE_PROVIDER_PATHS"
+				android:resource="@xml/file_paths" />
+		</provider>
 	</application>
 </manifest>
