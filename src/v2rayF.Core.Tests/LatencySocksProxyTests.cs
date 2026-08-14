@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http;
+using v2rayF.Models;
 using v2rayF.Services;
 
 namespace v2rayF.Core.Tests;
@@ -11,6 +12,43 @@ public class LatencySocksProxyTests
     {
         Assert.Equal("socks5", LatencyService.SocksProxyScheme);
         Assert.DoesNotContain("socks5h", LatencyService.SocksProxyScheme, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ProbeUrls_AreSequentialCloudflareFirst_NotRacedHomepage()
+    {
+        Assert.Equal("https://cp.cloudflare.com/generate_204", LatencyService.PingUrls[0]);
+        Assert.Equal(LatencyService.GoogleProbeUrl, LatencyService.PingUrls[0]);
+        Assert.DoesNotContain(LatencyService.PingUrls, u => u == "https://www.google.com/");
+        Assert.Equal(2, LatencyService.TimedProbeCount);
+        Assert.Equal(2000, LatencyService.HttpConnectTimeoutMs);
+        Assert.Equal(4000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(50, LatencyService.SocksPollTimeoutMs);
+    }
+
+    [Fact]
+    public void UiLatencyMs_ShowsTcpOnlyWhenProxyPathOk()
+    {
+        var ok = new LatencyService.LatencyResult(TcpMs: 102, ProxyPathMs: 1800, ProxyPathOk: true);
+        Assert.Equal(102, ok.UiLatencyMs);
+        Assert.Equal(1800, ok.LatencyMs);
+
+        var dead = new LatencyService.LatencyResult(TcpMs: 98, ProxyPathMs: -1, ProxyPathOk: false);
+        Assert.Equal(-1, dead.UiLatencyMs);
+
+        var domainWs = new LatencyService.LatencyResult(TcpMs: -1, ProxyPathMs: 240, ProxyPathOk: true);
+        Assert.Equal(240, domainWs.UiLatencyMs);
+    }
+
+    [Fact]
+    public void RankedServer_UiLatencyPrefersTcp()
+    {
+        var server = new ProxyServer { Name = "n", Address = "1.1.1.1", Port = 443 };
+        var ranked = new SmartConnectService.RankedServer(server, Score: 200, LatencyMs: 200, ProxyPathOk: true, TcpMs: 110);
+        Assert.Equal(110, ranked.UiLatencyMs);
+
+        var failed = new SmartConnectService.RankedServer(server, Score: int.MaxValue - 1, LatencyMs: 40, ProxyPathOk: false, TcpMs: 40);
+        Assert.Equal(-1, failed.UiLatencyMs);
     }
 
     [Fact]

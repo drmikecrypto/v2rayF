@@ -29,7 +29,16 @@ public sealed class SmartConnectService
         _latency = latency;
     }
 
-    public sealed record RankedServer(ProxyServer Server, int Score, int LatencyMs, bool ProxyPathOk);
+    public sealed record RankedServer(
+        ProxyServer Server,
+        int Score,
+        int LatencyMs,
+        bool ProxyPathOk,
+        int TcpMs = -1)
+    {
+        /// <summary>List column: TCP RTT when the tunnel works; timeout otherwise.</summary>
+        public int UiLatencyMs => ProxyPathOk && TcpMs > 0 ? TcpMs : ProxyPathOk ? LatencyMs : -1;
+    }
 
     /// <summary>
     /// Two-phase: concurrent TCP prefilter, then proxy-path probe on a transport-diverse shortlist.
@@ -81,17 +90,19 @@ public sealed class SmartConnectService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                result = new LatencyService.LatencyResult(-1, false);
+                result = new LatencyService.LatencyResult(null, -1, false);
             }
 
-            var latency = result.LatencyMs is > 0 ? result.LatencyMs.Value : int.MaxValue;
+            var proxyMs = result.ProxyPathMs is > 0 ? result.ProxyPathMs.Value : int.MaxValue;
+            var tcpMs = result.TcpMs is > 0 ? result.TcpMs.Value : -1;
             var realityBonus = string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) ? 5 : 0;
-            var score = result.ProxyPathOk ? Math.Max(0, latency - realityBonus) : int.MaxValue - 1;
+            var score = result.ProxyPathOk ? Math.Max(0, proxyMs - realityBonus) : int.MaxValue - 1;
             ranked.Add(new RankedServer(
                 server,
                 score,
-                latency == int.MaxValue ? -1 : latency,
-                result.ProxyPathOk));
+                proxyMs == int.MaxValue ? -1 : proxyMs,
+                result.ProxyPathOk,
+                tcpMs));
 
             if (result.ProxyPathOk)
                 goodCount++;

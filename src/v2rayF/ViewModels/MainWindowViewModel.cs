@@ -818,12 +818,12 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        StatusText = "Testing proxy delay…";
+        StatusText = "Testing delay…";
         await MeasureLatencyAsync(SelectedServer);
         if (SelectedServer.LatencyMs is > 0)
-            StatusText = $"Proxy delay: {SelectedServer.LatencyMs} ms";
+            StatusText = $"Delay: {SelectedServer.LatencyMs} ms";
         else if (string.IsNullOrWhiteSpace(StatusText) || StatusText.StartsWith("Testing", StringComparison.Ordinal))
-            StatusText = "Proxy delay: timeout (proxy probe failed)";
+            StatusText = "Delay: timeout (proxy probe failed)";
     }
 
     [RelayCommand]
@@ -836,32 +836,40 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsBusy = true;
-        StatusText = "Testing proxy delay for all servers…";
+        StatusText = "Testing delay for all servers…";
         try
         {
             var snapshot = Servers.ToList();
-            using var gate = new SemaphoreSlim(2, 2);
-            await Task.WhenAll(snapshot.Select(async server =>
+            await SetOnUiAsync(() =>
             {
-                await gate.WaitAsync().ConfigureAwait(false);
-                try
-                {
-                    RunOnUiThread(() => server.SetLatency(null));
-                    // MeasureAsync reports proxy-path only (-1 when TCP-only).
-                    var ms = await _latencyService.MeasureAsync(
-                        server,
-                        enableFragment: _settings.EnablePacketFragment).ConfigureAwait(false);
-                    RunOnUiThread(() => server.SetLatency(ms));
-                }
-                finally
-                {
-                    gate.Release();
-                }
+                foreach (var server in snapshot)
+                    server.SetLatency(null);
+            }).ConfigureAwait(true);
+
+            var tcpMs = new int?[snapshot.Count];
+            await Task.WhenAll(snapshot.Select(async (server, i) =>
+            {
+                tcpMs[i] = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
             })).ConfigureAwait(true);
+
+            await SetOnUiAsync(() => StatusText = "Verifying proxy path…").ConfigureAwait(true);
+
+            var fragment = _settings.EnablePacketFragment;
+            for (var i = 0; i < snapshot.Count; i++)
+            {
+                var server = snapshot[i];
+                var proxyMs = await _latencyService
+                    .MeasureProxyPathAsync(server, enableFragment: fragment)
+                    .ConfigureAwait(false);
+                var display = proxyMs is >= 0
+                    ? (tcpMs[i] is > 0 ? tcpMs[i] : proxyMs)
+                    : -1;
+                RunOnUiThread(() => server.SetLatency(display));
+            }
 
             await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
             var ok = Servers.Count(s => s.LatencyMs is > 0);
-            StatusText = $"Proxy delay test complete — {ok}/{Servers.Count} reachable.";
+            StatusText = $"Delay test complete — {ok}/{Servers.Count} reachable.";
         }
         finally
         {
@@ -881,7 +889,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             server.SetLatency(result);
             if (result is null or < 0 && !string.IsNullOrWhiteSpace(_latencyService.LastProbeError))
-                StatusText = $"Proxy delay: timeout ({_latencyService.LastProbeError})";
+                StatusText = $"Delay: timeout ({_latencyService.LastProbeError})";
         });
     }
 
@@ -1021,7 +1029,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 await SetOnUiAsync(() =>
                 {
                     foreach (var ranked in _lastRanking)
-                        ranked.Server.SetLatency(ranked.ProxyPathOk ? ranked.LatencyMs : -1);
+                        ranked.Server.SetLatency(ranked.UiLatencyMs);
                 }).ConfigureAwait(true);
 
                 candidates = _smartConnect.SelectConnectOrder(

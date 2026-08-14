@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-08-14
+
+### Fixed
+
+- Test / Test All no longer report ~2000ms for nodes that are ~100ms in v2rayN: the list shows **TCP RTT** after the tunnel is verified, not a cold HTTPS handshake through a freshly spawned Xray
+- Proxy-path probes no longer race four HTTPS URLs on a cold SOCKS (that inflated delay and slowed Connect); they warmup, then take the min of two sequential Cloudflare `generate_204` GETs
+- Connect health probe budget is 4s (was 10s) with a 2s HTTP connect timeout
+
+### Changed
+
+- A row still shows **timeout** when TCP works but the proxy path fails (no false ping)
+- Test All runs TCP for every server in parallel, then verifies the proxy path
+- Smart Connect ranks by warmed proxy-path RTT; the list still shows TCP ms for working tunnels
+
 ## [1.4.11] - 2026-08-14
 
 ### Fixed
