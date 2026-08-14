@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.13] - 2026-08-14
+
+### Fixed
+
+- Vision (xtls-rprx-vision) infers `tls`/`reality` when the share link omitted `security`, and Connect no longer tears down after a 4s cold handshake — one GET, 8s for Vision/REALITY
+- Incomplete REALITY links (empty `pbk`) are rejected with a clear error instead of a silent failed handshake
+- Connected session no longer runs HTTPS probes every 15s (that caused sudden speed drops on Vision)
+- Test All is parallel (3 Xray workers on desktop, 2 on Android) with a single generate_204 verify; IP nodes that fail TCP are skipped
+- TUN MTU is 1500; sniffing uses `routeOnly` so destinations are not rewritten
+- Vision is never mixed into a Smart Multipath `leastPing` balancer
+
+### Changed
+
+- After Test All / Smart Connect ranking, servers sort fastest-first
+- Settings live behind one **Settings** button (desktop flyout, mobile overlay)
+- QUIC key/security, xHTTP `extra`, SS SIP002 plugin-safe parse, VMess query-URI, gRPC `multiMode` import
+- Hysteria2/TUIC paste is skipped with a sing-box hint (not in this Xray build)
+
 ## [1.4.12] - 2026-08-14
 
 ### Fixed

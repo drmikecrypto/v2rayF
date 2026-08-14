@@ -32,7 +32,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private AppSettings _settings = new();
     private UpdateOffer? _pendingUpdate;
     private CancellationTokenSource? _connectCts;
-    private CancellationTokenSource? _pingCts;
     private IReadOnlyList<SmartConnectService.RankedServer> _lastRanking = [];
     private DateTimeOffset _lastUpdateCheckUtc = DateTimeOffset.MinValue;
     private bool _suppressSelectionPersist;
@@ -99,6 +98,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _subscriptionViaProxy = true;
+
+    [ObservableProperty]
+    private bool _settingsOpen;
 
     [ObservableProperty]
     private string _androidBypassPackages = "";
@@ -619,6 +621,19 @@ public partial class MainWindowViewModel : ViewModelBase
             : raw.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     [RelayCommand]
+    private async Task OpenSettingsAsync()
+    {
+        SettingsOpen = true;
+    }
+
+    [RelayCommand]
+    private async Task CloseSettingsAsync()
+    {
+        SettingsOpen = false;
+        await SaveSettingsAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private async Task SaveSettingsAsync()
     {
         await _settingsStore.SaveAsync(CollectSettings());
@@ -855,9 +870,14 @@ public partial class MainWindowViewModel : ViewModelBase
             await SetOnUiAsync(() => StatusText = "Verifying proxy path…").ConfigureAwait(true);
 
             var fragment = _settings.EnablePacketFragment;
-            for (var i = 0; i < snapshot.Count; i++)
+            await Task.WhenAll(snapshot.Select(async (server, i) =>
             {
-                var server = snapshot[i];
+                if (LatencyService.ShouldSkipProxyPath(server, tcpMs[i]))
+                {
+                    RunOnUiThread(() => server.SetLatency(-1));
+                    return;
+                }
+
                 var proxyMs = await _latencyService
                     .MeasureProxyPathAsync(server, enableFragment: fragment)
                     .ConfigureAwait(false);
@@ -865,8 +885,9 @@ public partial class MainWindowViewModel : ViewModelBase
                     ? (tcpMs[i] is > 0 ? tcpMs[i] : proxyMs)
                     : -1;
                 RunOnUiThread(() => server.SetLatency(display));
-            }
+            })).ConfigureAwait(true);
 
+            await SetOnUiAsync(ReorderServersByLatency).ConfigureAwait(true);
             await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
             var ok = Servers.Count(s => s.LatencyMs is > 0);
             StatusText = $"Delay test complete — {ok}/{Servers.Count} reachable.";
@@ -1030,6 +1051,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     foreach (var ranked in _lastRanking)
                         ranked.Server.SetLatency(ranked.UiLatencyMs);
+                    ReorderServersByLatency();
                 }).ConfigureAwait(true);
 
                 candidates = _smartConnect.SelectConnectOrder(
@@ -1497,7 +1519,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await MergeImportedAsync(imported);
         ImportText = "";
-        StatusText = $"Imported {imported.Count} server(s).";
+        var hint = ConfigImportParser.LastSkippedSingBoxHint;
+        StatusText = string.IsNullOrEmpty(hint)
+            ? $"Imported {imported.Count} server(s)."
+            : $"Imported {imported.Count} server(s). {hint}";
     }
 
     [RelayCommand]
@@ -1639,10 +1664,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
         TrafficStatsHub.Shared.Updated += OnHubTrafficUpdated;
         TrafficStatsHub.Shared.Subscribe();
-
-        _pingCts = new CancellationTokenSource();
-        var token = _pingCts.Token;
-        _ = Task.Run(() => ConnectedPingLoopAsync(token), CancellationToken.None);
     }
 
     private void StopTrafficPolling()
@@ -1651,17 +1672,6 @@ public partial class MainWindowViewModel : ViewModelBase
         TrafficStatsHub.Shared.Unsubscribe();
         TrafficStatsHub.Shared.Reset();
 
-        try
-        {
-            _pingCts?.Cancel();
-            _pingCts?.Dispose();
-        }
-        catch
-        {
-            // Best effort.
-        }
-
-        _pingCts = null;
         _lastRanking = [];
         RunOnUiThread(() =>
         {
@@ -1689,39 +1699,13 @@ public partial class MainWindowViewModel : ViewModelBase
             TrafficStatsHub.Shared.ConnectedPingMs);
     }
 
-    private async Task ConnectedPingLoopAsync(CancellationToken cancellationToken)
+    private void ReorderServersByLatency()
     {
-        // Prefer the post-connect health probe; never invent ping from an old Test result.
-        if (_proxyCore.LastConnectProbeMs is int live and > 0)
-            TrafficStatsHub.Shared.ConnectedPingMs = live;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
-                var ms = await _latencyService.MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, cancellationToken)
-                    .ConfigureAwait(false);
-                if (ms is >= 0)
-                {
-                    TrafficStatsHub.Shared.ConnectedPingMs = ms;
-                    RunOnUiThread(() =>
-                    {
-                        ConnectedPingText = $"{ms}";
-                        if (SelectedServer is not null)
-                            SelectedServer.SetLatency(ms);
-                    });
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch
-            {
-                // Keep trying.
-            }
-        }
+        var selectedId = SelectedServer?.Id;
+        var ordered = ServerLatencySort.Order(Servers);
+        Servers = new ObservableCollection<ProxyServer>(ordered);
+        if (selectedId is Guid id)
+            SelectedServer = Servers.FirstOrDefault(s => s.Id == id);
     }
 
     private static TopLevel? GetTopLevel()

@@ -303,11 +303,16 @@ public sealed class SmartConnectService
         ProxyServer primary)
     {
         var peers = new List<ProxyServer> { primary };
+        if (ShareLinkParser.IsVisionFlow(primary))
+            return peers;
+
         foreach (var item in ranked.Where(r => r.ProxyPathOk))
         {
             if (peers.Count >= MaxMultipathCandidates)
                 break;
             if (item.Server.Id == primary.Id)
+                continue;
+            if (ShareLinkParser.IsVisionFlow(item.Server))
                 continue;
             peers.Add(item.Server);
         }

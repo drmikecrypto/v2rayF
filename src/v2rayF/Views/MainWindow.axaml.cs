@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -54,5 +55,11 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         await vm.RemoveServerCommand.ExecuteAsync(server);
+    }
+
+    private async void SettingsFlyout_Closed(object? sender, EventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm)
+            await vm.CloseSettingsCommand.ExecuteAsync(null);
     }
 }

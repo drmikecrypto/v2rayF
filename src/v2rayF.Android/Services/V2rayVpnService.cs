@@ -83,7 +83,7 @@ public class V2rayVpnService : VpnService
 
             var builder = new Builder(this);
             builder.SetSession("v2rayF");
-            builder.SetMtu(1280);
+            builder.SetMtu(1500);
             builder.AddAddress("172.19.0.1", 30);
             builder.AddRoute("0.0.0.0", 0);
             builder.AddDnsServer("172.19.0.1");

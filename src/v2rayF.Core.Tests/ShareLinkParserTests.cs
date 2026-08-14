@@ -169,7 +169,7 @@ public class StreamSettingsBuilderTests
         var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
         var tunSettings = tun["settings"]!.AsObject();
         Assert.Equal(TunConstants.InterfaceName, tunSettings["name"]!.GetValue<string>());
-        Assert.Equal(1280, tunSettings["MTU"]!.GetValue<int>());
+        Assert.Equal(1500, tunSettings["MTU"]!.GetValue<int>());
         Assert.Null(tunSettings["fd"]);
         Assert.Null(tunSettings["stack"]);
         Assert.Null(tunSettings["inet4_address"]);

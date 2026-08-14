@@ -58,6 +58,9 @@ public static class ShareLinkParser
 
         link = link.Trim();
 
+        if (IsSingBoxOnlyScheme(link))
+            return null;
+
         return link switch
         {
             _ when link.StartsWith("vmess://", StringComparison.OrdinalIgnoreCase) => ParseVmess(link),
@@ -70,10 +73,38 @@ public static class ShareLinkParser
         };
     }
 
+    internal static bool IsSingBoxOnlyScheme(string link)
+    {
+        return link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+               link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) ||
+               link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ProxyServer ParseVmess(string link)
     {
         var payload = link["vmess://".Length..];
-        var json = Encoding.UTF8.GetString(Convert.FromBase64String(NormalizeBase64(payload)));
+        var hash = payload.IndexOf('#');
+        var body = hash >= 0 ? payload[..hash] : payload;
+        if (body.Contains('@') && !LooksLikeBase64(body.Split('?', 2)[0].Replace("-", "").Replace("_", "")))
+            return ParseVmessQueryUri(link);
+
+        try
+        {
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(NormalizeBase64(body)));
+            return ParseVmessJson(link, json, hash >= 0 ? payload[(hash + 1)..] : null);
+        }
+        catch (FormatException)
+        {
+            return ParseVmessQueryUri(link);
+        }
+        catch (JsonException)
+        {
+            return ParseVmessQueryUri(link);
+        }
+    }
+
+    private static ProxyServer ParseVmessJson(string link, string json, string? fragment)
+    {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
@@ -87,7 +118,7 @@ public static class ShareLinkParser
             !string.IsNullOrWhiteSpace(path))
             serviceName = path;
 
-        return new ProxyServer
+        var server = new ProxyServer
         {
             Protocol = ProxyProtocol.VMess,
             Name = GetString(root, "ps") ?? "VMess",
@@ -114,6 +145,32 @@ public static class ShareLinkParser
             AllowInsecure = GetString(root, "allowInsecure") is "1" or "true",
             RawLink = link
         };
+
+        if (!string.IsNullOrWhiteSpace(fragment) &&
+            (string.IsNullOrWhiteSpace(server.Name) || server.Name == "VMess"))
+            server.Name = Uri.UnescapeDataString(fragment);
+        return server;
+    }
+
+    private static ProxyServer ParseVmessQueryUri(string link)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri))
+            throw new FormatException("Invalid VMess link.");
+
+        var query = ParseQuery(uri.Query);
+        var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VMess,
+            Name = string.IsNullOrWhiteSpace(name) ? "VMess" : name,
+            Address = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 443,
+            UserId = Uri.UnescapeDataString(uri.UserInfo),
+            Cipher = GetQuery(query, "encryption") ?? GetQuery(query, "scy") ?? "auto",
+            RawLink = link
+        };
+        ApplyStreamFromQuery(server, query, defaultSecurity: "none");
+        return server;
     }
 
     private static ProxyServer ParseVless(string link)
@@ -179,7 +236,20 @@ public static class ShareLinkParser
                 password = decoded[(colon + 1)..];
             }
 
-            ParseHostPort(hostPart, out host, out port);
+            ParseHostPort(hostPart, out host, out port, out var query);
+            var server = new ProxyServer
+            {
+                Protocol = ProxyProtocol.Shadowsocks,
+                Name = string.IsNullOrWhiteSpace(name) ? "Shadowsocks" : name,
+                Address = host,
+                Port = port,
+                Cipher = method,
+                Password = password,
+                RawLink = originalLink
+            };
+            if (query.Count > 0)
+                ApplyStreamFromQuery(server, query, defaultSecurity: "none");
+            return server;
         }
         else
         {
@@ -193,19 +263,21 @@ public static class ShareLinkParser
             var colon = creds.IndexOf(':');
             method = creds[..colon];
             password = creds[(colon + 1)..];
-            ParseHostPort(hostPart, out host, out port);
+            ParseHostPort(hostPart, out host, out port, out var query);
+            var server = new ProxyServer
+            {
+                Protocol = ProxyProtocol.Shadowsocks,
+                Name = string.IsNullOrWhiteSpace(name) ? "Shadowsocks" : name,
+                Address = host,
+                Port = port,
+                Cipher = method,
+                Password = password,
+                RawLink = originalLink
+            };
+            if (query.Count > 0)
+                ApplyStreamFromQuery(server, query, defaultSecurity: "none");
+            return server;
         }
-
-        return new ProxyServer
-        {
-            Protocol = ProxyProtocol.Shadowsocks,
-            Name = string.IsNullOrWhiteSpace(name) ? "Shadowsocks" : name,
-            Address = host,
-            Port = port,
-            Cipher = method,
-            Password = password,
-            RawLink = originalLink
-        };
     }
 
     private static ProxyServer ParseTrojan(string link)
@@ -273,6 +345,10 @@ public static class ShareLinkParser
         server.ServiceName = GetQuery(query, "serviceName") ?? GetQuery(query, "servicename") ?? "";
         server.Mode = GetQuery(query, "mode") ?? "";
         server.Seed = GetQuery(query, "seed") ?? "";
+        server.Extra = GetQuery(query, "extra") ?? "";
+        server.QuicSecurity = GetQuery(query, "quicSecurity") ?? "";
+        if (server.Network.Equals("quic", StringComparison.OrdinalIgnoreCase))
+            server.QuicKey = GetQuery(query, "key") ?? server.QuicKey;
         server.AllowInsecure =
             GetQuery(query, "allowInsecure") is "1" or "true" ||
             GetQuery(query, "insecure") is "1" or "true";
@@ -287,7 +363,7 @@ public static class ShareLinkParser
             server.ServiceName = server.Path;
     }
 
-    /// <summary>Vision only applies on TCP — clear flow on other transports.</summary>
+    /// <summary>Vision only applies on TCP. Infers tls/reality when the link omitted security.</summary>
     internal static void NormalizeVisionFlow(ProxyServer server)
     {
         if (string.IsNullOrWhiteSpace(server.Flow))
@@ -300,13 +376,23 @@ public static class ShareLinkParser
             return;
         }
 
-        // Normalize common aliases to Xray's Vision flow names.
         if (server.Flow.Equals("vision", StringComparison.OrdinalIgnoreCase) ||
             server.Flow.Equals("xtls-rprx-vision", StringComparison.OrdinalIgnoreCase))
             server.Flow = "xtls-rprx-vision";
         else if (server.Flow.Equals("xtls-rprx-vision-udp443", StringComparison.OrdinalIgnoreCase))
             server.Flow = "xtls-rprx-vision-udp443";
+
+        if (!IsVisionFlow(server))
+            return;
+
+        var security = NormalizeSecurity(server.Security);
+        if (security is "none" or "")
+            server.Security = string.IsNullOrWhiteSpace(server.PublicKey) ? "tls" : "reality";
     }
+
+    internal static bool IsVisionFlow(ProxyServer server) =>
+        !string.IsNullOrWhiteSpace(server.Flow) &&
+        server.Flow.Contains("vision", StringComparison.OrdinalIgnoreCase);
 
     internal static string NormalizeNetwork(string? network)
     {
@@ -349,8 +435,18 @@ public static class ShareLinkParser
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
-    private static void ParseHostPort(string hostPart, out string host, out int port)
+    private static void ParseHostPort(string hostPart, out string host, out int port, out Dictionary<string, string> query)
     {
+        query = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var q = hostPart.IndexOf('?');
+        if (q >= 0)
+        {
+            query = ParseQuery(hostPart[q..]);
+            hostPart = hostPart[..q];
+        }
+
+        hostPart = hostPart.TrimEnd('/');
+
         if (hostPart.StartsWith('['))
         {
             var end = hostPart.IndexOf(']');

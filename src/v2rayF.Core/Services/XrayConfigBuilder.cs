@@ -16,6 +16,7 @@ public static class XrayConfigBuilder
     public const int DefaultSharePort = 10880;
     public const int ApiPort = 10085;
     public const string GooglePingUrl = "https://www.google.com/generate_204";
+    public const int TunMtu = 1500;
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
@@ -33,6 +34,7 @@ public static class XrayConfigBuilder
     /// </summary>
     public static string BuildServerRuntime(ProxyServer server, ServerRuntimeOptions opts)
     {
+        EnsureOutboundReady(server);
         var useFragment = AdaptiveSurviveService.ShouldApplyFragmentForServer(server, opts.EnableFragment);
         var outboundHosts = CollectOutboundDomainHosts([server]);
         var outbounds = new JsonArray();
@@ -109,6 +111,8 @@ public static class XrayConfigBuilder
         IReadOnlyList<ProxyServer>? multipathServers = null)
     {
         var peers = NormalizePeers(server, multipathServers, settings.SmartMultipathEnabled);
+        foreach (var peer in peers)
+            EnsureOutboundReady(peer);
         var useBalancer = peers.Count > 1;
 
         var inbounds = new JsonArray
@@ -134,7 +138,7 @@ public static class XrayConfigBuilder
             var tunSettings = new JsonObject
             {
                 ["name"] = TunConstants.InterfaceName,
-                ["MTU"] = 1280
+                ["MTU"] = TunMtu
             };
 
             if (tunFd is null)
@@ -162,7 +166,7 @@ public static class XrayConfigBuilder
                 {
                     ["enabled"] = true,
                     ["destOverride"] = new JsonArray { "http", "tls", "quic" },
-                    ["routeOnly"] = false
+                    ["routeOnly"] = true
                 }
             });
         }
@@ -542,7 +546,7 @@ public static class XrayConfigBuilder
     {
         ["enabled"] = true,
         ["destOverride"] = new JsonArray { "http", "tls", "quic" },
-        ["routeOnly"] = false
+        ["routeOnly"] = true
     };
 
     private static void AppendCustomRules(
@@ -675,13 +679,40 @@ public static class XrayConfigBuilder
                 ["dialerProxy"] = "fragment"
             };
         }
+        else
+        {
+            ApplyLiveSockopt(outbound, server);
+        }
 
         return outbound;
     }
 
+    /// <summary>Reject incomplete REALITY / normalize Vision before emitting JSON.</summary>
+    public static void EnsureOutboundReady(ProxyServer server)
+    {
+        ShareLinkParser.NormalizeVisionFlow(server);
+        var security = ShareLinkParser.NormalizeSecurity(server.Security);
+        if (security == "reality" && string.IsNullOrWhiteSpace(server.PublicKey))
+            throw new InvalidOperationException(
+                "REALITY requires a public key (pbk). This link is incomplete.");
+    }
+
+    private static void ApplyLiveSockopt(JsonObject outbound, ProxyServer server)
+    {
+        if (IsVisionFlow(server))
+            return;
+        if (outbound["streamSettings"] is not JsonObject stream)
+            return;
+
+        stream["sockopt"] = new JsonObject
+        {
+            ["tcpNoDelay"] = true,
+            ["tcpKeepAliveInterval"] = 30
+        };
+    }
+
     private static bool IsVisionFlow(ProxyServer server) =>
-        !string.IsNullOrWhiteSpace(server.Flow) &&
-        server.Flow.Contains("vision", StringComparison.OrdinalIgnoreCase);
+        ShareLinkParser.IsVisionFlow(server);
 
     private static JsonObject BuildVmessOutbound(ProxyServer server, string tag)
     {
@@ -748,24 +779,34 @@ public static class XrayConfigBuilder
         };
     }
 
-    private static JsonObject BuildShadowsocksOutbound(ProxyServer server, string tag) => new()
+    private static JsonObject BuildShadowsocksOutbound(ProxyServer server, string tag)
     {
-        ["tag"] = tag,
-        ["protocol"] = "shadowsocks",
-        ["settings"] = new JsonObject
+        var outbound = new JsonObject
         {
-            ["servers"] = new JsonArray
+            ["tag"] = tag,
+            ["protocol"] = "shadowsocks",
+            ["settings"] = new JsonObject
             {
-                new JsonObject
+                ["servers"] = new JsonArray
                 {
-                    ["address"] = server.Address,
-                    ["port"] = server.Port,
-                    ["method"] = server.Cipher,
-                    ["password"] = server.Password
+                    new JsonObject
+                    {
+                        ["address"] = server.Address,
+                        ["port"] = server.Port,
+                        ["method"] = server.Cipher,
+                        ["password"] = server.Password
+                    }
                 }
             }
-        }
-    };
+        };
+
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        var security = ShareLinkParser.NormalizeSecurity(server.Security);
+        if (network is not "tcp" || security is not "none")
+            outbound["streamSettings"] = BuildStreamSettings(server);
+
+        return outbound;
+    }
 
     private static JsonObject BuildTrojanOutbound(ProxyServer server, string tag) => new()
     {
@@ -941,6 +982,19 @@ public static class XrayConfigBuilder
                 };
                 if (!string.IsNullOrWhiteSpace(server.Mode))
                     xhttp["mode"] = server.Mode;
+                if (!string.IsNullOrWhiteSpace(server.Extra))
+                {
+                    try
+                    {
+                        var extra = JsonNode.Parse(server.Extra);
+                        if (extra is JsonObject extraObj)
+                            xhttp["extra"] = extraObj.DeepClone();
+                    }
+                    catch (JsonException)
+                    {
+                        // Share-link extra was not JSON; omit.
+                    }
+                }
                 stream["xhttpSettings"] = xhttp;
                 break;
             }
@@ -970,8 +1024,8 @@ public static class XrayConfigBuilder
             case "quic":
                 stream["quicSettings"] = new JsonObject
                 {
-                    ["security"] = "none",
-                    ["key"] = "",
+                    ["security"] = string.IsNullOrWhiteSpace(server.QuicSecurity) ? "none" : server.QuicSecurity,
+                    ["key"] = server.QuicKey ?? "",
                     ["header"] = new JsonObject
                     {
                         ["type"] = string.IsNullOrWhiteSpace(server.HeaderType) ? "none" : server.HeaderType

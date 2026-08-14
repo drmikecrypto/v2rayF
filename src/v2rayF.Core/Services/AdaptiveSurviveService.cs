@@ -71,9 +71,7 @@ public sealed class AdaptiveSurviveService
     }
 
     public static bool ShouldApplyFragmentForServer(ProxyServer server, bool fragmentEnabled) =>
-        fragmentEnabled &&
-        !string.Equals(server.Flow, "xtls-rprx-vision", System.StringComparison.OrdinalIgnoreCase) &&
-        !string.Equals(server.Flow, "xtls-rprx-vision-udp443", System.StringComparison.OrdinalIgnoreCase);
+        fragmentEnabled && !ShareLinkParser.IsVisionFlow(server);
 
     private static AppSettings Clone(AppSettings s) => new()
     {

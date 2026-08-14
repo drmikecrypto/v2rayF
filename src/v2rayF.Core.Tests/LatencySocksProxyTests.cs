@@ -20,10 +20,13 @@ public class LatencySocksProxyTests
         Assert.Equal("https://cp.cloudflare.com/generate_204", LatencyService.PingUrls[0]);
         Assert.Equal(LatencyService.GoogleProbeUrl, LatencyService.PingUrls[0]);
         Assert.DoesNotContain(LatencyService.PingUrls, u => u == "https://www.google.com/");
-        Assert.Equal(2, LatencyService.TimedProbeCount);
+        Assert.Equal(1, LatencyService.TimedProbeCount);
         Assert.Equal(2000, LatencyService.HttpConnectTimeoutMs);
         Assert.Equal(4000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(8000, LatencyService.ConnectHealthProbeVisionMs);
         Assert.Equal(50, LatencyService.SocksPollTimeoutMs);
+        Assert.Equal(3, LatencyService.ResolveWorkerCount(mobile: false));
+        Assert.Equal(2, LatencyService.ResolveWorkerCount(mobile: true));
     }
 
     [Fact]

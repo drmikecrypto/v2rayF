@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -14,7 +15,7 @@ namespace v2rayF.Services;
 
 public sealed class LatencyService
 {
-    /// <summary>Sequential fallbacks — never raced on a cold SOCKS (that inflated delay to ~2000ms).</summary>
+    /// <summary>Sequential fallbacks — never raced on a cold SOCKS.</summary>
     public static readonly string[] PingUrls =
     [
         "https://cp.cloudflare.com/generate_204",
@@ -22,41 +23,52 @@ public sealed class LatencyService
         "https://www.google.com/generate_204"
     ];
 
-    /// <summary>Primary proxy-path probe URL (Cloudflare; Google retained as fallback).</summary>
     public const string GoogleProbeUrl = "https://cp.cloudflare.com/generate_204";
 
-    private readonly ICoreEnvironment _environment;
-    private readonly ICoreProcessHost _speedtestHost;
-    private readonly SemaphoreSlim _speedtestLock = new(1, 1);
-
-    public const int TimeoutMs = 8000;
-    /// <summary>Per-probe budget during Smart Connect ranking (warmup + timed GETs).</summary>
-    public const int RankProbeTimeoutMs = 10000;
-    /// <summary>Default max wait for speedtest SOCKS to bind before probing.</summary>
+    public const int TimeoutMs = 4000;
+    public const int RankProbeTimeoutMs = 4000;
     public const int CoreReadyWaitMs = 2000;
-    /// <summary>Post-connect live SOCKS health probe budget.</summary>
     public const int ConnectHealthProbeMs = 4000;
-    /// <summary>TCP connect budget per attempt (v2rayN-style tcping).</summary>
+    public const int ConnectHealthProbeVisionMs = 8000;
     public const int TcpConnectTimeoutMs = 1500;
     public const int SocksPollTimeoutMs = 50;
     public const int HttpConnectTimeoutMs = 2000;
-    public const int TimedProbeCount = 2;
+    public const int TimedProbeCount = 1;
+    public const int DesktopSpeedtestWorkers = 3;
+    public const int MobileSpeedtestWorkers = 2;
 
-    /// <summary>Last core/speedtest failure detail (sanitized for UI).</summary>
+    private readonly ICoreEnvironment _environment;
+    private readonly ConcurrentQueue<ICoreProcessHost> _idleHosts = new();
+    private readonly SemaphoreSlim _speedtestLock;
+
     public string? LastProbeError { get; private set; }
+
+    public int WorkerCount { get; }
 
     public LatencyService(ICoreEnvironment environment)
     {
         _environment = environment;
-        _speedtestHost = environment.CreateProcessHost();
+        WorkerCount = ResolveWorkerCount(AppServices.Platform?.IsMobile == true);
+        _speedtestLock = new SemaphoreSlim(WorkerCount, WorkerCount);
+        for (var i = 0; i < WorkerCount; i++)
+            _idleHosts.Enqueue(environment.CreateProcessHost());
+    }
+
+    public static int ResolveWorkerCount(bool mobile) =>
+        mobile ? MobileSpeedtestWorkers : DesktopSpeedtestWorkers;
+
+    public static int GetConnectHealthProbeMs(ProxyServer server)
+    {
+        if (ShareLinkParser.IsVisionFlow(server) ||
+            string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase))
+            return ConnectHealthProbeVisionMs;
+        return ConnectHealthProbeMs;
     }
 
     public readonly record struct LatencyResult(int? TcpMs, int? ProxyPathMs, bool ProxyPathOk)
     {
-        /// <summary>Warmed proxy-path RTT when the tunnel works; TCP otherwise (prefilter only).</summary>
         public int? LatencyMs => ProxyPathOk ? ProxyPathMs : TcpMs;
 
-        /// <summary>UI column: TCP RTT after proxy-path OK; timeout otherwise. Never TCP-only.</summary>
         public int? UiLatencyMs =>
             !ProxyPathOk ? -1
             : TcpMs is > 0 ? TcpMs
@@ -72,10 +84,6 @@ public sealed class LatencyService
         return await MeasureTcpAsync(server, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// UI Test / Test All: TCP RTT when the node also proxies HTTPS; otherwise -1 (timeout).
-    /// TCP-only reachability is never shown as a successful ping.
-    /// </summary>
     public async Task<int?> MeasureAsync(
         ProxyServer server,
         CancellationToken cancellationToken = default,
@@ -85,10 +93,6 @@ public sealed class LatencyService
         return detailed.UiLatencyMs;
     }
 
-    /// <summary>
-    /// TCP + warmed proxy-path. Smart Connect ranks by <see cref="LatencyResult.ProxyPathMs"/>;
-    /// the list column uses <see cref="LatencyResult.UiLatencyMs"/>.
-    /// </summary>
     public async Task<LatencyResult> MeasureDetailedAsync(
         ProxyServer server,
         CancellationToken cancellationToken = default,
@@ -118,22 +122,22 @@ public sealed class LatencyService
             }
             catch
             {
-                // Observed; TCP failure is represented as -1 below.
+                // Observed.
             }
         }
 
         var tcp = tcpTask.Status == TaskStatus.RanToCompletion ? tcpTask.Result : -1;
-        var proxyOk = proxyMs is >= 0;
-        return new LatencyResult(tcp, proxyMs, proxyOk);
+        return new LatencyResult(tcp, proxyMs, proxyMs is >= 0);
     }
 
-    /// <summary>HTTPS-through-SOCKS only (live connect health). Warmup + min of timed GETs.</summary>
-    public async Task<int?> MeasureViaSocksAsync(int socksPort, CancellationToken cancellationToken = default)
+    public async Task<int?> MeasureViaSocksAsync(
+        int socksPort,
+        CancellationToken cancellationToken = default,
+        int timeoutMs = TimeoutMs)
     {
-        return await ProbeThroughSocksAsync(socksPort, cancellationToken).ConfigureAwait(false);
+        return await ProbeThroughSocksAsync(socksPort, cancellationToken, timeoutMs).ConfigureAwait(false);
     }
 
-    /// <summary>Ephemeral-core proxy-path RTT (no TCP). Used by Test All after a parallel TCP pass.</summary>
     public async Task<int?> MeasureProxyPathAsync(
         ProxyServer server,
         CancellationToken cancellationToken = default,
@@ -153,14 +157,32 @@ public sealed class LatencyService
         return await MeasureViaCoreAsync(server, enableFragment, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Skip expensive Xray boot when TCP to an IP already failed.</summary>
+    public static bool ShouldSkipProxyPath(ProxyServer server, int? tcpMs)
+    {
+        if (tcpMs is > 0)
+            return false;
+        if (string.IsNullOrWhiteSpace(server.Address))
+            return true;
+        if (!IPAddress.TryParse(server.Address, out _))
+            return false;
+
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        return network is not ("ws" or "grpc" or "httpupgrade" or "h2" or "xhttp");
+    }
+
     private async Task<int?> MeasureViaCoreAsync(
         ProxyServer server,
         bool enableFragment,
         CancellationToken cancellationToken)
     {
         await _speedtestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        ICoreProcessHost? host = null;
         try
         {
+            if (!_idleHosts.TryDequeue(out host))
+                host = _environment.CreateProcessHost();
+
             var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
@@ -177,18 +199,18 @@ public sealed class LatencyService
                 return null;
             }
 
-            await _speedtestHost.StartAsync(
+            await host.StartAsync(
                 corePath,
                 configPath,
                 _environment.GetCoresDirectory(),
                 tunFd: null,
                 cancellationToken).ConfigureAwait(false);
 
-            await WaitForCoreReadyAsync(socksPort, server, cancellationToken).ConfigureAwait(false);
-            if (_speedtestHost.HasExited)
+            await WaitForCoreReadyAsync(host, socksPort, server, cancellationToken).ConfigureAwait(false);
+            if (host.HasExited)
             {
                 await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
-                var err = _speedtestHost.GetRecentError();
+                var err = host.GetRecentError();
                 LastProbeError = string.IsNullOrWhiteSpace(err)
                     ? "Speedtest core exited before SOCKS was ready."
                     : StatusSanitizer.Scrub(err);
@@ -201,19 +223,28 @@ public sealed class LatencyService
                 return -1;
             }
 
-            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken).ConfigureAwait(false);
+            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken, TimeoutMs).ConfigureAwait(false);
             if (ms is null or < 0)
                 LastProbeError ??= "Proxy-path HTTPS probe timed out.";
             return ms;
         }
+        catch (InvalidOperationException ex)
+        {
+            LastProbeError = StatusSanitizer.Scrub(ex.Message);
+            return -1;
+        }
         finally
         {
-            await _speedtestHost.StopAsync(cancellationToken).ConfigureAwait(false);
+            if (host is not null)
+            {
+                await host.StopAsync(CancellationToken.None).ConfigureAwait(false);
+                _idleHosts.Enqueue(host);
+            }
+
             _speedtestLock.Release();
         }
     }
 
-    /// <summary>Transport-aware SOCKS bind budget (WS/gRPC need longer than bare TCP).</summary>
     public static int GetCoreReadyWaitMs(ProxyServer server)
     {
         var network = ShareLinkParser.NormalizeNetwork(server.Network);
@@ -226,13 +257,17 @@ public sealed class LatencyService
         };
     }
 
-    private async Task WaitForCoreReadyAsync(int socksPort, ProxyServer server, CancellationToken cancellationToken)
+    private static async Task WaitForCoreReadyAsync(
+        ICoreProcessHost host,
+        int socksPort,
+        ProxyServer server,
+        CancellationToken cancellationToken)
     {
         var waitMs = GetCoreReadyWaitMs(server);
         var iterations = Math.Max(1, waitMs / SocksPollTimeoutMs);
         for (var i = 0; i < iterations; i++)
         {
-            if (_speedtestHost.HasExited)
+            if (host.HasExited)
                 return;
 
             if (await IsPortOpenAsync("127.0.0.1", socksPort, cancellationToken).ConfigureAwait(false))
@@ -272,30 +307,22 @@ public sealed class LatencyService
         }
     }
 
-    /// <summary>
-    /// SOCKS scheme for HttpClient probes. Must be <c>socks5</c> — .NET rejects <c>socks5h</c>
-    /// (<see cref="NotSupportedException"/>), which made every latency/connect probe look like a timeout.
-    /// On .NET, socks5 already sends the hostname to the proxy.
-    /// </summary>
     public const string SocksProxyScheme = "socks5";
 
-    /// <summary>
-    /// Sequential URL fallbacks. Warmup GET is discarded; min of timed GETs is the proxy-path RTT
-    /// (same pattern as v2rayN GetRealPingTime).
-    /// </summary>
-    private async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken)
+    private async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken, int timeoutMs)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeoutMs);
+        timeout.CancelAfter(timeoutMs);
 
+        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
         var handler = new SocketsHttpHandler
         {
             Proxy = new WebProxy($"{SocksProxyScheme}://127.0.0.1:{socksPort}"),
             UseProxy = true,
-            ConnectTimeout = TimeSpan.FromMilliseconds(HttpConnectTimeoutMs)
+            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs)
         };
 
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(TimeoutMs) };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
 
         Exception? firstError = null;
         try
@@ -303,27 +330,10 @@ public sealed class LatencyService
             foreach (var url in PingUrls)
             {
                 timeout.Token.ThrowIfCancellationRequested();
-
-                var warm = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                if (!warm.Ok)
-                {
-                    firstError ??= warm.Error;
-                    continue;
-                }
-
-                var times = new List<int>(TimedProbeCount);
-                for (var i = 0; i < TimedProbeCount; i++)
-                {
-                    var timed = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                    if (timed.Ok && timed.Ms >= 0)
-                        times.Add(timed.Ms);
-
-                    if (i + 1 < TimedProbeCount)
-                        await Task.Delay(100, timeout.Token).ConfigureAwait(false);
-                }
-
-                if (times.Count > 0)
-                    return times.Min();
+                var one = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                if (one.Ok && one.Ms >= 0)
+                    return one.Ms;
+                firstError ??= one.Error;
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -354,7 +364,6 @@ public sealed class LatencyService
         }
         catch (OperationCanceledException)
         {
-            // Overall timeout.
         }
         catch (Exception ex)
         {
@@ -364,7 +373,6 @@ public sealed class LatencyService
         return (false, -1, null);
     }
 
-    /// <summary>Two TCP connects; first warms DNS, second is the reported RTT (v2rayN tcping).</summary>
     private static async Task<int?> MeasureTcpAsync(ProxyServer server, CancellationToken cancellationToken)
     {
         var first = await TcpConnectOnceAsync(server, cancellationToken).ConfigureAwait(false);

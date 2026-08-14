@@ -59,6 +59,15 @@ public partial class ProxyServer : ObservableObject
     /// <summary>mKCP seed.</summary>
     public string Seed { get; set; } = "";
 
+    /// <summary>xHTTP extra JSON (query extra=).</summary>
+    public string Extra { get; set; } = "";
+
+    /// <summary>QUIC encryption (none/aes-128-gcm/chacha20-poly1305).</summary>
+    public string QuicSecurity { get; set; } = "";
+
+    /// <summary>QUIC key.</summary>
+    public string QuicKey { get; set; } = "";
+
     /// <summary>VLESS encryption (usually none).</summary>
     public string Encryption { get; set; } = "none";
 
@@ -92,7 +101,10 @@ public partial class ProxyServer : ObservableObject
         get
         {
             if (Protocol == ProxyProtocol.Shadowsocks)
-                return "SS · tcp";
+            {
+                var net = ShareLinkParser.NormalizeNetwork(Network);
+                return net is "tcp" or "" ? "SS · tcp" : $"SS · {net}";
+            }
 
             var network = ShareLinkParser.NormalizeNetwork(Network);
             var security = ShareLinkParser.NormalizeSecurity(Security);

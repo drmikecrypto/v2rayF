@@ -16,12 +16,17 @@ public static partial class ConfigImportParser
 {
     private static readonly Regex ShareLinkRegex = ShareLinkPattern();
 
+    /// <summary>Set when paste/subscription contained hy2/TUIC that this Xray build cannot run.</summary>
+    public static string? LastSkippedSingBoxHint { get; private set; }
+
     public static IReadOnlyList<ProxyServer> Parse(string input)
     {
+        LastSkippedSingBoxHint = null;
         if (string.IsNullOrWhiteSpace(input))
             return Array.Empty<ProxyServer>();
 
         var trimmed = input.Trim();
+        LastSkippedSingBoxHint = DetectSingBoxHint(trimmed);
 
         // Subscription URL alone is handled by the caller (fetch), not here.
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
@@ -352,7 +357,22 @@ public static partial class ConfigImportParser
         if (stream.TryGetProperty("grpcSettings", out var grpc))
         {
             server.ServiceName = GetJsonString(grpc, "serviceName") ?? server.ServiceName;
-            server.Mode = GetJsonString(grpc, "mode") ?? server.Mode;
+            if (grpc.TryGetProperty("multiMode", out var multi) && multi.ValueKind == JsonValueKind.True)
+                server.Mode = "multi";
+            else
+                server.Mode = GetJsonString(grpc, "mode") ?? server.Mode;
+        }
+
+        if (stream.TryGetProperty("httpSettings", out var h2))
+        {
+            server.Path = GetJsonString(h2, "path") ?? server.Path;
+            if (h2.TryGetProperty("host", out var hosts))
+            {
+                if (hosts.ValueKind == JsonValueKind.Array && hosts.GetArrayLength() > 0)
+                    server.Host = hosts[0].GetString() ?? server.Host;
+                else if (hosts.ValueKind == JsonValueKind.String)
+                    server.Host = hosts.GetString() ?? server.Host;
+            }
         }
 
         if (stream.TryGetProperty("httpupgradeSettings", out var httpUp) ||
@@ -368,6 +388,16 @@ public static partial class ConfigImportParser
             server.Path = GetJsonString(xhttp, "path") ?? server.Path;
             server.Host = GetJsonString(xhttp, "host") ?? server.Host;
             server.Mode = GetJsonString(xhttp, "mode") ?? server.Mode;
+            if (xhttp.TryGetProperty("extra", out var extra) && extra.ValueKind == JsonValueKind.Object)
+                server.Extra = extra.GetRawText();
+        }
+
+        if (stream.TryGetProperty("quicSettings", out var quic))
+        {
+            server.QuicSecurity = GetJsonString(quic, "security") ?? server.QuicSecurity;
+            server.QuicKey = GetJsonString(quic, "key") ?? server.QuicKey;
+            if (quic.TryGetProperty("header", out var qh))
+                server.HeaderType = GetJsonString(qh, "type") ?? server.HeaderType;
         }
 
         if (stream.TryGetProperty("tcpSettings", out var tcp) &&
@@ -377,7 +407,11 @@ public static partial class ConfigImportParser
         }
 
         if (stream.TryGetProperty("kcpSettings", out var kcp))
+        {
             server.Seed = GetJsonString(kcp, "seed") ?? server.Seed;
+            if (kcp.TryGetProperty("header", out var kh))
+                server.HeaderType = GetJsonString(kh, "type") ?? server.HeaderType;
+        }
 
         ShareLinkParser.NormalizeVisionFlow(server);
     }
@@ -435,6 +469,15 @@ public static partial class ConfigImportParser
         return list;
     }
 
+    private static string? DetectSingBoxHint(string text)
+    {
+        if (text.Contains("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("hy2://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("tuic://", StringComparison.OrdinalIgnoreCase))
+            return "Skipped Hysteria2/TUIC links (need sing-box; not in this build).";
+        return null;
+    }
+
     private static bool LooksLikeBareSubscriptionUrl(string text) =>
         !text.Contains("vmess://", StringComparison.OrdinalIgnoreCase) &&
         !text.Contains("vless://", StringComparison.OrdinalIgnoreCase) &&
@@ -458,7 +501,7 @@ public static partial class ConfigImportParser
         };
     }
 
-    [GeneratedRegex(@"(?:vmess|vless|trojan|ss|socks5?|socks)://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:vmess|vless|trojan|ss|socks5?|socks|hysteria2|hy2|tuic)://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ShareLinkPattern();
 
     [GeneratedRegex("\"([^\"]{16,})\"", RegexOptions.CultureInvariant)]

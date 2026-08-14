@@ -110,11 +110,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
         // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
         LastConnectProbeMs = null;
         using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        probeCts.CancelAfter(LatencyService.ConnectHealthProbeMs);
+        var healthBudget = LatencyService.GetConnectHealthProbeMs(server);
+        probeCts.CancelAfter(healthBudget);
         int? probeMs;
         try
         {
-            probeMs = await _latency.MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token)
+            probeMs = await _latency
+                .MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, healthBudget)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
