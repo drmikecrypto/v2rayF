@@ -135,8 +135,13 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
             ?? throw new InvalidOperationException("Unable to open Internet Settings registry key.");
 
         key.SetValue("ProxyEnable", 1, Microsoft.Win32.RegistryValueKind.DWord);
-        key.SetValue("ProxyServer", $"127.0.0.1:{XrayConfigBuilder.HttpPort}");
-        key.SetValue("ProxyOverride", "<local>", Microsoft.Win32.RegistryValueKind.String);
+        key.SetValue(
+            "ProxyServer",
+            $"http=127.0.0.1:{XrayConfigBuilder.HttpPort};https=127.0.0.1:{XrayConfigBuilder.HttpPort};socks=127.0.0.1:{XrayConfigBuilder.SocksPort}");
+        key.SetValue(
+            "ProxyOverride",
+            "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>",
+            Microsoft.Win32.RegistryValueKind.String);
 
         InternetSetOption(IntPtr.Zero, 39, IntPtr.Zero, 0);
         InternetSetOption(IntPtr.Zero, 37, IntPtr.Zero, 0);

@@ -21,9 +21,10 @@ public sealed class AdaptiveSurviveService
     /// <summary>
     /// Builds ordered temporary setting clones to retry after a failed connect wave.
     /// </summary>
-    public IReadOnlyList<SurviveAttempt> BuildRetryAttempts(AppSettings userSettings)
+    /// <param name="force">When true, build tactics even if AdaptiveSurviveEnabled is off (Smart Connect exhausted).</param>
+    public IReadOnlyList<SurviveAttempt> BuildRetryAttempts(AppSettings userSettings, bool force = false)
     {
-        if (!userSettings.AdaptiveSurviveEnabled)
+        if (!force && !userSettings.AdaptiveSurviveEnabled)
             return [];
 
         var attempts = new List<SurviveAttempt>();
@@ -38,6 +39,8 @@ public sealed class AdaptiveSurviveService
                 "Survive: enabled fragment after probe failures"));
         }
 
+        // Global + BlockIpv6; DnsThroughProxy still uses DoH servers but dns-module stays direct
+        // (see XrayConfigBuilder) so node bootstrap no longer chicken-and-eggs.
         if (!userSettings.DnsThroughProxy || !userSettings.BlockIpv6 || userSettings.RoutingMode != RoutingMode.Global)
         {
             var sentinel = Clone(userSettings);

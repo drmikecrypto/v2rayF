@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-08-14
+
+### Fixed
+
+- Live connect DNS no longer chicken-and-eggs domain nodes: outbound hosts resolve via direct `1.1.1.1` / `8.8.8.8`, and `dns-module` always routes direct (same bootstrap as speedtest)
+- Connect no longer reports Connected when only local SOCKS is listening — HTTPS proxy-path probe must succeed first
+- Windows system proxy now sets HTTP + HTTPS + SOCKS (`10809` / `10808`) with LAN bypass overrides
+- Smart Connect no longer aborts before Adaptive Survive when every latency probe times out
+- Domain nodes that fail system-DNS TCP prefilter still enter the Smart Connect shortlist; Reality peers get reserved slots
+
+### Changed
+
+- Latency Test / Smart Connect use ephemeral localhost SOCKS ports (no fixed `10818`)
+- Speedtest honors packet fragment when enabled (Vision excluded); Smart Connect probe budget raised to 10s
+- Local SOCKS/HTTP inbounds enable sniffing for domain-based routing under system proxy
+
+### Tests
+
+- Connect reliability config tests for DNS bootstrap, fragment speedtest, Reality/domain shortlist, and Survive candidate selection
+
 ## [1.4.8] - 2026-08-12
 
 ### Removed
@@ -328,6 +348,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundled [Xray-core](https://github.com/XTLS/Xray-core) with geo data in release packages
 - GitHub Actions workflow for automated multi-platform releases
 
+[1.4.9]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.9
 [1.4.8]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.8
 [1.4.7]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.7
 [1.4.6]: https://github.com/drmikecrypto/v2rayF/releases/tag/v1.4.6

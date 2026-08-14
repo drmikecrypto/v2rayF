@@ -126,10 +126,12 @@ public static class XrayConfigBuilder
             ["settings"] = new JsonObject()
         });
 
+        var outboundHosts = CollectOutboundDomainHosts(peers);
+
         var config = new JsonObject
         {
             ["log"] = new JsonObject { ["loglevel"] = "warning" },
-            ["dns"] = BuildDns(settings),
+            ["dns"] = BuildDns(settings, outboundHosts),
             ["inbounds"] = inbounds,
             ["outbounds"] = outbounds,
             ["routing"] = BuildRouting(settings, useBalancer),
@@ -181,8 +183,35 @@ public static class XrayConfigBuilder
         return config.ToJsonString(CompactJson);
     }
 
-    public static string BuildSpeedtest(ProxyServer server, int socksPort = SpeedtestSocksPort)
+    public static string BuildSpeedtest(
+        ProxyServer server,
+        int socksPort = SpeedtestSocksPort,
+        bool enableFragment = false)
     {
+        var useFragment = AdaptiveSurviveService.ShouldApplyFragmentForServer(server, enableFragment);
+        var outbounds = new JsonArray();
+        if (useFragment)
+        {
+            outbounds.Add(new JsonObject
+            {
+                ["tag"] = "fragment",
+                ["protocol"] = "freedom",
+                ["settings"] = new JsonObject
+                {
+                    ["fragment"] = new JsonObject
+                    {
+                        ["packets"] = "tlshello",
+                        ["length"] = "100-200",
+                        ["interval"] = "10-20"
+                    }
+                }
+            });
+        }
+
+        outbounds.Add(BuildOutbound(server, "proxy", useFragment));
+        outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
+        outbounds.Add(new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" });
+
         var config = new JsonObject
         {
             ["log"] = new JsonObject { ["loglevel"] = "warning" },
@@ -205,12 +234,7 @@ public static class XrayConfigBuilder
                     ["settings"] = new JsonObject { ["udp"] = false }
                 }
             },
-            ["outbounds"] = new JsonArray
-            {
-                BuildOutbound(server, "proxy", enableFragment: false),
-                new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" },
-                new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" }
-            },
+            ["outbounds"] = outbounds,
             ["routing"] = new JsonObject
             {
                 ["domainStrategy"] = "AsIs",
@@ -222,12 +246,7 @@ public static class XrayConfigBuilder
                         ["inboundTag"] = new JsonArray { "dns-module" },
                         ["outboundTag"] = "direct"
                     },
-                    new JsonObject
-                    {
-                        ["type"] = "field",
-                        ["ip"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
-                        ["outboundTag"] = "direct"
-                    },
+                    PublicDnsDirectRule(),
                     new JsonObject
                     {
                         ["type"] = "field",
@@ -288,7 +307,7 @@ public static class XrayConfigBuilder
         return list;
     }
 
-    private static JsonObject BuildDns(AppSettings settings)
+    private static JsonObject BuildDns(AppSettings settings, IReadOnlyList<string> outboundDomainHosts)
     {
         var dns = new JsonObject
         {
@@ -296,30 +315,74 @@ public static class XrayConfigBuilder
             ["tag"] = "dns-module"
         };
 
+        var servers = new JsonArray();
+
+        // Bootstrap: resolve outbound hostnames via direct UDP DNS (avoids chicken-and-egg
+        // when general DNS is DoH-through-proxy).
+        if (outboundDomainHosts.Count > 0)
+        {
+            var domains = new JsonArray();
+            foreach (var host in outboundDomainHosts)
+                domains.Add($"full:{host}");
+
+            servers.Add(new JsonObject
+            {
+                ["address"] = "1.1.1.1",
+                ["domains"] = domains.DeepClone(),
+                ["skipFallback"] = true
+            });
+            servers.Add(new JsonObject
+            {
+                ["address"] = "8.8.8.8",
+                ["domains"] = domains,
+                ["skipFallback"] = true
+            });
+        }
+
         if (settings.DnsThroughProxy)
         {
-            // DoH endpoints; traffic tagged dns-module is routed through the proxy.
-            dns["servers"] = new JsonArray
+            // App DNS via DoH; 1.1.1.1/8.8.8.8 stay direct (see BuildRouting).
+            servers.Add(new JsonObject
             {
-                new JsonObject
-                {
-                    ["address"] = "https://1.1.1.1/dns-query",
-                    ["skipFallback"] = false
-                },
-                new JsonObject
-                {
-                    ["address"] = "https://8.8.8.8/dns-query",
-                    ["skipFallback"] = false
-                }
-            };
+                ["address"] = "https://1.1.1.1/dns-query",
+                ["skipFallback"] = false
+            });
+            servers.Add(new JsonObject
+            {
+                ["address"] = "https://8.8.8.8/dns-query",
+                ["skipFallback"] = false
+            });
         }
         else
         {
-            dns["servers"] = new JsonArray { "1.1.1.1", "8.8.8.8" };
+            servers.Add("1.1.1.1");
+            servers.Add("8.8.8.8");
         }
 
+        dns["servers"] = servers;
         return dns;
     }
+
+    private static List<string> CollectOutboundDomainHosts(IEnumerable<ProxyServer> peers)
+    {
+        var hosts = new List<string>();
+        foreach (var peer in peers)
+        {
+            var host = peer.Address?.Trim();
+            if (string.IsNullOrWhiteSpace(host))
+                continue;
+            if (IPAddressLooksLike(host))
+                continue;
+            if (hosts.Any(h => string.Equals(h, host, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            hosts.Add(host);
+        }
+
+        return hosts;
+    }
+
+    private static bool IPAddressLooksLike(string host) =>
+        System.Net.IPAddress.TryParse(host, out _);
 
     private static JsonObject BuildApiInbound() => new()
     {
@@ -342,13 +405,15 @@ public static class XrayConfigBuilder
             }
         };
 
-        // Xray DNS module traffic → proxy (or balancer).
-        if (settings.DnsThroughProxy)
+        // Public resolvers + DNS module always direct (node bootstrap). DnsThroughProxy only
+        // selects DoH vs UDP servers in BuildDns — never hairpin DNS through the proxy.
+        rules.Add(PublicDnsDirectRule());
+        rules.Add(new JsonObject
         {
-            rules.Add(MakeOutboundRule(
-                useBalancer,
-                inboundTag: "dns-module"));
-        }
+            ["type"] = "field",
+            ["inboundTag"] = new JsonArray { "dns-module" },
+            ["outboundTag"] = "direct"
+        });
 
         // App DNS on TUN/local → dns outbound (resolved via dns module above).
         rules.Add(new JsonObject
@@ -430,25 +495,12 @@ public static class XrayConfigBuilder
         };
     }
 
-    private static JsonObject MakeOutboundRule(bool useBalancer, string inboundTag)
+    private static JsonObject PublicDnsDirectRule() => new()
     {
-        if (useBalancer)
-        {
-            return new JsonObject
-            {
-                ["type"] = "field",
-                ["inboundTag"] = new JsonArray { inboundTag },
-                ["balancerTag"] = "balancer"
-            };
-        }
-
-        return new JsonObject
-        {
-            ["type"] = "field",
-            ["inboundTag"] = new JsonArray { inboundTag },
-            ["outboundTag"] = "proxy"
-        };
-    }
+        ["type"] = "field",
+        ["ip"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
+        ["outboundTag"] = "direct"
+    };
 
     private static JsonObject PrivateLanDirectRule() => new()
     {
@@ -467,6 +519,13 @@ public static class XrayConfigBuilder
             "::1/128"
         },
         ["outboundTag"] = "direct"
+    };
+
+    private static JsonObject LocalSniffing() => new()
+    {
+        ["enabled"] = true,
+        ["destOverride"] = new JsonArray { "http", "tls", "quic" },
+        ["routeOnly"] = false
     };
 
     private static void AppendCustomRules(
@@ -519,7 +578,8 @@ public static class XrayConfigBuilder
         ["port"] = port,
         ["listen"] = listen,
         ["protocol"] = "socks",
-        ["settings"] = new JsonObject { ["udp"] = true }
+        ["settings"] = new JsonObject { ["udp"] = true },
+        ["sniffing"] = LocalSniffing()
     };
 
     private static JsonObject BuildLocalHttpInbound(string tag, int port, string listen) => new()
@@ -527,7 +587,8 @@ public static class XrayConfigBuilder
         ["tag"] = tag,
         ["port"] = port,
         ["listen"] = listen,
-        ["protocol"] = "http"
+        ["protocol"] = "http",
+        ["sniffing"] = LocalSniffing()
     };
 
     private static JsonObject BuildShareSocksInbound(int port, string user, string pass, string listen) => new()

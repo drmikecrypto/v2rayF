@@ -30,8 +30,15 @@ public sealed class LatencyService
     private readonly SemaphoreSlim _speedtestLock = new(1, 1);
 
     public const int TimeoutMs = 10000;
-    /// <summary>Per-probe budget during Smart Connect ranking (keeps connect agile).</summary>
-    public const int RankProbeTimeoutMs = 4500;
+    /// <summary>Per-probe budget during Smart Connect ranking (matches manual Test).</summary>
+    public const int RankProbeTimeoutMs = 10000;
+    /// <summary>Max wait for speedtest SOCKS to bind before probing.</summary>
+    public const int CoreReadyWaitMs = 2000;
+    /// <summary>Post-connect live SOCKS health probe budget.</summary>
+    public const int ConnectHealthProbeMs = 10000;
+
+    /// <summary>Last core/speedtest failure detail (sanitized for UI).</summary>
+    public string? LastProbeError { get; private set; }
 
     public LatencyService(ICoreEnvironment environment)
     {
@@ -51,9 +58,12 @@ public sealed class LatencyService
     /// Proxy-path delay only. Returns -1 when the node does not successfully proxy an HTTPS probe
     /// (TCP-only reachability is never reported as a successful ping).
     /// </summary>
-    public async Task<int?> MeasureAsync(ProxyServer server, CancellationToken cancellationToken = default)
+    public async Task<int?> MeasureAsync(
+        ProxyServer server,
+        CancellationToken cancellationToken = default,
+        bool enableFragment = false)
     {
-        var detailed = await MeasureDetailedAsync(server, cancellationToken).ConfigureAwait(false);
+        var detailed = await MeasureDetailedAsync(server, cancellationToken, enableFragment).ConfigureAwait(false);
         if (detailed.ProxyPathOk && detailed.LatencyMs is >= 0)
             return detailed.LatencyMs;
 
@@ -67,15 +77,20 @@ public sealed class LatencyService
     /// contain a TCP fallback for Smart Connect prefilter scoring, but ProxyPathOk is false.
     /// UI Test/Test All must use <see cref="MeasureAsync"/> so TCP-only never looks like a ping.
     /// </summary>
-    public async Task<LatencyResult> MeasureDetailedAsync(ProxyServer server, CancellationToken cancellationToken = default)
+    public async Task<LatencyResult> MeasureDetailedAsync(
+        ProxyServer server,
+        CancellationToken cancellationToken = default,
+        bool enableFragment = false)
     {
+        LastProbeError = null;
         if (string.IsNullOrWhiteSpace(server.Address) || server.Port <= 0)
             return new LatencyResult(null, false);
 
         await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
         if (File.Exists(_environment.GetCorePath()))
         {
-            var proxyResult = await MeasureViaCoreAsync(server, cancellationToken).ConfigureAwait(false);
+            var proxyResult = await MeasureViaCoreAsync(server, enableFragment, cancellationToken)
+                .ConfigureAwait(false);
             if (proxyResult.HasValue && proxyResult.Value >= 0)
                 return new LatencyResult(proxyResult, true);
         }
@@ -92,22 +107,29 @@ public sealed class LatencyService
         return await ProbeThroughSocksAsync(socksPort, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<int?> MeasureViaCoreAsync(ProxyServer server, CancellationToken cancellationToken)
+    private async Task<int?> MeasureViaCoreAsync(
+        ProxyServer server,
+        bool enableFragment,
+        CancellationToken cancellationToken)
     {
         await _speedtestLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
-            var configPath = Path.Combine(configDir, "speedtest.json");
+            var configPath = Path.Combine(configDir, $"speedtest-{socksPort}.json");
             await File.WriteAllTextAsync(
                 configPath,
-                XrayConfigBuilder.BuildSpeedtest(server),
+                XrayConfigBuilder.BuildSpeedtest(server, socksPort, enableFragment),
                 cancellationToken).ConfigureAwait(false);
 
             var corePath = _environment.GetCorePath();
             if (!File.Exists(corePath))
+            {
+                LastProbeError = "Xray core not found.";
                 return null;
+            }
 
             await _speedtestHost.StartAsync(
                 corePath,
@@ -116,12 +138,27 @@ public sealed class LatencyService
                 tunFd: null,
                 cancellationToken).ConfigureAwait(false);
 
-            await WaitForCoreReadyAsync(cancellationToken).ConfigureAwait(false);
+            await WaitForCoreReadyAsync(socksPort, cancellationToken).ConfigureAwait(false);
             if (_speedtestHost.HasExited)
+            {
+                await Task.Delay(100, CancellationToken.None).ConfigureAwait(false);
+                var err = _speedtestHost.GetRecentError();
+                LastProbeError = string.IsNullOrWhiteSpace(err)
+                    ? "Speedtest core exited before SOCKS was ready."
+                    : StatusSanitizer.Scrub(err);
                 return -1;
+            }
 
-            return await ProbeThroughSocksAsync(XrayConfigBuilder.SpeedtestSocksPort, cancellationToken)
-                .ConfigureAwait(false);
+            if (!await IsPortOpenAsync("127.0.0.1", socksPort, cancellationToken).ConfigureAwait(false))
+            {
+                LastProbeError = $"Speedtest SOCKS did not bind on 127.0.0.1:{socksPort}.";
+                return -1;
+            }
+
+            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken).ConfigureAwait(false);
+            if (ms is null or < 0)
+                LastProbeError ??= "Proxy-path HTTPS probe timed out.";
+            return ms;
         }
         finally
         {
@@ -130,19 +167,32 @@ public sealed class LatencyService
         }
     }
 
-    private async Task WaitForCoreReadyAsync(CancellationToken cancellationToken)
+    private async Task WaitForCoreReadyAsync(int socksPort, CancellationToken cancellationToken)
     {
-        // ~4s budget (was ~2s) so domain DNS + Reality handshake can finish before we probe.
-        for (var i = 0; i < 80; i++)
+        var iterations = Math.Max(1, CoreReadyWaitMs / 50);
+        for (var i = 0; i < iterations; i++)
         {
             if (_speedtestHost.HasExited)
                 return;
 
-            if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SpeedtestSocksPort, cancellationToken)
-                    .ConfigureAwait(false))
+            if (await IsPortOpenAsync("127.0.0.1", socksPort, cancellationToken).ConfigureAwait(false))
                 return;
 
             await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static int GetFreeTcpPort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            return ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 

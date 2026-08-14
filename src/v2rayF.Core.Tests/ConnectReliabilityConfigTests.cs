@@ -1,0 +1,193 @@
+using System.Text.Json.Nodes;
+using v2rayF.Models;
+using v2rayF.Services;
+
+namespace v2rayF.Core.Tests;
+
+public class ConnectReliabilityConfigTests
+{
+    [Fact]
+    public void Build_IncludesOutboundHostDirectDnsAndPublicResolverDirectRules()
+    {
+        var server = new ProxyServer
+        {
+            Name = "domain-node",
+            Protocol = ProxyProtocol.VLESS,
+            Address = "rfau8vd61dcf.dop33.com",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid().ToString(),
+            Security = "tls",
+            Network = "tcp"
+        };
+
+        var settings = new AppSettings { DnsThroughProxy = true };
+        var root = JsonNode.Parse(XrayConfigBuilder.Build(server, settings))!.AsObject();
+
+        var dnsServers = root["dns"]!["servers"]!.AsArray();
+        Assert.True(dnsServers.Count >= 3);
+
+        var bootstrap = dnsServers
+            .Select(n => n as JsonObject)
+            .FirstOrDefault(o => o?["address"]?.GetValue<string>() == "1.1.1.1" && o["domains"] is not null);
+        Assert.NotNull(bootstrap);
+        var domains = bootstrap!["domains"]!.AsArray().Select(d => d!.GetValue<string>()).ToList();
+        Assert.Contains("full:rfau8vd61dcf.dop33.com", domains);
+
+        var rules = root["routing"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "direct" &&
+            r["ip"] is JsonArray ips &&
+            ips.Any(i => i!.GetValue<string>() == "1.1.1.1") &&
+            ips.Any(i => i!.GetValue<string>() == "8.8.8.8"));
+
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "direct" &&
+            r["inboundTag"] is JsonArray tags &&
+            tags.Any(t => t!.GetValue<string>() == "dns-module"));
+
+        var socks = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "socks-in")!;
+        Assert.True(socks["sniffing"]!["enabled"]!.GetValue<bool>());
+        var http = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "http-in")!;
+        Assert.True(http["sniffing"]!["enabled"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Build_DnsThroughProxyFalse_StillRoutesDnsModuleDirect()
+    {
+        var server = new ProxyServer
+        {
+            Name = "ip-node",
+            Protocol = ProxyProtocol.VLESS,
+            Address = "169.40.32.81",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid().ToString(),
+            Network = "tcp"
+        };
+
+        var root = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings { DnsThroughProxy = false }))!;
+        var rules = root["routing"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "direct" &&
+            r["inboundTag"] is JsonArray tags &&
+            tags.Any(t => t!.GetValue<string>() == "dns-module"));
+    }
+
+    [Fact]
+    public void BuildSpeedtest_EphemeralPortAndFragmentDialer()
+    {
+        var server = new ProxyServer
+        {
+            Name = "frag",
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid().ToString(),
+            Security = "tls",
+            Network = "tcp"
+        };
+
+        var speed = JsonNode.Parse(XrayConfigBuilder.BuildSpeedtest(server, socksPort: 34567, enableFragment: true))!;
+        Assert.Equal(34567, speed["inbounds"]![0]!["port"]!.GetValue<int>());
+        Assert.Contains(speed["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
+        var proxy = speed["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal("fragment", proxy["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void BuildSpeedtest_Vision_SkipsFragmentDialer()
+    {
+        var server = new ProxyServer
+        {
+            Name = "vision",
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            UserId = Guid.NewGuid().ToString(),
+            Security = "reality",
+            Network = "tcp",
+            Flow = "xtls-rprx-vision",
+            PublicKey = "test"
+        };
+
+        var speed = JsonNode.Parse(XrayConfigBuilder.BuildSpeedtest(server, enableFragment: true))!;
+        Assert.DoesNotContain(speed["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
+    }
+}
+
+public class SmartConnectShortlistTests
+{
+    [Fact]
+    public void BuildShortlist_ReservesRealityAndIncludesFailedDomainTcp()
+    {
+        var servers = new List<(ProxyServer Server, int TcpMs)>();
+        for (var i = 0; i < 8; i++)
+        {
+            servers.Add((new ProxyServer
+            {
+                Name = $"tcp-{i}",
+                Address = $"1.1.1.{i + 1}",
+                Port = 443,
+                Id = Guid.NewGuid()
+            }, 10 + i));
+        }
+
+        var reality = new ProxyServer
+        {
+            Name = "reality-slow",
+            Address = "9.9.9.9",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            Security = "reality"
+        };
+        servers.Add((reality, 5000));
+
+        var domain = new ProxyServer
+        {
+            Name = "domain-fail",
+            Address = "node.example.com",
+            Port = 443,
+            Id = Guid.NewGuid()
+        };
+        servers.Add((domain, int.MaxValue));
+
+        var arr = servers.ToArray();
+        var reachable = arr.Where(t => t.TcpMs < int.MaxValue).OrderBy(t => t.TcpMs).ToList();
+        var shortlist = SmartConnectService.BuildShortlist(arr, reachable);
+
+        Assert.Contains(shortlist, s => s.Id == reality.Id);
+        Assert.Contains(shortlist, s => s.Id == domain.Id);
+        Assert.True(shortlist.Count <= SmartConnectService.TcpPrefilterLimit);
+    }
+
+    [Fact]
+    public void SelectSurviveConnectOrder_ReturnsCandidatesWhenNoProxyPathOk()
+    {
+        var latency = new LatencyService(new FakeEnv());
+        var smart = new SmartConnectService(latency);
+        var a = new ProxyServer { Name = "A", Address = "node.example.com", Port = 443, Security = "reality" };
+        var b = new ProxyServer { Name = "B", Address = "2.2.2.2", Port = 443 };
+        var ranked = new List<SmartConnectService.RankedServer>
+        {
+            new(a, int.MaxValue - 1, -1, false),
+            new(b, int.MaxValue - 1, 40, false)
+        };
+
+        Assert.Empty(smart.SelectConnectOrder(ranked, preferred: null, lastGoodServerId: null));
+        var survive = smart.SelectSurviveConnectOrder(ranked, preferred: null, lastGoodServerId: null);
+        Assert.NotEmpty(survive);
+        Assert.Equal(a.Id, survive[0].Id);
+    }
+
+    private sealed class FakeEnv : ICoreEnvironment
+    {
+        public string GetDataDirectory() => Path.GetTempPath();
+        public string GetCoresDirectory() => Path.GetTempPath();
+        public string GetCorePath() => Path.Combine(Path.GetTempPath(), "missing-xray");
+        public Task EnsureCoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ICoreProcessHost CreateProcessHost() => new ManagedCoreProcessHost();
+    }
+}

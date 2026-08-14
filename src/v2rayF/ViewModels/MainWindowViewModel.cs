@@ -820,9 +820,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
         StatusText = "Testing proxy delay…";
         await MeasureLatencyAsync(SelectedServer);
-        StatusText = SelectedServer.LatencyMs is > 0
-            ? $"Proxy delay: {SelectedServer.LatencyMs} ms"
-            : "Proxy delay: timeout (proxy probe failed)";
+        if (SelectedServer.LatencyMs is > 0)
+            StatusText = $"Proxy delay: {SelectedServer.LatencyMs} ms";
+        else if (string.IsNullOrWhiteSpace(StatusText) || StatusText.StartsWith("Testing", StringComparison.Ordinal))
+            StatusText = "Proxy delay: timeout (proxy probe failed)";
     }
 
     [RelayCommand]
@@ -847,7 +848,9 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     RunOnUiThread(() => server.SetLatency(null));
                     // MeasureAsync reports proxy-path only (-1 when TCP-only).
-                    var ms = await _latencyService.MeasureAsync(server).ConfigureAwait(false);
+                    var ms = await _latencyService.MeasureAsync(
+                        server,
+                        enableFragment: _settings.EnablePacketFragment).ConfigureAwait(false);
                     RunOnUiThread(() => server.SetLatency(ms));
                 }
                 finally
@@ -870,9 +873,16 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         RunOnUiThread(() => server.SetLatency(null));
 
-        var result = await _latencyService.MeasureAsync(server);
+        var result = await _latencyService.MeasureAsync(
+            server,
+            enableFragment: _settings.EnablePacketFragment);
 
-        RunOnUiThread(() => server.SetLatency(result));
+        RunOnUiThread(() =>
+        {
+            server.SetLatency(result);
+            if (result is null or < 0 && !string.IsNullOrWhiteSpace(_latencyService.LastProbeError))
+                StatusText = $"Proxy delay: timeout ({_latencyService.LastProbeError})";
+        });
     }
 
     [RelayCommand]
@@ -997,11 +1007,15 @@ public partial class MainWindowViewModel : ViewModelBase
             await ResumeOnUiAsync().ConfigureAwait(true);
 
             IReadOnlyList<ProxyServer> candidates;
+            var forceSurviveWaves = false;
             if (settings.SmartConnectEnabled && Servers.Count > 0)
             {
                 await SetOnUiAsync(() => StatusText = "Smart Connect — probing servers…").ConfigureAwait(true);
                 var serversSnapshot = Servers.ToList();
-                _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                _lastRanking = await _smartConnect.RankAsync(
+                    serversSnapshot,
+                    token,
+                    settings.EnablePacketFragment).ConfigureAwait(false);
                 await ResumeOnUiAsync().ConfigureAwait(true);
                 await SetOnUiAsync(() =>
                 {
@@ -1016,12 +1030,26 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 if (candidates.Count == 0)
                 {
-                    await SetOnUiAsync(() =>
+                    // Do not abort — Adaptive Survive (fragment/Sentinel) may still succeed.
+                    candidates = _smartConnect.SelectSurviveConnectOrder(
+                        _lastRanking,
+                        SelectedServer,
+                        settings.LastGoodServerId);
+
+                    if (candidates.Count == 0)
                     {
-                        StatusText = "Smart Connect: no working proxy paths (all timed out).";
-                        ConnectionState = ConnectionState.Failed;
-                    }).ConfigureAwait(true);
-                    return;
+                        await SetOnUiAsync(() =>
+                        {
+                            StatusText = "Smart Connect: no candidates to try.";
+                            ConnectionState = ConnectionState.Failed;
+                        }).ConfigureAwait(true);
+                        return;
+                    }
+
+                    forceSurviveWaves = true;
+                    await SetOnUiAsync(() =>
+                        StatusText = "Smart Connect: no proxy-path OK — trying Survive tactics…")
+                        .ConfigureAwait(true);
                 }
             }
             else
@@ -1040,7 +1068,10 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (settings.SmartMultipathEnabled && Servers.Count > 1)
                 {
                     var serversSnapshot = Servers.ToList();
-                    _lastRanking = await _smartConnect.RankAsync(serversSnapshot, token).ConfigureAwait(false);
+                    _lastRanking = await _smartConnect.RankAsync(
+                        serversSnapshot,
+                        token,
+                        settings.EnablePacketFragment).ConfigureAwait(false);
                     await ResumeOnUiAsync().ConfigureAwait(true);
                 }
             }
@@ -1051,9 +1082,9 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 (settings, null, null)
             };
-            if (settings.AdaptiveSurviveEnabled && settings.SmartConnectEnabled)
+            if ((settings.AdaptiveSurviveEnabled || forceSurviveWaves) && settings.SmartConnectEnabled)
             {
-                foreach (var survive in _adaptiveSurvive.BuildRetryAttempts(settings))
+                foreach (var survive in _adaptiveSurvive.BuildRetryAttempts(settings, force: forceSurviveWaves))
                     attempts.Add((survive.Settings, survive.Tactic, survive.StatusReason));
             }
 
@@ -1584,8 +1615,12 @@ public partial class MainWindowViewModel : ViewModelBase
             ShowTrafficStats = true;
             UploadTrafficText = TrafficStatsService.FormatUploadRate(0);
             DownloadTrafficText = TrafficStatsService.FormatDownloadRate(0);
-            ConnectedPingText = SelectedServer?.LatencyMs is > 0 ? $"{SelectedServer.LatencyMs}" : "";
-            TrafficStatsHub.Shared.ConnectedPingMs = SelectedServer?.LatencyMs is > 0 ? SelectedServer.LatencyMs : null;
+            // Do not seed from stale list latency — only show after live SOCKS probe.
+            var live = _proxyCore.LastConnectProbeMs;
+            ConnectedPingText = live is > 0 ? $"{live}" : "";
+            TrafficStatsHub.Shared.ConnectedPingMs = live is > 0 ? live : null;
+            if (live is > 0 && SelectedServer is not null)
+                SelectedServer.SetLatency(live);
         });
 
         TrafficStatsHub.Shared.Updated += OnHubTrafficUpdated;
@@ -1642,9 +1677,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task ConnectedPingLoopAsync(CancellationToken cancellationToken)
     {
-        // Seed from last test if available.
-        if (SelectedServer?.LatencyMs is int seed and > 0)
-            TrafficStatsHub.Shared.ConnectedPingMs = seed;
+        // Prefer the post-connect health probe; never invent ping from an old Test result.
+        if (_proxyCore.LastConnectProbeMs is int live and > 0)
+            TrafficStatsHub.Shared.ConnectedPingMs = live;
 
         while (!cancellationToken.IsCancellationRequested)
         {

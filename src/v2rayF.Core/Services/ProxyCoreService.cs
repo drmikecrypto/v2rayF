@@ -14,6 +14,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int HealthCheckIntervalMs = 4000;
 
     private readonly ICoreEnvironment _environment;
+    private readonly LatencyService _latency;
     private string? _configPath;
     private CancellationTokenSource? _healthCts;
     private int _unexpectedHandled;
@@ -23,8 +24,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public ProxyCoreService(ICoreEnvironment environment)
     {
         _environment = environment;
+        _latency = new LatencyService(environment);
         ProcessHost.UnexpectedExited += OnUnexpectedExited;
     }
+
+    /// <summary>Last successful post-connect proxy-path RTT (ms), if health probe ran.</summary>
+    public int? LastConnectProbeMs { get; private set; }
 
     public bool IsRunning => ProcessHost.IsRunning;
 
@@ -102,6 +107,30 @@ public sealed class ProxyCoreService : IAsyncDisposable
             throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
         }
 
+        // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
+        LastConnectProbeMs = null;
+        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        probeCts.CancelAfter(LatencyService.ConnectHealthProbeMs);
+        int? probeMs;
+        try
+        {
+            probeMs = await _latency.MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            probeMs = -1;
+        }
+
+        if (probeMs is null or < 0)
+        {
+            await StopAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(
+                "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.");
+        }
+
+        LastConnectProbeMs = probeMs;
+
         ActiveServer = server;
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
@@ -112,6 +141,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         // Prevent unexpected-exit handlers from racing a deliberate stop.
         Interlocked.Exchange(ref _unexpectedHandled, 1);
         StopHealthMonitor();
+        LastConnectProbeMs = null;
         await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
         ActiveServer = null;
         RunningStateChanged?.Invoke(this, false);

@@ -34,6 +34,24 @@ public class AdaptiveSurviveServiceTests
     }
 
     [Fact]
+    public void BuildRetryAttempts_Force_WorksWhenDisabled()
+    {
+        var svc = new AdaptiveSurviveService();
+        var settings = new AppSettings
+        {
+            AdaptiveSurviveEnabled = false,
+            EnablePacketFragment = false,
+            DnsThroughProxy = false,
+            BlockIpv6 = false,
+            RoutingMode = RoutingMode.BypassLan
+        };
+
+        var attempts = svc.BuildRetryAttempts(settings, force: true);
+        Assert.NotEmpty(attempts);
+        Assert.Contains(attempts, a => a.Tactic == AdaptiveSurviveService.TacticFragment);
+    }
+
+    [Fact]
     public void MaxSurviveCandidates_KeepsRetriesTight()
     {
         Assert.True(AdaptiveSurviveService.MaxSurviveCandidates <= 2);
