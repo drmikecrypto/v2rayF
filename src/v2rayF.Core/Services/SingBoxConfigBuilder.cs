@@ -51,6 +51,11 @@ public static class SingBoxConfigBuilder
             {
                 new JsonObject
                 {
+                    ["ip_version"] = 6,
+                    ["outbound"] = "block"
+                },
+                new JsonObject
+                {
                     ["ip_is_private"] = true,
                     ["outbound"] = "direct"
                 }
@@ -87,6 +92,10 @@ public static class SingBoxConfigBuilder
             ["server_port"] = server.Port,
             ["password"] = server.Password
         };
+        if (server.UpMbps > 0)
+            o["up_mbps"] = server.UpMbps;
+        if (server.DownMbps > 0)
+            o["down_mbps"] = server.DownMbps;
         if (!string.IsNullOrWhiteSpace(server.Path))
             o["obfs"] = new JsonObject
             {
@@ -99,6 +108,11 @@ public static class SingBoxConfigBuilder
 
     private static JsonObject BuildTuic(ProxyServer server)
     {
+        var congestion = string.IsNullOrWhiteSpace(server.Mode) ? "bbr" : server.Mode;
+        // Mode holds congestion_control; never treat udp_relay_mode values as congestion.
+        if (congestion is "native" or "quic")
+            congestion = "bbr";
+
         var o = new JsonObject
         {
             ["type"] = "tuic",
@@ -107,8 +121,10 @@ public static class SingBoxConfigBuilder
             ["server_port"] = server.Port,
             ["uuid"] = string.IsNullOrWhiteSpace(server.UserId) ? server.Password : server.UserId,
             ["password"] = server.Password,
-            ["congestion_control"] = string.IsNullOrWhiteSpace(server.Mode) ? "bbr" : server.Mode
+            ["congestion_control"] = congestion
         };
+        if (!string.IsNullOrWhiteSpace(server.UdpRelayMode))
+            o["udp_relay_mode"] = server.UdpRelayMode.Trim();
         o["tls"] = BuildTls(server);
         return o;
     }
@@ -148,7 +164,7 @@ public static class SingBoxConfigBuilder
             ["private_key"] = server.Password,
             ["local_address"] = BuildLocalAddress(server),
             ["peers"] = new JsonArray { peer },
-            ["mtu"] = 1400
+            ["mtu"] = server.Mtu > 0 ? server.Mtu : 1400
         };
     }
 

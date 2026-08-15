@@ -183,19 +183,24 @@ public static partial class ClashMetaImportParser
                 server.Sni = Get(map, "sni") ?? Get(map, "servername") ?? "";
                 server.Path = Get(map, "obfs-password") ?? "";
                 server.AllowInsecure = Get(map, "skip-cert-verify") is "true" or "1";
+                server.UpMbps = ShareLinkParser.ParseMbps(Get(map, "up") ?? Get(map, "upmbps"));
+                server.DownMbps = ShareLinkParser.ParseMbps(Get(map, "down") ?? Get(map, "downmbps"));
                 break;
             case "tuic":
                 server.Protocol = ProxyProtocol.Tuic;
                 server.UserId = Get(map, "uuid") ?? "";
                 server.Password = Get(map, "password") ?? "";
                 server.Sni = Get(map, "sni") ?? "";
-                server.Mode = Get(map, "congestion-controller") ?? "bbr";
+                server.Mode = Get(map, "congestion-controller") ?? Get(map, "congestion_control") ?? "bbr";
+                server.UdpRelayMode = Get(map, "udp-relay-mode") ?? Get(map, "udp_relay_mode") ?? "";
                 break;
             case "wireguard":
                 server.Protocol = ProxyProtocol.WireGuard;
                 server.Password = Get(map, "private-key") ?? Get(map, "privateKey") ?? "";
                 server.PublicKey = Get(map, "public-key") ?? Get(map, "publicKey") ?? "";
                 server.Path = Get(map, "ip") ?? Get(map, "address") ?? "10.0.0.2/32";
+                if (int.TryParse(Get(map, "mtu"), out var mtu) && mtu > 0)
+                    server.Mtu = mtu;
                 break;
             case "anytls":
                 server.Protocol = ProxyProtocol.AnyTls;

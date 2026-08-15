@@ -28,4 +28,13 @@ After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision
 
 ## While connected
 
-Traffic rates poll every **5s** (single-flight). Health checks need **three** SOCKS misses before a drop. Kill switch requires **TUN**; with system proxy only, apps are not blackholed. Secure DNS (DoH) is off by default for lower first-hit latency.
+Traffic rates poll every **5s** (single-flight). Health checks need **three** SOCKS misses before a drop. Kill switch requires **TUN**; with system proxy only, apps are not blackholed.
+
+**Secure DNS (DoH)** is off by default for lower first-hit latency. When enabled, Xray resolves via Cloudflare/Google DoH on the **direct** path (not hairpinned through the proxy)—safer DNS, but new domains can feel slower to open. Leave it off if you want the snappiest browsing; turn it on when you care about encrypted DNS.
+
+## Protocol throughput notes
+
+- **Hysteria2** — `up` / `down` (Mbps) from share links and Clash are applied as `up_mbps` / `down_mbps` in sing-box. Missing values use sing-box defaults (do not invent fake Mbps).
+- **TUIC** — congestion defaults to `bbr`; `udp_relay_mode` is honored when present.
+- **WireGuard** — link/Clash `mtu` is honored; otherwise 1400.
+- **VLESS Vision / REALITY / classic Xray** — no mux; fragment only if you enable Packet fragment / Adaptive Survive (slow).

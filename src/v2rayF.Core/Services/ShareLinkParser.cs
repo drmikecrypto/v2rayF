@@ -417,6 +417,10 @@ public static class ShareLinkParser
             Path = GetQuery(query, "obfs-password") ?? GetQuery(query, "obfsPassword") ?? "",
             AllowInsecure = GetQuery(query, "insecure") is "1" or "true",
             Fingerprint = GetQuery(query, "pinSHA256") ?? GetQuery(query, "fp") ?? "",
+            UpMbps = ParseMbps(
+                GetQuery(query, "upmbps") ?? GetQuery(query, "up")),
+            DownMbps = ParseMbps(
+                GetQuery(query, "downmbps") ?? GetQuery(query, "down")),
             RawLink = link
         };
     }
@@ -443,6 +447,7 @@ public static class ShareLinkParser
             Password = password,
             Sni = GetQuery(query, "sni") ?? "",
             Mode = GetQuery(query, "congestion_control") ?? GetQuery(query, "congestion") ?? "bbr",
+            UdpRelayMode = GetQuery(query, "udp_relay_mode") ?? GetQuery(query, "udp-relay-mode") ?? "",
             AllowInsecure = GetQuery(query, "allow_insecure") is "1" or "true" ||
                             GetQuery(query, "insecure") is "1" or "true",
             Alpn = GetQuery(query, "alpn") ?? "",
@@ -478,6 +483,8 @@ public static class ShareLinkParser
 
         var query = ParseQuery(uri.Query);
         var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        var mtu = 0;
+        _ = int.TryParse(GetQuery(query, "mtu"), out mtu);
         return new ProxyServer
         {
             Protocol = ProxyProtocol.WireGuard,
@@ -488,8 +495,27 @@ public static class ShareLinkParser
             PublicKey = GetQuery(query, "publickey") ?? GetQuery(query, "publicKey") ?? GetQuery(query, "peer") ?? "",
             Path = GetQuery(query, "address") ?? GetQuery(query, "local") ?? "10.0.0.2/32",
             ShortId = GetQuery(query, "reserved") ?? "",
+            Mtu = mtu > 0 ? mtu : 0,
             RawLink = link
         };
+    }
+
+    /// <summary>Parses Mbps from share/Clash values like "100", "100 Mbps", or "100Mbps".</summary>
+    internal static int ParseMbps(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return 0;
+        var s = raw.Trim();
+        var end = 0;
+        while (end < s.Length && (char.IsDigit(s[end]) || s[end] == '.'))
+            end++;
+        if (end == 0)
+            return 0;
+        if (!double.TryParse(s[..end], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var value) ||
+            value <= 0)
+            return 0;
+        return (int)Math.Round(value);
     }
 
     /// <summary>Maps common share-link query keys onto stream fields (VLESS / Trojan / compatible).</summary>

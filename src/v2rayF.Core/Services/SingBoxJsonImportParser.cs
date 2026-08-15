@@ -161,16 +161,21 @@ public static class SingBoxJsonImportParser
             case "hysteria2":
                 server.Protocol = ProxyProtocol.Hysteria2;
                 server.Password = GetString(item, "password") ?? "";
+                server.UpMbps = GetInt(item, "up_mbps") is > 0 and var up ? up : 0;
+                server.DownMbps = GetInt(item, "down_mbps") is > 0 and var down ? down : 0;
                 break;
             case "tuic":
                 server.Protocol = ProxyProtocol.Tuic;
                 server.UserId = GetString(item, "uuid") ?? "";
                 server.Password = GetString(item, "password") ?? "";
                 server.Mode = GetString(item, "congestion_control") ?? "bbr";
+                server.UdpRelayMode = GetString(item, "udp_relay_mode") ?? "";
                 break;
             case "wireguard":
                 server.Protocol = ProxyProtocol.WireGuard;
                 server.Password = GetString(item, "private_key") ?? "";
+                if (GetInt(item, "mtu") is > 0 and var wgMtu)
+                    server.Mtu = wgMtu;
                 if (item.TryGetProperty("peers", out var peers) && peers.ValueKind == JsonValueKind.Array &&
                     peers.GetArrayLength() > 0)
                 {

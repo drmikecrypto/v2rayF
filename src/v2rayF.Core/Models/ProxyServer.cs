@@ -77,6 +77,18 @@ public partial class ProxyServer : ObservableObject
     /// <summary>VLESS/VMess packet encoding (xudp / packet).</summary>
     public string PacketEncoding { get; set; } = "";
 
+    /// <summary>Hysteria2 upload bandwidth (Mbps). 0 = omit (sing-box default).</summary>
+    public int UpMbps { get; set; }
+
+    /// <summary>Hysteria2 download bandwidth (Mbps). 0 = omit (sing-box default).</summary>
+    public int DownMbps { get; set; }
+
+    /// <summary>TUIC UDP relay mode (native / quic). Empty = omit.</summary>
+    public string UdpRelayMode { get; set; } = "";
+
+    /// <summary>WireGuard MTU. 0 = builder default (1400).</summary>
+    public int Mtu { get; set; }
+
     /// <summary>VLESS encryption (usually none).</summary>
     public string Encryption { get; set; } = "none";
 

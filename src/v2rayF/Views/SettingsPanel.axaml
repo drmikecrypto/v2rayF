@@ -42,6 +42,8 @@
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowDesktopProxySettings}"/>
             <CheckBox Content="Secure DNS (DoH)" IsChecked="{Binding DnsThroughProxy}"/>
+            <TextBlock Text="Encrypts DNS via DoH; can add first-page latency vs plain DNS. Off by default for snappier browsing."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
             <CheckBox Content="Adaptive Survive (DPI; can slow)" IsChecked="{Binding AdaptiveSurviveEnabled}"/>

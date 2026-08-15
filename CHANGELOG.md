@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-08-16
+
+### Added
+
+- Hysteria2 `up`/`down` (Mbps) from share links and Clash/sing-box JSON → live `up_mbps`/`down_mbps`
+- TUIC `udp_relay_mode` and WireGuard `mtu` when present on the config
+- Secure DNS settings note: DoH can add first-page latency
+
+### Changed
+
+- sing-box **Block IPv6** also rejects IPv6 (matches Xray leak intent)
+
 ## [2.0.1] - 2026-08-15
 
 ### Changed
