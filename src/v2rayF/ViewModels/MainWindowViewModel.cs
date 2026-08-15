@@ -97,6 +97,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _adaptiveSurviveEnabled;
 
     [ObservableProperty]
+    private bool _autoReconnectEnabled = true;
+
+    [ObservableProperty]
     private bool _subscriptionViaProxy = true;
 
     [ObservableProperty]
@@ -503,6 +506,7 @@ public partial class MainWindowViewModel : ViewModelBase
         SecureShareEnabled = settings.SecureShareEnabled;
         EnablePacketFragment = settings.EnablePacketFragment;
         AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled;
+        AutoReconnectEnabled = settings.AutoReconnectEnabled;
         ShareListenAllInterfaces = settings.ShareListenAllInterfaces;
         SubscriptionViaProxy = settings.SubscriptionViaProxy;
         AndroidBypassPackages = settings.AndroidBypassPackages;
@@ -530,6 +534,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.ShareListenAllInterfaces = ShareListenAllInterfaces;
         _settings.EnablePacketFragment = EnablePacketFragment;
         _settings.AdaptiveSurviveEnabled = AdaptiveSurviveEnabled;
+        _settings.AutoReconnectEnabled = AutoReconnectEnabled;
         _settings.SubscriptionViaProxy = SubscriptionViaProxy;
         _settings.AndroidBypassPackages = AndroidBypassPackages;
         return _settings;
@@ -1187,6 +1192,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         await SetOnUiAsync(() =>
                         {
                             ConnectionState = ConnectionState.Connected;
+                            _autoReconnectAttempts = 0;
                             if (!string.IsNullOrWhiteSpace(reason))
                                 StatusText = $"{StatusText} · {reason}";
                             UpdateSecureShareEndpoint();
@@ -1350,8 +1356,15 @@ public partial class MainWindowViewModel : ViewModelBase
         }).ConfigureAwait(true);
     }
 
+    private int _autoReconnectAttempts;
+
     private async Task HandleUnexpectedCoreStopAsync()
     {
+        var settings = CollectSettings();
+        var shouldReconnect = settings.AutoReconnectEnabled &&
+                              _autoReconnectAttempts == 0 &&
+                              SelectedServer is not null;
+
         try
         {
             // Tear down proxy/VPN but KEEP kill switch armed (fail closed).
@@ -1359,12 +1372,63 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
+            if (!shouldReconnect)
+            {
+                await SetOnUiAsync(() =>
+                {
+                    ConnectionState = ConnectionState.Failed;
+                    StatusText = AppServices.KillSwitch.IsArmed
+                        ? "Connection dropped — kill switch still blocking clearnet. Disconnect to restore."
+                        : "Connection dropped — VPN torn down.";
+                    OnPropertyChanged(nameof(ConnectButtonText));
+                    OnPropertyChanged(nameof(TrayToolTip));
+                    UpdateSecureShareEndpoint();
+                }).ConfigureAwait(true);
+            }
+        }
+
+        if (!shouldReconnect)
+            return;
+
+        _autoReconnectAttempts = 1;
+        try
+        {
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Connecting;
+                StatusText = "Connection dropped — reconnecting…";
+                OnPropertyChanged(nameof(ConnectButtonText));
+            }).ConfigureAwait(true);
+
+            // One sticky retry with user settings only (never force Survive/fragment).
+            var server = SelectedServer!;
+            var connectSettings = CollectSettings();
+            connectSettings.EnablePacketFragment = EnablePacketFragment;
+            connectSettings.AdaptiveSurviveEnabled = false;
+
+            if (IsMobile)
+                await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
+            else
+                await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
+
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Connected;
+                StatusText = $"Reconnected — {StatusSanitizer.Scrub(server.Name)}";
+                OnPropertyChanged(nameof(ConnectButtonText));
+                OnPropertyChanged(nameof(TrayToolTip));
+                UpdateSecureShareEndpoint();
+            }).ConfigureAwait(true);
+            _autoReconnectAttempts = 0;
+        }
+        catch (Exception ex)
+        {
             await SetOnUiAsync(() =>
             {
                 ConnectionState = ConnectionState.Failed;
                 StatusText = AppServices.KillSwitch.IsArmed
-                    ? "Connection dropped — kill switch still blocking clearnet. Disconnect to restore."
-                    : "Connection dropped — VPN torn down.";
+                    ? $"Reconnect failed — kill switch still blocking clearnet. Disconnect to restore. ({StatusSanitizer.Scrub(ex.Message)})"
+                    : $"Reconnect failed — {StatusSanitizer.Scrub(ex.Message)}";
                 OnPropertyChanged(nameof(ConnectButtonText));
                 OnPropertyChanged(nameof(TrayToolTip));
                 UpdateSecureShareEndpoint();

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-15
+
+### Added
+
+- **Auto-reconnect once** after unexpected core drop (user settings only — never forces Survive/fragment). Toggle in Settings.
+
+### Changed
+
+- Live-experience follow-up to 1.4.15/1.5.0: sticky reconnect without poisoning the session with DPI fragment
+
 ## [1.5.0] - 2026-08-15
 
 ### Added

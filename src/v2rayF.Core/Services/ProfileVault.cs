@@ -129,6 +129,7 @@ public sealed class ProfileVault
         DnsThroughProxy = s.DnsThroughProxy,
         EnablePacketFragment = s.EnablePacketFragment,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
+        AutoReconnectEnabled = s.AutoReconnectEnabled,
         SubscriptionUrl = s.SubscriptionUrl,
         StorageVersion = 2
     };

@@ -60,6 +60,9 @@ public sealed class AppSettings
     /// <summary>Escalate fragment / Sentinel DNS tactics when Smart Connect failover exhausts (opt-in; fragment is slow).</summary>
     public bool AdaptiveSurviveEnabled { get; set; }
 
+    /// <summary>After unexpected core drop, try one reconnect with user settings (no Survive fragment).</summary>
+    public bool AutoReconnectEnabled { get; set; } = true;
+
     /// <summary>Hint from last successful Adaptive Survive session (fragment / sentinel).</summary>
     public string LastSurviveTactic { get; set; } = "";
 

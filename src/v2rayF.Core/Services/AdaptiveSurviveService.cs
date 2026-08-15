@@ -98,6 +98,7 @@ public sealed class AdaptiveSurviveService
         AndroidBypassPackages = s.AndroidBypassPackages,
         LastGoodServerId = s.LastGoodServerId,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
+        AutoReconnectEnabled = s.AutoReconnectEnabled,
         LastSurviveTactic = s.LastSurviveTactic,
         StorageVersion = s.StorageVersion
     };
