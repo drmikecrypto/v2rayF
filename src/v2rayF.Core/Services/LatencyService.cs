@@ -204,16 +204,17 @@ public sealed class LatencyService
             var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
-            var configPath = Path.Combine(configDir, $"speedtest-{socksPort}.json");
-            await File.WriteAllTextAsync(
-                configPath,
-                XrayConfigBuilder.BuildSpeedtest(server, socksPort, enableFragment),
-                cancellationToken).ConfigureAwait(false);
+            var useSingBox = CoreRuntime.RequiresSingBox(server);
+            var configPath = Path.Combine(configDir, useSingBox ? $"speedtest-sb-{socksPort}.json" : $"speedtest-{socksPort}.json");
+            var configJson = useSingBox
+                ? SingBoxConfigBuilder.BuildSpeedtest(server, socksPort)
+                : XrayConfigBuilder.BuildSpeedtest(server, socksPort, enableFragment);
+            await File.WriteAllTextAsync(configPath, configJson, cancellationToken).ConfigureAwait(false);
 
-            var corePath = _environment.GetCorePath();
+            var corePath = useSingBox ? _environment.GetSingBoxPath() : _environment.GetCorePath();
             if (!File.Exists(corePath))
             {
-                LastProbeError = "Xray core not found.";
+                LastProbeError = useSingBox ? "sing-box core not found." : "Xray core not found.";
                 return null;
             }
 

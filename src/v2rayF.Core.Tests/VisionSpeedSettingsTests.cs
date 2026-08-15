@@ -218,13 +218,12 @@ public class VisionSpeedSettingsTests
     }
 
     [Fact]
-    public void Import_SkipsHy2_WithHint()
+    public void Import_Hy2_IsImportedForSingBox()
     {
         var text = "hy2://secret@example.com:443#h\nvless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v";
         var result = ConfigImportParser.ParseDetailed(text);
         Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
-        Assert.DoesNotContain(result.Servers, s => s.Name == "h");
-        Assert.Contains("sing-box", result.SummaryHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.Hysteria2 && s.Name == "h");
     }
 
     [Fact]
@@ -239,6 +238,7 @@ public class VisionSpeedSettingsTests
         public string GetDataDirectory() => Path.GetTempPath();
         public string GetCoresDirectory() => Path.GetTempPath();
         public string GetCorePath() => Path.Combine(Path.GetTempPath(), "missing-xray");
+        public string GetSingBoxPath() => Path.Combine(Path.GetTempPath(), "missing-sing-box");
         public Task EnsureCoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ICoreProcessHost CreateProcessHost() => new ManagedCoreProcessHost();
     }

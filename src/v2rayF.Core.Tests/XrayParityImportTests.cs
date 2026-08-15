@@ -18,14 +18,13 @@ public class XrayParityImportTests
     }
 
     [Fact]
-    public void Hy2AndWg_AreSkippedWithHonestHints()
+    public void Hy2AndAnytls_AreImportedForSingBox()
     {
-        var text = "hy2://secret@h.example:443#h\nwg://example\nvless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v";
+        var text = "hy2://secret@h.example:443#h\nanytls://x@a.example:443#a\nvless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v";
         var result = ConfigImportParser.ParseDetailed(text);
         Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
-        Assert.True(result.SkippedCount >= 1);
-        Assert.False(string.IsNullOrEmpty(result.SummaryHint));
-        Assert.Contains("sing-box", result.SummaryHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.Hysteria2);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.AnyTls);
     }
 
     [Fact]
@@ -48,7 +47,7 @@ public class XrayParityImportTests
     }
 
     [Fact]
-    public void ClashMeta_ImportsVmess_SkipsHy2()
+    public void ClashMeta_ImportsVmessAndHy2()
     {
         var yaml = """
             proxies:
@@ -59,13 +58,11 @@ public class XrayParityImportTests
             """;
         var result = ClashMetaImportParser.Parse(yaml);
         Assert.Contains(result.Servers, s => s.Name == "c1" && s.Protocol == ProxyProtocol.VMess);
-        Assert.DoesNotContain(result.Servers, s => s.Name == "h2");
-        Assert.True(result.SkippedCount >= 1);
-        Assert.Contains(result.SkipReasons, r => r.Contains("Hysteria2", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Servers, s => s.Name == "h2" && s.Protocol == ProxyProtocol.Hysteria2);
     }
 
     [Fact]
-    public void SingBoxJson_ImportsVless_SkipsTuic()
+    public void SingBoxJson_ImportsVlessAndTuic()
     {
         var json = """
             {
@@ -93,7 +90,6 @@ public class XrayParityImportTests
             """;
         var result = SingBoxJsonImportParser.Parse(json);
         Assert.Contains(result.Servers, s => s.Name == "vl" && s.Protocol == ProxyProtocol.VLESS && s.Network == "ws");
-        Assert.True(result.SkippedCount >= 1);
-        Assert.Contains(result.SkipReasons, r => r.Contains("TUIC", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Servers, s => s.Name == "t" && s.Protocol == ProxyProtocol.Tuic);
     }
 }

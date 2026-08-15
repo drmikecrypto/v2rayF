@@ -54,21 +54,33 @@ public static class SingBoxJsonImportParser
                         continue;
                     case "hysteria2":
                     case "hysteria":
-                        skipCount++;
-                        AddUnique(skips, "Hysteria2 needs sing-box runtime (not in this build)");
+                    {
+                        var mapped = MapOutbound(item, "hysteria2");
+                        if (mapped is not null)
+                            servers.Add(mapped);
                         break;
+                    }
                     case "tuic":
-                        skipCount++;
-                        AddUnique(skips, "TUIC needs sing-box runtime (not in this build)");
+                    {
+                        var mapped = MapOutbound(item, "tuic");
+                        if (mapped is not null)
+                            servers.Add(mapped);
                         break;
+                    }
                     case "wireguard":
-                        skipCount++;
-                        AddUnique(skips, "WireGuard needs sing-box runtime (not in this build)");
+                    {
+                        var mapped = MapOutbound(item, "wireguard");
+                        if (mapped is not null)
+                            servers.Add(mapped);
                         break;
+                    }
                     case "anytls":
-                        skipCount++;
-                        AddUnique(skips, "anytls needs sing-box runtime (not in this build)");
+                    {
+                        var mapped = MapOutbound(item, "anytls");
+                        if (mapped is not null)
+                            servers.Add(mapped);
                         break;
+                    }
                     case "vless":
                     case "vmess":
                     case "trojan":
@@ -146,9 +158,38 @@ public static class SingBoxJsonImportParser
                 server.UserId = GetString(item, "username") ?? "";
                 server.Password = GetString(item, "password") ?? "";
                 break;
+            case "hysteria2":
+                server.Protocol = ProxyProtocol.Hysteria2;
+                server.Password = GetString(item, "password") ?? "";
+                break;
+            case "tuic":
+                server.Protocol = ProxyProtocol.Tuic;
+                server.UserId = GetString(item, "uuid") ?? "";
+                server.Password = GetString(item, "password") ?? "";
+                server.Mode = GetString(item, "congestion_control") ?? "bbr";
+                break;
+            case "wireguard":
+                server.Protocol = ProxyProtocol.WireGuard;
+                server.Password = GetString(item, "private_key") ?? "";
+                if (item.TryGetProperty("peers", out var peers) && peers.ValueKind == JsonValueKind.Array &&
+                    peers.GetArrayLength() > 0)
+                {
+                    server.PublicKey = GetString(peers[0], "public_key") ?? "";
+                    server.Address = GetString(peers[0], "server") ?? server.Address;
+                    server.Port = GetInt(peers[0], "server_port") is > 0 and var p ? p : server.Port;
+                }
+                break;
+            case "anytls":
+                server.Protocol = ProxyProtocol.AnyTls;
+                server.Password = GetString(item, "password") ?? "";
+                break;
         }
 
-        ApplyTransport(server, item);
+        if (server.Protocol is ProxyProtocol.Hysteria2 or ProxyProtocol.Tuic or ProxyProtocol.AnyTls)
+            ApplyTransport(server, item);
+        else if (server.Protocol is not ProxyProtocol.WireGuard)
+            ApplyTransport(server, item);
+
         ShareLinkParser.NormalizeVisionFlow(server);
         return server;
     }

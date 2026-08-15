@@ -98,6 +98,10 @@ public partial class ProxyServer : ObservableObject
         ProxyProtocol.Shadowsocks => "SS",
         ProxyProtocol.Trojan => "Trojan",
         ProxyProtocol.Socks => "SOCKS",
+        ProxyProtocol.Hysteria2 => "Hy2",
+        ProxyProtocol.Tuic => "TUIC",
+        ProxyProtocol.WireGuard => "WG",
+        ProxyProtocol.AnyTls => "anytls",
         _ => "?"
     };
 

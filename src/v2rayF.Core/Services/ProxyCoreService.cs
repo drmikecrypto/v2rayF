@@ -45,9 +45,14 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     public string ResolveCorePath() => _environment.GetCorePath();
 
+    public string ResolveCorePathFor(ProxyServer server) =>
+        CoreRuntime.RequiresSingBox(server) ? _environment.GetSingBoxPath() : _environment.GetCorePath();
+
     public string ResolveCoresDirectory() => _environment.GetCoresDirectory();
 
     public bool IsCoreAvailable() => File.Exists(ResolveCorePath());
+
+    public bool IsCoreAvailableFor(ProxyServer server) => File.Exists(ResolveCorePathFor(server));
 
     public bool HasGeoFiles()
     {
@@ -69,15 +74,18 @@ public sealed class ProxyCoreService : IAsyncDisposable
     {
         await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!IsCoreAvailable())
+        if (!IsCoreAvailableFor(server))
             throw new FileNotFoundException(
-                "Xray core not found.",
-                ResolveCorePath());
+                CoreRuntime.RequiresSingBox(server)
+                    ? "sing-box core not found. Place sing-box in the cores folder."
+                    : "Xray core not found.",
+                ResolveCorePathFor(server));
 
         if (settings.EnableTunMode && !AppServices.Platform.CanUseTunMode)
             throw new InvalidOperationException(AppServices.Platform.TunRequirementMessage);
 
-        if (settings.RoutingMode == RoutingMode.BypassChina && !HasGeoFiles())
+        if (settings.RoutingMode == RoutingMode.BypassChina && !HasGeoFiles() &&
+            !CoreRuntime.RequiresSingBox(server))
             throw new InvalidOperationException(
                 "Bypass China routing requires geoip.dat and geosite.dat in the cores folder.");
 
@@ -87,17 +95,23 @@ public sealed class ProxyCoreService : IAsyncDisposable
         if (settings.SecureShareEnabled)
             XrayConfigBuilder.EnsureShareCredentials(settings);
 
-        var configJson = XrayConfigBuilder.Build(server, settings, tunFd, multipathServers);
+        var useSingBox = CoreRuntime.RequiresSingBox(server);
+        if (useSingBox && multipathServers is { Count: > 0 })
+            multipathServers = null; // sing-box multipath not in this build
+
+        var configJson = useSingBox
+            ? SingBoxConfigBuilder.Build(server, settings)
+            : XrayConfigBuilder.Build(server, settings, tunFd, multipathServers);
         var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
         Directory.CreateDirectory(configDir);
-        _configPath = Path.Combine(configDir, "config.json");
+        _configPath = Path.Combine(configDir, useSingBox ? "singbox-config.json" : "config.json");
         await File.WriteAllTextAsync(_configPath, configJson, cancellationToken).ConfigureAwait(false);
 
         await ProcessHost.StartAsync(
-            ResolveCorePath(),
+            ResolveCorePathFor(server),
             _configPath,
             ResolveCoresDirectory(),
-            tunFd,
+            useSingBox ? null : tunFd,
             cancellationToken).ConfigureAwait(false);
 
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

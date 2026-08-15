@@ -42,6 +42,7 @@ public class SmartConnectServiceTests
         public string GetDataDirectory() => Path.GetTempPath();
         public string GetCoresDirectory() => Path.GetTempPath();
         public string GetCorePath() => Path.Combine(Path.GetTempPath(), "missing-xray");
+        public string GetSingBoxPath() => Path.Combine(Path.GetTempPath(), "missing-sing-box");
         public Task EnsureCoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ICoreProcessHost CreateProcessHost() => new ManagedCoreProcessHost();
     }

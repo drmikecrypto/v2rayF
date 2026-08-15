@@ -1,8 +1,8 @@
-# Supported configs (v2rayF)
+# Supported configs (v2rayF 2.0)
 
 Honest matrix for what this build can **import, test, and connect**.
 
-## Xray runtime (full path)
+## Xray core
 
 | Protocol | Transports | Security |
 |----------|------------|----------|
@@ -12,20 +12,26 @@ Honest matrix for what this build can **import, test, and connect**.
 | Shadowsocks | plain (+ stream when link has type=) | — |
 | SOCKS5 | — | — |
 
-Also: WS early data (`ed`), `packetEncoding` (xudp/packet), REALITY pbk/sid/spx, xHTTP `extra`.
+Also: WS early data (`ed`), `packetEncoding`, REALITY, xHTTP `extra`.
 
-## Import-only maps (still run on Xray)
+## sing-box core (bundled on desktop)
 
-- **Clash Meta** `proxies:` — vmess / vless / trojan / ss / socks5
-- **sing-box JSON** outbounds — same Xray-capable types
+| Protocol | Notes |
+|----------|--------|
+| Hysteria2 (`hy2://`) | password + SNI / obfs |
+| TUIC | uuid:password + congestion |
+| WireGuard | private key @ host + peer public key |
+| anytls | password + SNI |
 
-## Skipped (need sing-box — not in 1.5.x)
+Connect/Test route these to `cores/sing-box` automatically. If the binary is missing, Connect shows a clear error.
 
-Hysteria2 (`hy2`), TUIC, WireGuard, anytls, Shadowsocks SIP003 **plugins**.
+## Import sources
 
-Skipped items show a clear StatusText reason; they are **not** imported as fake plain nodes.
+- Share links / subscriptions
+- Clash Meta `proxies:` YAML
+- sing-box JSON outbounds
+- Xray JSON outbounds
 
-## Roadmap
+## Still skipped
 
-- **1.6.x** — live session feel (stats, reconnect, TUN/proxy)
-- **2.0** — dual-core sing-box so hy2/TUIC/WG/anytls actually connect
+Shadowsocks SIP003 **plugins** (plain SS only) — with StatusText reason.

@@ -19,6 +19,14 @@ public sealed class DesktopCoreEnvironment : ICoreEnvironment
             : Path.Combine(coresDir, "xray");
     }
 
+    public string GetSingBoxPath()
+    {
+        var coresDir = GetCoresDirectory();
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? Path.Combine(coresDir, "sing-box.exe")
+            : Path.Combine(coresDir, "sing-box");
+    }
+
     public string GetCoresDirectory() => Path.Combine(AppContext.BaseDirectory, "cores");
 
     public string GetDataDirectory()

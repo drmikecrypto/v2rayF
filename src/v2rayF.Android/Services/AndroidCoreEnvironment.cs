@@ -50,6 +50,9 @@ public sealed class AndroidCoreEnvironment : ICoreEnvironment
         return Path.Combine(nativeLibDir, CoreLibraryName);
     }
 
+    public string GetSingBoxPath() =>
+        Path.Combine(GetCoresDirectory(), "sing-box");
+
     public string GetCoresDirectory() =>
         Path.Combine(Application.Context!.FilesDir!.AbsolutePath, "cores");
 

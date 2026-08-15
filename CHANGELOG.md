@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-08-15
+
+### Added
+
+- **Dual-core**: Hysteria2, TUIC, WireGuard, and anytls import → test → connect via bundled **sing-box** (desktop packages)
+- `SingBoxConfigBuilder` + `CoreRuntime` route by protocol; Xray remains default for VLESS/VMess/Trojan/SS/SOCKS
+- Clash Meta / sing-box JSON now **import** hy2/tuic/wg/anytls (run when sing-box binary is present)
+- Packager downloads sing-box into `cores/` alongside Xray ([docs/supported-configs.md](docs/supported-configs.md))
+
+### Changed
+
+- Share links `hy2://`, `tuic://`, `anytls://`, `wireguard://` parse into first-class protocols instead of skip-only
+
 ## [1.6.0] - 2026-08-15
 
 ### Added

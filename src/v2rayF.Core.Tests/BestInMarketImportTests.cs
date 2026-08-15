@@ -18,19 +18,17 @@ public class BestInMarketImportTests
     }
 
     [Fact]
-    public void Hy2AnytlsWg_SkippedWithHints()
+    public void Hy2Anytls_ImportedForDualCore()
     {
         var text = """
             hy2://secret@h.example:443#h
             anytls://x@a.example:443#a
-            wg://ignored
             vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v
             """;
         var result = ConfigImportParser.ParseDetailed(text);
         Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
-        Assert.DoesNotContain(result.Servers, s => s.Name is "h" or "a");
-        Assert.True(result.SkippedCount >= 2);
-        Assert.Contains("sing-box", result.SummaryHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.Hysteria2);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.AnyTls);
     }
 
     [Fact]
@@ -51,7 +49,7 @@ public class BestInMarketImportTests
     }
 
     [Fact]
-    public void ClashMeta_ImportsVless_SkipsHy2()
+    public void ClashMeta_ImportsVlessAndHy2()
     {
         var yaml = """
             proxies:
@@ -61,15 +59,13 @@ public class BestInMarketImportTests
               - { name: PROXY, type: select, proxies: [ok, hy] }
             """;
         var result = ClashMetaImportParser.Parse(yaml);
-        Assert.Single(result.Servers);
-        Assert.Equal(ProxyProtocol.VLESS, result.Servers[0].Protocol);
-        Assert.Equal("ws", result.Servers[0].Network);
-        Assert.True(result.SkippedCount >= 1);
-        Assert.Contains("Hysteria2", result.SummaryHint, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, result.Servers.Count);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.Hysteria2);
     }
 
     [Fact]
-    public void SingBoxJson_ImportsVless_SkipsTuic()
+    public void SingBoxJson_ImportsVlessAndTuic()
     {
         var json = """
             {
@@ -83,9 +79,8 @@ public class BestInMarketImportTests
             }
             """;
         var result = SingBoxJsonImportParser.Parse(json);
-        Assert.Single(result.Servers);
-        Assert.Equal(ProxyProtocol.VLESS, result.Servers[0].Protocol);
-        Assert.Equal("ws", result.Servers[0].Network);
-        Assert.Contains(result.SkipReasons, r => r.Contains("TUIC", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, result.Servers.Count);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.Tuic);
     }
 }

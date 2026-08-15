@@ -64,21 +64,33 @@ public static partial class ClashMetaImportParser
                 }
                 case "hysteria2":
                 case "hysteria":
-                    skipCount++;
-                    AddUnique(skips, "Hysteria2 needs sing-box (not in this build)");
+                {
+                    var h = MapSingBoxCapable("hysteria2", map);
+                    if (h is not null)
+                        servers.Add(h);
                     break;
+                }
                 case "tuic":
-                    skipCount++;
-                    AddUnique(skips, "TUIC needs sing-box (not in this build)");
+                {
+                    var t = MapSingBoxCapable("tuic", map);
+                    if (t is not null)
+                        servers.Add(t);
                     break;
+                }
                 case "wireguard":
-                    skipCount++;
-                    AddUnique(skips, "WireGuard needs sing-box (not in this build)");
+                {
+                    var w = MapSingBoxCapable("wireguard", map);
+                    if (w is not null)
+                        servers.Add(w);
                     break;
+                }
                 case "anytls":
-                    skipCount++;
-                    AddUnique(skips, "anytls needs sing-box (not in this build)");
+                {
+                    var a = MapSingBoxCapable("anytls", map);
+                    if (a is not null)
+                        servers.Add(a);
                     break;
+                }
                 default:
                     skipCount++;
                     AddUnique(skips, $"Clash type '{type}' not supported in this Xray build");
@@ -142,6 +154,58 @@ public static partial class ClashMetaImportParser
 
         ApplyClashStream(server, map);
         ShareLinkParser.NormalizeVisionFlow(server);
+        return server;
+    }
+
+    private static ProxyServer? MapSingBoxCapable(string type, Dictionary<string, string> map)
+    {
+        if (!map.TryGetValue("server", out var address) || string.IsNullOrWhiteSpace(address))
+            return null;
+        if (!map.TryGetValue("port", out var portRaw) ||
+            !int.TryParse(portRaw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) ||
+            port <= 0)
+            return null;
+
+        map.TryGetValue("name", out var name);
+        var server = new ProxyServer
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? type : name.Trim().Trim('"', '\''),
+            Address = address.Trim().Trim('"', '\''),
+            Port = port,
+            RawLink = $"clash://{type}/{address}:{port}"
+        };
+
+        switch (type)
+        {
+            case "hysteria2":
+                server.Protocol = ProxyProtocol.Hysteria2;
+                server.Password = Get(map, "password") ?? "";
+                server.Sni = Get(map, "sni") ?? Get(map, "servername") ?? "";
+                server.Path = Get(map, "obfs-password") ?? "";
+                server.AllowInsecure = Get(map, "skip-cert-verify") is "true" or "1";
+                break;
+            case "tuic":
+                server.Protocol = ProxyProtocol.Tuic;
+                server.UserId = Get(map, "uuid") ?? "";
+                server.Password = Get(map, "password") ?? "";
+                server.Sni = Get(map, "sni") ?? "";
+                server.Mode = Get(map, "congestion-controller") ?? "bbr";
+                break;
+            case "wireguard":
+                server.Protocol = ProxyProtocol.WireGuard;
+                server.Password = Get(map, "private-key") ?? Get(map, "privateKey") ?? "";
+                server.PublicKey = Get(map, "public-key") ?? Get(map, "publicKey") ?? "";
+                server.Path = Get(map, "ip") ?? Get(map, "address") ?? "10.0.0.2/32";
+                break;
+            case "anytls":
+                server.Protocol = ProxyProtocol.AnyTls;
+                server.Password = Get(map, "password") ?? "";
+                server.Sni = Get(map, "sni") ?? Get(map, "servername") ?? "";
+                break;
+            default:
+                return null;
+        }
+
         return server;
     }
 

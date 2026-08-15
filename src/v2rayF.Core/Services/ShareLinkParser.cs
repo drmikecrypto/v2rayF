@@ -121,36 +121,23 @@ public static class ShareLinkParser
             _ when link.StartsWith("trojan://", StringComparison.OrdinalIgnoreCase) => ParseTrojan(link),
             _ when link.StartsWith("socks://", StringComparison.OrdinalIgnoreCase) ||
                    link.StartsWith("socks5://", StringComparison.OrdinalIgnoreCase) => ParseSocks(link),
+            _ when link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+                   link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) => ParseHysteria2(link),
+            _ when link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase) => ParseTuic(link),
+            _ when link.StartsWith("anytls://", StringComparison.OrdinalIgnoreCase) => ParseAnyTls(link),
+            _ when link.StartsWith("wg://", StringComparison.OrdinalIgnoreCase) ||
+                   link.StartsWith("wireguard://", StringComparison.OrdinalIgnoreCase) => ParseWireGuard(link),
             _ => null
         };
     }
 
-    internal static bool IsSingBoxOnlyScheme(string link)
-    {
-        return link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("anytls://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("wg://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("wireguard://", StringComparison.OrdinalIgnoreCase);
-    }
+    /// <summary>Legacy name: schemes that previously could not run. Dual-core 2.0 parses these.</summary>
+    internal static bool IsSingBoxOnlyScheme(string link) => false;
 
-    /// <summary>Human-readable skip reason for schemes this Xray build cannot run.</summary>
+    /// <summary>Human-readable skip reason — null when the link can be imported (Xray or sing-box).</summary>
     public static string? GetUnsupportedSchemeHint(string link)
     {
-        if (string.IsNullOrWhiteSpace(link))
-            return null;
-        link = link.Trim();
-        if (link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
-            link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
-            return "Hysteria2 needs sing-box (not in this build)";
-        if (link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
-            return "TUIC needs sing-box (not in this build)";
-        if (link.StartsWith("anytls://", StringComparison.OrdinalIgnoreCase))
-            return "anytls needs sing-box (not in this build)";
-        if (link.StartsWith("wg://", StringComparison.OrdinalIgnoreCase) ||
-            link.StartsWith("wireguard://", StringComparison.OrdinalIgnoreCase))
-            return "WireGuard needs sing-box (not in this build)";
+        // All known schemes are importable in 2.0 when the matching core binary is present.
         return null;
     }
 
@@ -408,6 +395,99 @@ public static class ShareLinkParser
             Port = uri.Port > 0 ? uri.Port : 1080,
             UserId = parts.Length > 0 ? Uri.UnescapeDataString(parts[0]) : "",
             Password = parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : "",
+            RawLink = link
+        };
+    }
+
+    private static ProxyServer ParseHysteria2(string link)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri))
+            throw new FormatException("Invalid Hysteria2 link.");
+
+        var query = ParseQuery(uri.Query);
+        var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Hysteria2,
+            Name = string.IsNullOrWhiteSpace(name) ? "Hysteria2" : name,
+            Address = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 443,
+            Password = Uri.UnescapeDataString(uri.UserInfo),
+            Sni = GetQuery(query, "sni") ?? GetQuery(query, "peer") ?? "",
+            Path = GetQuery(query, "obfs-password") ?? GetQuery(query, "obfsPassword") ?? "",
+            AllowInsecure = GetQuery(query, "insecure") is "1" or "true",
+            Fingerprint = GetQuery(query, "pinSHA256") ?? GetQuery(query, "fp") ?? "",
+            RawLink = link
+        };
+    }
+
+    private static ProxyServer ParseTuic(string link)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri))
+            throw new FormatException("Invalid TUIC link.");
+
+        var query = ParseQuery(uri.Query);
+        var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        var userInfo = Uri.UnescapeDataString(uri.UserInfo);
+        var colon = userInfo.IndexOf(':');
+        var uuid = colon >= 0 ? userInfo[..colon] : userInfo;
+        var password = colon >= 0 ? userInfo[(colon + 1)..] : (GetQuery(query, "password") ?? "");
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Tuic,
+            Name = string.IsNullOrWhiteSpace(name) ? "TUIC" : name,
+            Address = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 443,
+            UserId = uuid,
+            Password = password,
+            Sni = GetQuery(query, "sni") ?? "",
+            Mode = GetQuery(query, "congestion_control") ?? GetQuery(query, "congestion") ?? "bbr",
+            AllowInsecure = GetQuery(query, "allow_insecure") is "1" or "true" ||
+                            GetQuery(query, "insecure") is "1" or "true",
+            Alpn = GetQuery(query, "alpn") ?? "",
+            RawLink = link
+        };
+    }
+
+    private static ProxyServer ParseAnyTls(string link)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri))
+            throw new FormatException("Invalid anytls link.");
+
+        var query = ParseQuery(uri.Query);
+        var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.AnyTls,
+            Name = string.IsNullOrWhiteSpace(name) ? "anytls" : name,
+            Address = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 443,
+            Password = Uri.UnescapeDataString(uri.UserInfo),
+            Sni = GetQuery(query, "sni") ?? "",
+            AllowInsecure = GetQuery(query, "insecure") is "1" or "true",
+            RawLink = link
+        };
+    }
+
+    private static ProxyServer ParseWireGuard(string link)
+    {
+        // wireguard://PRIVATEKEY@server:port?publickey=PEERPK&address=10.0.0.2/32&reserved=0,0,0#name
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri))
+            throw new FormatException("Invalid WireGuard link.");
+
+        var query = ParseQuery(uri.Query);
+        var name = Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.WireGuard,
+            Name = string.IsNullOrWhiteSpace(name) ? "WireGuard" : name,
+            Address = uri.Host,
+            Port = uri.Port > 0 ? uri.Port : 51820,
+            Password = Uri.UnescapeDataString(uri.UserInfo),
+            PublicKey = GetQuery(query, "publickey") ?? GetQuery(query, "publicKey") ?? GetQuery(query, "peer") ?? "",
+            Path = GetQuery(query, "address") ?? GetQuery(query, "local") ?? "10.0.0.2/32",
+            ShortId = GetQuery(query, "reserved") ?? "",
             RawLink = link
         };
     }

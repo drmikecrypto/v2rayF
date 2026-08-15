@@ -7,5 +7,9 @@ public enum ProxyProtocol
     VLESS,
     Shadowsocks,
     Trojan,
-    Socks
+    Socks,
+    Hysteria2,
+    Tuic,
+    WireGuard,
+    AnyTls
 }
