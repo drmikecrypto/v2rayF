@@ -35,6 +35,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private IReadOnlyList<SmartConnectService.RankedServer> _lastRanking = [];
     private DateTimeOffset _lastUpdateCheckUtc = DateTimeOffset.MinValue;
     private bool _suppressSelectionPersist;
+    private bool _suppressSelectionSwitch;
+    private bool _selectionSwitchInFlight;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -229,6 +231,17 @@ public partial class MainWindowViewModel : ViewModelBase
 
         _settings.SelectedServerId = value?.Id.ToString() ?? "";
         _ = PersistSelectedServerAsync();
+
+        if (_suppressSelectionSwitch || _selectionSwitchInFlight)
+            return;
+        if (ConnectionState is not ConnectionState.Connected)
+            return;
+        if (value is null)
+            return;
+        if (_proxyCore.ActiveServer?.Id == value.Id)
+            return;
+
+        _ = ConnectToServerAsync(value);
     }
 
     partial void OnSubscriptionUrlChanged(string value) => OnPropertyChanged(nameof(HasSavedSubscription));
@@ -994,12 +1007,12 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
 
         if (IsMobile)
-            await RunOnUiThreadAsync(ConnectWithOrchestrationAsync).ConfigureAwait(true);
+            await RunOnUiThreadAsync(() => ConnectWithOrchestrationAsync()).ConfigureAwait(true);
         else
             await ConnectWithOrchestrationAsync().ConfigureAwait(true);
     }
 
-    private async Task ConnectWithOrchestrationAsync()
+    private async Task ConnectWithOrchestrationAsync(ProxyServer? forceServer = null)
     {
         if (!await _connectionGate.WaitAsync(0).ConfigureAwait(false))
             return;
@@ -1052,15 +1065,36 @@ public partial class MainWindowViewModel : ViewModelBase
 
             IReadOnlyList<ProxyServer> candidates;
             var forceSurviveWaves = false;
-            if (settings.SmartConnectEnabled && Servers.Count > 0)
+            if (forceServer is not null)
             {
-                await SetOnUiAsync(() => StatusText = "Smart Connect — probing servers…").ConfigureAwait(true);
+                candidates = [forceServer];
+                if (settings.SmartMultipathEnabled && Servers.Count > 1)
+                {
+                    var serversSnapshot = Servers.ToList();
+                    _lastRanking = await _smartConnect.RankAsync(
+                        serversSnapshot,
+                        token,
+                        settings.EnablePacketFragment,
+                        preferred: forceServer).ConfigureAwait(false);
+                    await ResumeOnUiAsync().ConfigureAwait(true);
+                    await SetOnUiAsync(() =>
+                    {
+                        foreach (var ranked in _lastRanking)
+                            ranked.Server.SetLatency(ranked.UiLatencyMs);
+                        ReorderServersByLatency();
+                    }).ConfigureAwait(true);
+                }
+            }
+            else if (settings.SmartConnectEnabled && Servers.Count > 0)
+            {
+                await SetOnUiAsync(() => StatusText = "Connecting to fastest…").ConfigureAwait(true);
                 var serversSnapshot = Servers.ToList();
+                // No preferred / LastGood boost — true fastest by working path first.
                 _lastRanking = await _smartConnect.RankAsync(
                     serversSnapshot,
                     token,
                     settings.EnablePacketFragment,
-                    SelectedServer).ConfigureAwait(false);
+                    preferred: null).ConfigureAwait(false);
                 await ResumeOnUiAsync().ConfigureAwait(true);
                 await SetOnUiAsync(() =>
                 {
@@ -1071,16 +1105,16 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 candidates = _smartConnect.SelectConnectOrder(
                     _lastRanking,
-                    SelectedServer,
-                    settings.LastGoodServerId);
+                    preferred: null,
+                    lastGoodServerId: null);
 
                 if (candidates.Count == 0)
                 {
                     // Do not abort — Adaptive Survive (fragment/Sentinel) may still succeed.
                     candidates = _smartConnect.SelectSurviveConnectOrder(
                         _lastRanking,
-                        SelectedServer,
-                        settings.LastGoodServerId);
+                        preferred: null,
+                        lastGoodServerId: null);
 
                     if (candidates.Count == 0)
                     {
@@ -1152,7 +1186,16 @@ public partial class MainWindowViewModel : ViewModelBase
                     token.ThrowIfCancellationRequested();
                     await SetOnUiAsync(() =>
                     {
-                        SelectedServer = server;
+                        _suppressSelectionSwitch = true;
+                        try
+                        {
+                            SelectedServer = server;
+                        }
+                        finally
+                        {
+                            _suppressSelectionSwitch = false;
+                        }
+
                         StatusText = string.IsNullOrWhiteSpace(reason)
                             ? $"Connecting to {StatusSanitizer.Scrub(server.Name)}…"
                             : $"{reason} — {StatusSanitizer.Scrub(server.Name)}";
@@ -1551,15 +1594,40 @@ public partial class MainWindowViewModel : ViewModelBase
         if (server is null)
             return;
 
-        SelectedServer = server;
-
-        if (IsConnected && _proxyCore.ActiveServer?.Id == server.Id)
+        if (ConnectionState is ConnectionState.Connecting or ConnectionState.Disconnecting)
             return;
 
-        if (IsConnected)
-            await DisconnectAsync();
+        if (_selectionSwitchInFlight)
+            return;
 
-        await ToggleConnectionAsync();
+        _selectionSwitchInFlight = true;
+        try
+        {
+            _suppressSelectionSwitch = true;
+            try
+            {
+                SelectedServer = server;
+            }
+            finally
+            {
+                _suppressSelectionSwitch = false;
+            }
+
+            if (IsConnected && _proxyCore.ActiveServer?.Id == server.Id)
+                return;
+
+            if (IsConnected)
+                await DisconnectAsync();
+
+            if (IsMobile)
+                await RunOnUiThreadAsync(() => ConnectWithOrchestrationAsync(forceServer: server)).ConfigureAwait(true);
+            else
+                await ConnectWithOrchestrationAsync(forceServer: server).ConfigureAwait(true);
+        }
+        finally
+        {
+            _selectionSwitchInFlight = false;
+        }
     }
 
     public async Task ShutdownAsync()

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-08-15
+
+### Changed
+
+- **Smart Connect** Connect uses the true fastest working path (no Selected / LastGood boost)
+- Clicking another server while **Connected** switches to it immediately (explicit pick skips re-rank)
+- Status shows `Connecting to fastest…` then the chosen name
+
 ## [2.0.0] - 2026-08-15
 
 ### Added

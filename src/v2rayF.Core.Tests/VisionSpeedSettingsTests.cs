@@ -182,6 +182,23 @@ public class VisionSpeedSettingsTests
     }
 
     [Fact]
+    public void PickMultipathPeers_PrimaryFixed_EvenWhenSlower()
+    {
+        var latency = new LatencyService(new FakeEnv());
+        var smart = new SmartConnectService(latency);
+        var slowPrimary = new ProxyServer { Name = "slow", Address = "1.1.1.1", Port = 443, Network = "ws" };
+        var fastPeer = new ProxyServer { Name = "fast", Address = "2.2.2.2", Port = 443, Network = "ws" };
+        var ranked = new List<SmartConnectService.RankedServer>
+        {
+            new(fastPeer, 20, 20, true, 20),
+            new(slowPrimary, 200, 200, true, 200)
+        };
+        var peers = smart.PickMultipathPeers(ranked, slowPrimary);
+        Assert.Equal(slowPrimary.Id, peers[0].Id);
+        Assert.Contains(peers, p => p.Id == fastPeer.Id);
+    }
+
+    [Fact]
     public void LiveSockopt_OnNonVision()
     {
         var server = new ProxyServer
