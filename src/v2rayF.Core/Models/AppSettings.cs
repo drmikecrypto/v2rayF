@@ -57,8 +57,8 @@ public sealed class AppSettings
 
     public string LastGoodServerId { get; set; } = "";
 
-    /// <summary>Escalate fragment / Sentinel DNS tactics when Smart Connect failover exhausts.</summary>
-    public bool AdaptiveSurviveEnabled { get; set; } = true;
+    /// <summary>Escalate fragment / Sentinel DNS tactics when Smart Connect failover exhausts (opt-in; fragment is slow).</summary>
+    public bool AdaptiveSurviveEnabled { get; set; }
 
     /// <summary>Hint from last successful Adaptive Survive session (fragment / sentinel).</summary>
     public string LastSurviveTactic { get; set; } = "";

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.14] - 2026-08-15
+
+### Fixed
+
+- After Connect, the ping label no longer jumps from ~100ms (TCP) to ~1500ms (cold HTTPS) — list TCP ms is kept
+- Connect health uses a warmup GET then one timed GET (8s / 12s Vision·REALITY) so cold handshakes less often fail into Adaptive Survive fragment
+- Adaptive Survive defaults **off** so a flaky probe cannot leave the session on slow TLS hello fragment
+
+### Changed
+
+- Packet fragment / Survive remain available as opt-in Settings for DPI environments
+
 ## [1.4.13] - 2026-08-14
 
 ### Fixed

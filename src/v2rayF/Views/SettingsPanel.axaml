@@ -40,7 +40,7 @@
             <CheckBox Content="DNS through proxy" IsChecked="{Binding DnsThroughProxy}"/>
             <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
-            <CheckBox Content="Adaptive Survive" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
+            <CheckBox Content="Adaptive Survive (DPI; can slow)" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
             <CheckBox Content="Fetch subscriptions via proxy when connected"
                       IsChecked="{Binding SubscriptionViaProxy}"
                       IsVisible="{Binding ShowDesktopProxySettings}"/>

@@ -52,9 +52,23 @@ public class AdaptiveSurviveServiceTests
     }
 
     [Fact]
+    public void BuildRetryAttempts_DefaultSettings_SurviveOff()
+    {
+        var svc = new AdaptiveSurviveService();
+        Assert.Empty(svc.BuildRetryAttempts(new AppSettings()));
+    }
+
+    [Fact]
     public void MaxSurviveCandidates_KeepsRetriesTight()
     {
         Assert.True(AdaptiveSurviveService.MaxSurviveCandidates <= 2);
         Assert.True(SmartConnectService.EarlyExitGoodPeers <= SmartConnectService.MaxProxyPathProbes);
+    }
+
+    [Fact]
+    public void AdaptiveSurviveEnabled_DefaultsOff()
+    {
+        Assert.False(new AppSettings().AdaptiveSurviveEnabled);
+        Assert.False(new AppSettings().EnablePacketFragment);
     }
 }

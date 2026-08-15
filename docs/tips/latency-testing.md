@@ -20,4 +20,8 @@ TCP shortlist, then one-GET proxy-path. Vision peers are never mixed into a mult
 
 ## Connect health
 
-After SOCKS `10808` binds: **one** HTTPS GET. Vision/REALITY gets 8s; other transports 4s. No repeating HTTPS ping while connected.
+After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision/REALITY). Connected ping stays the list **TCP** ms — never the HTTPS probe. No repeating HTTPS ping while connected.
+
+## Adaptive Survive
+
+**Off by default.** When enabled, failed connects may retry with TLS hello fragment (works for some DPI; **slow**). Prefer leaving it off unless you need it.

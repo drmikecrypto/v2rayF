@@ -116,7 +116,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         try
         {
             probeMs = await _latency
-                .MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, healthBudget)
+                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, healthBudget)
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

@@ -1654,12 +1654,10 @@ public partial class MainWindowViewModel : ViewModelBase
             ShowTrafficStats = true;
             UploadTrafficText = TrafficStatsService.FormatUploadRate(0);
             DownloadTrafficText = TrafficStatsService.FormatDownloadRate(0);
-            // Do not seed from stale list latency — only show after live SOCKS probe.
-            var live = _proxyCore.LastConnectProbeMs;
-            ConnectedPingText = live is > 0 ? $"{live}" : "";
-            TrafficStatsHub.Shared.ConnectedPingMs = live is > 0 ? live : null;
-            if (live is > 0 && SelectedServer is not null)
-                SelectedServer.SetLatency(live);
+            // Keep Test All / Smart Connect TCP ms — never overwrite with cold/warm HTTPS probe.
+            var tcp = SelectedServer?.LatencyMs is int ms and > 0 ? ms : (int?)null;
+            ConnectedPingText = tcp is > 0 ? $"{tcp}" : "";
+            TrafficStatsHub.Shared.ConnectedPingMs = tcp;
         });
 
         TrafficStatsHub.Shared.Updated += OnHubTrafficUpdated;

@@ -28,12 +28,17 @@ public sealed class LatencyService
     public const int TimeoutMs = 4000;
     public const int RankProbeTimeoutMs = 4000;
     public const int CoreReadyWaitMs = 2000;
-    public const int ConnectHealthProbeMs = 4000;
-    public const int ConnectHealthProbeVisionMs = 8000;
+    /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
+    public const int ConnectHealthProbeMs = 8000;
+    /// <summary>Connect gate budget for Vision / REALITY.</summary>
+    public const int ConnectHealthProbeVisionMs = 12000;
     public const int TcpConnectTimeoutMs = 1500;
     public const int SocksPollTimeoutMs = 50;
     public const int HttpConnectTimeoutMs = 2000;
+    /// <summary>Test All / rank: single GET (no warmup). Connect health uses warmup separately.</summary>
     public const int TimedProbeCount = 1;
+    /// <summary>Connect gate: discard one warmup GET, then this many timed samples.</summary>
+    public const int ConnectHealthTimedProbeCount = 1;
     public const int DesktopSpeedtestWorkers = 3;
     public const int MobileSpeedtestWorkers = 2;
 
@@ -135,7 +140,20 @@ public sealed class LatencyService
         CancellationToken cancellationToken = default,
         int timeoutMs = TimeoutMs)
     {
-        return await ProbeThroughSocksAsync(socksPort, cancellationToken, timeoutMs).ConfigureAwait(false);
+        return await ProbeThroughSocksAsync(socksPort, cancellationToken, timeoutMs, warmThenMeasure: false)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Connect gate only: one discarded warmup GET, then one timed GET (avoids cold-handshake false fails into Survive).
+    /// </summary>
+    public async Task<int?> MeasureConnectHealthViaSocksAsync(
+        int socksPort,
+        CancellationToken cancellationToken = default,
+        int timeoutMs = ConnectHealthProbeMs)
+    {
+        return await ProbeThroughSocksAsync(socksPort, cancellationToken, timeoutMs, warmThenMeasure: true)
+            .ConfigureAwait(false);
     }
 
     public async Task<int?> MeasureProxyPathAsync(
@@ -309,7 +327,11 @@ public sealed class LatencyService
 
     public const string SocksProxyScheme = "socks5";
 
-    private async Task<int?> ProbeThroughSocksAsync(int socksPort, CancellationToken cancellationToken, int timeoutMs)
+    private async Task<int?> ProbeThroughSocksAsync(
+        int socksPort,
+        CancellationToken cancellationToken,
+        int timeoutMs,
+        bool warmThenMeasure = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(timeoutMs);
@@ -330,6 +352,29 @@ public sealed class LatencyService
             foreach (var url in PingUrls)
             {
                 timeout.Token.ThrowIfCancellationRequested();
+
+                if (warmThenMeasure)
+                {
+                    // Discard cold TLS handshake; timed sample is what we store as LastConnectProbeMs.
+                    _ = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                    timeout.Token.ThrowIfCancellationRequested();
+
+                    int? best = null;
+                    for (var i = 0; i < ConnectHealthTimedProbeCount; i++)
+                    {
+                        timeout.Token.ThrowIfCancellationRequested();
+                        var timed = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                        if (timed.Ok && timed.Ms >= 0)
+                            best = best is null ? timed.Ms : Math.Min(best.Value, timed.Ms);
+                        else
+                            firstError ??= timed.Error;
+                    }
+
+                    if (best is >= 0)
+                        return best;
+                    continue;
+                }
+
                 var one = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
                 if (one.Ok && one.Ms >= 0)
                     return one.Ms;

@@ -53,8 +53,23 @@ public class VisionSpeedSettingsTests
     {
         var vision = new ProxyServer { Flow = "xtls-rprx-vision", Security = "reality", Network = "tcp" };
         var plain = new ProxyServer { Network = "tcp", Security = "tls" };
-        Assert.Equal(8000, LatencyService.GetConnectHealthProbeMs(vision));
-        Assert.Equal(4000, LatencyService.GetConnectHealthProbeMs(plain));
+        Assert.Equal(12000, LatencyService.GetConnectHealthProbeMs(vision));
+        Assert.Equal(8000, LatencyService.GetConnectHealthProbeMs(plain));
+    }
+
+    [Fact]
+    public void AdaptiveSurvive_DefaultsOff()
+    {
+        Assert.False(new AppSettings().AdaptiveSurviveEnabled);
+    }
+
+    [Fact]
+    public void ConnectHealth_UsesWarmupThenTimedSample()
+    {
+        Assert.Equal(1, LatencyService.TimedProbeCount);
+        Assert.Equal(1, LatencyService.ConnectHealthTimedProbeCount);
+        Assert.True(LatencyService.ConnectHealthProbeMs >= 8000);
+        Assert.True(LatencyService.ConnectHealthProbeVisionMs >= LatencyService.ConnectHealthProbeMs);
     }
 
     [Fact]
