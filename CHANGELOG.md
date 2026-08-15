@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-15
+
+### Added
+
+- Clash Meta `proxies:` YAML import (vmess/vless/trojan/ss/socks) with skips for hy2/tuic/wg/anytls
+- sing-box JSON outbound import for Xray-runnable types; unsupported types reported honestly
+- WS early data (`ed` / `maxEarlyData`) and VLESS/VMess `packetEncoding` parse + Xray build
+- Import summary StatusText: N imported + skip reasons ([docs/supported-configs.md](docs/supported-configs.md))
+
+### Fixed
+
+- Shadowsocks SIP003 `plugin=` links are **skipped** (plain SS only) instead of importing a broken node
+- hy2 / TUIC / anytls / WireGuard schemes skipped with clear sing-box hints (not silent drop)
+
 ## [1.4.15] - 2026-08-15
 
 ### Fixed

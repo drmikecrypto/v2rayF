@@ -133,14 +133,14 @@ public class VisionSpeedSettingsTests
     }
 
     [Fact]
-    public void Parse_SsPluginQuery_DoesNotBreakHostPort()
+    public void Parse_SsPluginQuery_IsRejected()
     {
         var user = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("aes-128-gcm:password"));
         var link = $"ss://{user}@example.com:8388/?plugin=obfs-local%3Bobfs%3Dhttp#ss1";
-        var server = ShareLinkParser.Parse(link)!;
-        Assert.Equal("example.com", server.Address);
-        Assert.Equal(8388, server.Port);
-        Assert.Equal("aes-128-gcm", server.Cipher);
+        Assert.Throws<FormatException>(() => ShareLinkParser.Parse(link));
+        var bulk = ShareLinkParser.ParseBulkDetailed(link);
+        Assert.Empty(bulk.Servers);
+        Assert.True(bulk.SkippedCount >= 1);
     }
 
     [Fact]
@@ -221,10 +221,10 @@ public class VisionSpeedSettingsTests
     public void Import_SkipsHy2_WithHint()
     {
         var text = "hy2://secret@example.com:443#h\nvless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v";
-        var servers = ConfigImportParser.Parse(text);
-        Assert.Contains(servers, s => s.Protocol == ProxyProtocol.VLESS);
-        Assert.DoesNotContain(servers, s => s.Name == "h");
-        Assert.Contains("sing-box", ConfigImportParser.LastSkippedSingBoxHint, StringComparison.OrdinalIgnoreCase);
+        var result = ConfigImportParser.ParseDetailed(text);
+        Assert.Contains(result.Servers, s => s.Protocol == ProxyProtocol.VLESS);
+        Assert.DoesNotContain(result.Servers, s => s.Name == "h");
+        Assert.Contains("sing-box", result.SummaryHint, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

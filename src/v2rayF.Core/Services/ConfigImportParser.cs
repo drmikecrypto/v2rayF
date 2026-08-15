@@ -16,53 +16,146 @@ public static partial class ConfigImportParser
 {
     private static readonly Regex ShareLinkRegex = ShareLinkPattern();
 
-    /// <summary>Set when paste/subscription contained hy2/TUIC that this Xray build cannot run.</summary>
+    /// <summary>Set when paste/subscription contained unsupported links (hy2/TUIC/wg/plugins/…).</summary>
     public static string? LastSkippedSingBoxHint { get; private set; }
 
-    public static IReadOnlyList<ProxyServer> Parse(string input)
+    public static IReadOnlyList<ProxyServer> Parse(string input) =>
+        ParseDetailed(input).Servers;
+
+    public static ImportResult ParseDetailed(string input)
     {
         LastSkippedSingBoxHint = null;
         if (string.IsNullOrWhiteSpace(input))
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
 
         var trimmed = input.Trim();
-        LastSkippedSingBoxHint = DetectSingBoxHint(trimmed);
 
         // Subscription URL alone is handled by the caller (fetch), not here.
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
             uri.Scheme is "http" or "https" &&
             LooksLikeBareSubscriptionUrl(trimmed))
         {
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
+        }
+
+        var mergedSkips = new List<string>();
+        var skipCount = 0;
+
+        void MergeSkips(ImportResult part)
+        {
+            skipCount += part.SkippedCount;
+            foreach (var s in part.SkipReasons)
+            {
+                if (!mergedSkips.Contains(s))
+                    mergedSkips.Add(s);
+            }
+        }
+
+        // Clash Meta YAML (proxies:)
+        if (ClashMetaImportParser.LooksLikeClash(trimmed))
+        {
+            var clash = ClashMetaImportParser.Parse(trimmed);
+            MergeSkips(clash);
+            if (clash.Servers.Count > 0)
+            {
+                var result = ImportResult.FromServers(Deduplicate(clash.Servers), mergedSkips, skipCount);
+                LastSkippedSingBoxHint = result.SummaryHint;
+                return result;
+            }
+        }
+
+        // sing-box JSON with outbounds
+        if (SingBoxJsonImportParser.LooksLikeSingBox(trimmed))
+        {
+            var sb = SingBoxJsonImportParser.Parse(trimmed);
+            MergeSkips(sb);
+            if (sb.Servers.Count > 0 || sb.SkippedCount > 0)
+            {
+                // Prefer sing-box mapping even if only skips (so UI shows honesty).
+                if (sb.Servers.Count > 0)
+                {
+                    var result = ImportResult.FromServers(Deduplicate(sb.Servers), mergedSkips, skipCount);
+                    LastSkippedSingBoxHint = result.SummaryHint;
+                    return result;
+                }
+            }
         }
 
         var fromJson = TryParseXrayJson(trimmed);
         if (fromJson.Count > 0)
-            return Deduplicate(fromJson);
+        {
+            var hint = DetectUnsupportedHint(trimmed);
+            if (hint is not null)
+                mergedSkips.Add(hint);
+            var result = ImportResult.FromServers(Deduplicate(fromJson), mergedSkips, skipCount + (hint is null ? 0 : 1));
+            LastSkippedSingBoxHint = result.SummaryHint;
+            return result;
+        }
 
-        var fromLinks = ShareLinkParser.ParseBulk(trimmed);
-        if (fromLinks.Count > 0)
-            return Deduplicate(fromLinks);
+        // After Xray JSON miss, try sing-box again if it looked empty due to only skips
+        if (SingBoxJsonImportParser.LooksLikeSingBox(trimmed))
+        {
+            var sbOnly = SingBoxJsonImportParser.Parse(trimmed);
+            if (sbOnly.SkippedCount > 0 && sbOnly.Servers.Count == 0)
+            {
+                LastSkippedSingBoxHint = sbOnly.SummaryHint;
+                return sbOnly;
+            }
+        }
 
-        var scanned = ScanShareLinks(trimmed);
-        if (scanned.Count > 0)
-            return Deduplicate(scanned);
+        var fromLinks = ShareLinkParser.ParseBulkDetailed(trimmed);
+        MergeSkips(fromLinks);
+        if (fromLinks.Servers.Count > 0)
+        {
+            var result = ImportResult.FromServers(Deduplicate(fromLinks.Servers), mergedSkips, skipCount);
+            LastSkippedSingBoxHint = result.SummaryHint;
+            return result;
+        }
+
+        var scanned = ScanShareLinksDetailed(trimmed);
+        MergeSkips(scanned);
+        if (scanned.Servers.Count > 0)
+        {
+            var result = ImportResult.FromServers(Deduplicate(scanned.Servers), mergedSkips, skipCount);
+            LastSkippedSingBoxHint = result.SummaryHint;
+            return result;
+        }
 
         // Nested base64 / JSON string fields common in .v2box / .npv dumps.
         foreach (var candidate in ExtractQuotedOrBase64Blobs(trimmed))
         {
-            var nested = Parse(candidate);
-            if (nested.Count > 0)
-                return Deduplicate(nested);
+            var nested = ParseDetailed(candidate);
+            if (nested.Servers.Count > 0)
+            {
+                LastSkippedSingBoxHint = nested.SummaryHint;
+                return nested;
+            }
         }
 
-        return Array.Empty<ProxyServer>();
+        if (mergedSkips.Count > 0)
+        {
+            var empty = ImportResult.FromServers([], mergedSkips, skipCount);
+            LastSkippedSingBoxHint = empty.SummaryHint;
+            return empty;
+        }
+
+        var fallbackHint = DetectUnsupportedHint(trimmed);
+        if (fallbackHint is not null)
+        {
+            LastSkippedSingBoxHint = fallbackHint;
+            return ImportResult.FromServers([], [fallbackHint], 1);
+        }
+
+        return ImportResult.Empty;
     }
 
-    public static IReadOnlyList<ProxyServer> ParseBytes(byte[] bytes, string? fileNameHint = null)
+    public static IReadOnlyList<ProxyServer> ParseBytes(byte[] bytes, string? fileNameHint = null) =>
+        ParseBytesDetailed(bytes, fileNameHint).Servers;
+
+    public static ImportResult ParseBytesDetailed(byte[] bytes, string? fileNameHint = null)
     {
         if (bytes.Length == 0)
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
 
         // UTF-8 / UTF-16 text first.
         string text;
@@ -80,13 +173,13 @@ public static partial class ConfigImportParser
             text = Encoding.Latin1.GetString(bytes);
         }
 
-        var parsed = Parse(text);
-        if (parsed.Count > 0)
+        var parsed = ParseDetailed(text);
+        if (parsed.Servers.Count > 0 || parsed.SkippedCount > 0)
             return parsed;
 
         // Binary / encrypted vault-like: still scan for ASCII share links.
         var ascii = Encoding.ASCII.GetString(bytes);
-        return ScanShareLinks(ascii);
+        return ScanShareLinksDetailed(ascii);
     }
 
     public static IReadOnlyList<ProxyServer> TryParseXrayJson(string text)
@@ -416,17 +509,48 @@ public static partial class ConfigImportParser
         ShareLinkParser.NormalizeVisionFlow(server);
     }
 
-    public static IReadOnlyList<ProxyServer> ScanShareLinks(string text)
+    public static IReadOnlyList<ProxyServer> ScanShareLinks(string text) =>
+        ScanShareLinksDetailed(text).Servers;
+
+    public static ImportResult ScanShareLinksDetailed(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
 
         var results = new List<ProxyServer>();
+        var skips = new List<string>();
+        var skipCount = 0;
+
         foreach (Match match in ShareLinkRegex.Matches(text))
         {
             try
             {
                 var link = match.Value.Trim().TrimEnd(',', ';', '"', '\'', ')', ']', '}');
+                var unsupported = ShareLinkParser.GetUnsupportedSchemeHint(link);
+                if (unsupported is not null)
+                {
+                    skipCount++;
+                    if (!skips.Contains(unsupported))
+                        skips.Add(unsupported);
+                    continue;
+                }
+
+                if (link.StartsWith("ss://", StringComparison.OrdinalIgnoreCase))
+                {
+                    var detailed = ShareLinkParser.ParseBulkDetailed(link);
+                    if (detailed.SkippedCount > 0)
+                    {
+                        skipCount += detailed.SkippedCount;
+                        foreach (var s in detailed.SkipReasons)
+                        {
+                            if (!skips.Contains(s))
+                                skips.Add(s);
+                        }
+
+                        continue;
+                    }
+                }
+
                 var server = ShareLinkParser.Parse(link);
                 if (server is not null)
                     results.Add(server);
@@ -437,7 +561,7 @@ public static partial class ConfigImportParser
             }
         }
 
-        return results;
+        return ImportResult.FromServers(results, skips, skipCount);
     }
 
     private static IEnumerable<string> ExtractQuotedOrBase64Blobs(string text)
@@ -469,13 +593,31 @@ public static partial class ConfigImportParser
         return list;
     }
 
-    private static string? DetectSingBoxHint(string text)
+    private static string? DetectUnsupportedHint(string text)
     {
+        var reasons = new List<string>();
         if (text.Contains("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
             text.Contains("hy2://", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("tuic://", StringComparison.OrdinalIgnoreCase))
-            return "Skipped Hysteria2/TUIC links (need sing-box; not in this build).";
-        return null;
+            text.Contains("hysteria2", StringComparison.OrdinalIgnoreCase))
+            reasons.Add("Hysteria2 needs sing-box (not in this build)");
+        if (text.Contains("tuic://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("\"tuic\"", StringComparison.OrdinalIgnoreCase))
+            reasons.Add("TUIC needs sing-box (not in this build)");
+        if (text.Contains("anytls://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("anytls", StringComparison.OrdinalIgnoreCase))
+            reasons.Add("anytls needs sing-box (not in this build)");
+        if (text.Contains("wg://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("wireguard://", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("wireguard", StringComparison.OrdinalIgnoreCase))
+            reasons.Add("WireGuard needs sing-box (not in this build)");
+        if (text.Contains("plugin=", StringComparison.OrdinalIgnoreCase))
+            reasons.Add("Shadowsocks plugins not supported (plain SS only)");
+
+        if (reasons.Count == 0)
+            return null;
+        return reasons.Count == 1
+            ? $"Skipped: {reasons[0]}"
+            : $"Skipped unsupported: {string.Join("; ", reasons)}";
     }
 
     private static bool LooksLikeBareSubscriptionUrl(string text) =>
@@ -501,7 +643,7 @@ public static partial class ConfigImportParser
         };
     }
 
-    [GeneratedRegex(@"(?:vmess|vless|trojan|ss|socks5?|socks|hysteria2|hy2|tuic)://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?:vmess|vless|trojan|ss|socks5?|socks|hysteria2|hy2|tuic|anytls|wg|wireguard)://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ShareLinkPattern();
 
     [GeneratedRegex("\"([^\"]{16,})\"", RegexOptions.CultureInvariant)]

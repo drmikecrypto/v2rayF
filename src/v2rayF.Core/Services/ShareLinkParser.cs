@@ -9,17 +9,20 @@ namespace v2rayF.Services;
 
 public static class ShareLinkParser
 {
-    public static IReadOnlyList<ProxyServer> ParseBulk(string input)
+    public static IReadOnlyList<ProxyServer> ParseBulk(string input) =>
+        ParseBulkDetailed(input).Servers;
+
+    public static ImportResult ParseBulkDetailed(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
 
         var trimmed = input.Trim();
 
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) &&
             (uri.Scheme is "http" or "https"))
         {
-            return Array.Empty<ProxyServer>();
+            return ImportResult.Empty;
         }
 
         if (!trimmed.Contains("://", StringComparison.Ordinal) && LooksLikeBase64(trimmed))
@@ -34,21 +37,70 @@ public static class ShareLinkParser
             }
         }
 
-        return trimmed
-            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .SelectMany(line =>
+        var servers = new List<ProxyServer>();
+        var skips = new List<string>();
+        var skipCount = 0;
+
+        foreach (var line in trimmed.Split(
+                     ['\r', '\n'],
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            try
             {
-                try
+                var unsupported = GetUnsupportedSchemeHint(line);
+                if (unsupported is not null)
                 {
-                    var server = Parse(line);
-                    return server is null ? Array.Empty<ProxyServer>() : [server];
+                    skipCount++;
+                    if (!skips.Contains(unsupported))
+                        skips.Add(unsupported);
+                    continue;
                 }
-                catch
+
+                if (line.StartsWith("ss://", StringComparison.OrdinalIgnoreCase) &&
+                    TryGetSsPluginSkipReason(line, out var ssSkip))
                 {
-                    return Array.Empty<ProxyServer>();
+                    skipCount++;
+                    if (!skips.Contains(ssSkip!))
+                        skips.Add(ssSkip!);
+                    continue;
                 }
-            })
-            .ToList();
+
+                var server = Parse(line);
+                if (server is not null)
+                    servers.Add(server);
+            }
+            catch
+            {
+                // Skip malformed lines.
+            }
+        }
+
+        return ImportResult.FromServers(servers, skips, skipCount);
+    }
+
+    private static bool TryGetSsPluginSkipReason(string link, out string? reason)
+    {
+        reason = null;
+        try
+        {
+            var hashIndex = link.IndexOf('#');
+            var body = hashIndex >= 0 ? link[..hashIndex] : link;
+            body = body["ss://".Length..];
+            if (!body.Contains('@'))
+                return false;
+            var atIndex = body.LastIndexOf('@');
+            var hostPart = body[(atIndex + 1)..];
+            ParseHostPort(hostPart, out _, out _, out var query);
+            if (!HasUnsupportedSsPlugin(query))
+                return false;
+            var plugin = GetQuery(query, "plugin") ?? "plugin";
+            reason = $"Shadowsocks plugin '{plugin.Split(';')[0]}' not supported (plain SS only)";
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static ProxyServer? Parse(string link)
@@ -77,7 +129,37 @@ public static class ShareLinkParser
     {
         return link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
                link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase) ||
-               link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase);
+               link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase) ||
+               link.StartsWith("anytls://", StringComparison.OrdinalIgnoreCase) ||
+               link.StartsWith("wg://", StringComparison.OrdinalIgnoreCase) ||
+               link.StartsWith("wireguard://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Human-readable skip reason for schemes this Xray build cannot run.</summary>
+    public static string? GetUnsupportedSchemeHint(string link)
+    {
+        if (string.IsNullOrWhiteSpace(link))
+            return null;
+        link = link.Trim();
+        if (link.StartsWith("hysteria2://", StringComparison.OrdinalIgnoreCase) ||
+            link.StartsWith("hy2://", StringComparison.OrdinalIgnoreCase))
+            return "Hysteria2 needs sing-box (not in this build)";
+        if (link.StartsWith("tuic://", StringComparison.OrdinalIgnoreCase))
+            return "TUIC needs sing-box (not in this build)";
+        if (link.StartsWith("anytls://", StringComparison.OrdinalIgnoreCase))
+            return "anytls needs sing-box (not in this build)";
+        if (link.StartsWith("wg://", StringComparison.OrdinalIgnoreCase) ||
+            link.StartsWith("wireguard://", StringComparison.OrdinalIgnoreCase))
+            return "WireGuard needs sing-box (not in this build)";
+        return null;
+    }
+
+    /// <summary>True when SIP003 plugin query would produce a non-working plain SS node.</summary>
+    public static bool HasUnsupportedSsPlugin(IReadOnlyDictionary<string, string> query)
+    {
+        if (!query.TryGetValue("plugin", out var plugin) && !query.TryGetValue("Plugin", out plugin))
+            return false;
+        return !string.IsNullOrWhiteSpace(plugin);
     }
 
     private static ProxyServer ParseVmess(string link)
@@ -237,6 +319,9 @@ public static class ShareLinkParser
             }
 
             ParseHostPort(hostPart, out host, out port, out var query);
+            if (HasUnsupportedSsPlugin(query))
+                throw new FormatException(
+                    $"Shadowsocks plugin not supported (plain SS only): {GetQuery(query, "plugin")}");
             var server = new ProxyServer
             {
                 Protocol = ProxyProtocol.Shadowsocks,
@@ -264,6 +349,9 @@ public static class ShareLinkParser
             method = creds[..colon];
             password = creds[(colon + 1)..];
             ParseHostPort(hostPart, out host, out port, out var query);
+            if (HasUnsupportedSsPlugin(query))
+                throw new FormatException(
+                    $"Shadowsocks plugin not supported (plain SS only): {GetQuery(query, "plugin")}");
             var server = new ProxyServer
             {
                 Protocol = ProxyProtocol.Shadowsocks,
@@ -349,6 +437,10 @@ public static class ShareLinkParser
         server.QuicSecurity = GetQuery(query, "quicSecurity") ?? "";
         if (server.Network.Equals("quic", StringComparison.OrdinalIgnoreCase))
             server.QuicKey = GetQuery(query, "key") ?? server.QuicKey;
+        server.PacketEncoding = GetQuery(query, "packetEncoding") ?? GetQuery(query, "packetencoding") ?? "";
+        if (int.TryParse(GetQuery(query, "ed") ?? GetQuery(query, "maxEarlyData"), out var ed) && ed > 0)
+            server.MaxEarlyData = ed;
+        server.EarlyDataHeaderName = GetQuery(query, "eh") ?? GetQuery(query, "earlyDataHeaderName") ?? "";
         server.AllowInsecure =
             GetQuery(query, "allowInsecure") is "1" or "true" ||
             GetQuery(query, "insecure") is "1" or "true";

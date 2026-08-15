@@ -68,6 +68,15 @@ public partial class ProxyServer : ObservableObject
     /// <summary>QUIC key.</summary>
     public string QuicKey { get; set; } = "";
 
+    /// <summary>WS early data size (maxEarlyData / ed).</summary>
+    public int MaxEarlyData { get; set; }
+
+    /// <summary>WS early data header name (default Sec-WebSocket-Protocol).</summary>
+    public string EarlyDataHeaderName { get; set; } = "";
+
+    /// <summary>VLESS/VMess packet encoding (xudp / packet).</summary>
+    public string PacketEncoding { get; set; } = "";
+
     /// <summary>VLESS encryption (usually none).</summary>
     public string Encryption { get; set; } = "none";
 

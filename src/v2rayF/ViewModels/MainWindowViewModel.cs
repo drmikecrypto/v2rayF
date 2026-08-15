@@ -1519,19 +1519,21 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var imported = ConfigImportParser.Parse(text);
-        if (imported.Count == 0)
+        var imported = ConfigImportParser.ParseDetailed(text);
+        if (imported.Servers.Count == 0)
         {
-            StatusText = "No valid proxy configs found (share links, Xray JSON, or bulk list).";
+            StatusText = string.IsNullOrEmpty(imported.SummaryHint)
+                ? "No valid proxy configs found (share links, Xray JSON, Clash Meta, or bulk list)."
+                : imported.SummaryHint;
             return;
         }
 
-        await MergeImportedAsync(imported);
+        await MergeImportedAsync(imported.Servers);
         ImportText = "";
-        var hint = ConfigImportParser.LastSkippedSingBoxHint;
+        var hint = imported.SummaryHint;
         StatusText = string.IsNullOrEmpty(hint)
-            ? $"Imported {imported.Count} server(s)."
-            : $"Imported {imported.Count} server(s). {hint}";
+            ? $"Imported {imported.Servers.Count} server(s)."
+            : $"Imported {imported.Servers.Count} server(s). {hint}";
     }
 
     [RelayCommand]
@@ -1565,22 +1567,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
             IsBusy = true;
             var all = new List<ProxyServer>();
+            var hints = new List<string>();
             foreach (var file in files)
             {
                 await using var stream = await file.OpenReadAsync().ConfigureAwait(true);
                 using var ms = new MemoryStream();
                 await stream.CopyToAsync(ms).ConfigureAwait(true);
-                all.AddRange(ConfigImportParser.ParseBytes(ms.ToArray(), file.Name));
+                var detailed = ConfigImportParser.ParseBytesDetailed(ms.ToArray(), file.Name);
+                all.AddRange(detailed.Servers);
+                if (!string.IsNullOrEmpty(detailed.SummaryHint) && !hints.Contains(detailed.SummaryHint))
+                    hints.Add(detailed.SummaryHint);
             }
 
             if (all.Count == 0)
             {
-                StatusText = "No valid proxy configs found in the selected file(s).";
+                StatusText = hints.Count > 0
+                    ? string.Join(" ", hints)
+                    : "No valid proxy configs found in the selected file(s).";
                 return;
             }
 
             await MergeImportedAsync(all).ConfigureAwait(true);
-            StatusText = $"Imported {all.Count} server(s) from file(s).";
+            StatusText = hints.Count > 0
+                ? $"Imported {all.Count} server(s) from file(s). {string.Join(" ", hints)}"
+                : $"Imported {all.Count} server(s) from file(s).";
         }
         catch (Exception ex)
         {
@@ -1608,9 +1618,11 @@ public partial class MainWindowViewModel : ViewModelBase
             var imported = await _subscriptionService.FetchAsync(SubscriptionUrl, viaProxy);
             await MergeImportedAsync(imported);
             await _settingsStore.SaveAsync(CollectSettings());
-            StatusText = viaProxy
+            var hint = ConfigImportParser.LastSkippedSingBoxHint;
+            var baseMsg = viaProxy
                 ? $"Imported {imported.Count} server(s) via proxy."
                 : $"Imported {imported.Count} server(s) from subscription.";
+            StatusText = string.IsNullOrEmpty(hint) ? baseMsg : $"{baseMsg} {hint}";
             return true;
         }
         catch (Exception ex)

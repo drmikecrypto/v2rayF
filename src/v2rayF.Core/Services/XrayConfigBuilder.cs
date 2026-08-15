@@ -716,6 +716,15 @@ public static class XrayConfigBuilder
 
     private static JsonObject BuildVmessOutbound(ProxyServer server, string tag)
     {
+        var user = new JsonObject
+        {
+            ["id"] = server.UserId,
+            ["alterId"] = server.AlterId,
+            ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher
+        };
+        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
+            user["packetEncoding"] = server.PacketEncoding;
+
         var outbound = new JsonObject
         {
             ["tag"] = tag,
@@ -728,15 +737,7 @@ public static class XrayConfigBuilder
                     {
                         ["address"] = server.Address,
                         ["port"] = server.Port,
-                        ["users"] = new JsonArray
-                        {
-                            new JsonObject
-                            {
-                                ["id"] = server.UserId,
-                                ["alterId"] = server.AlterId,
-                                ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher
-                            }
-                        }
+                        ["users"] = new JsonArray { user }
                     }
                 }
             }
@@ -758,6 +759,8 @@ public static class XrayConfigBuilder
 
         if (!string.IsNullOrWhiteSpace(server.Flow))
             user["flow"] = server.Flow;
+        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
+            user["packetEncoding"] = server.PacketEncoding;
 
         return new JsonObject
         {
@@ -932,7 +935,8 @@ public static class XrayConfigBuilder
         switch (network)
         {
             case "ws":
-                stream["wsSettings"] = new JsonObject
+            {
+                var ws = new JsonObject
                 {
                     ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path,
                     ["headers"] = new JsonObject
@@ -940,7 +944,17 @@ public static class XrayConfigBuilder
                         ["Host"] = FirstHost(server)
                     }
                 };
+                if (server.MaxEarlyData > 0)
+                {
+                    ws["maxEarlyData"] = server.MaxEarlyData;
+                    ws["earlyDataHeaderName"] = string.IsNullOrWhiteSpace(server.EarlyDataHeaderName)
+                        ? "Sec-WebSocket-Protocol"
+                        : server.EarlyDataHeaderName;
+                }
+
+                stream["wsSettings"] = ws;
                 break;
+            }
 
             case "grpc":
             {
