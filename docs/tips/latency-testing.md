@@ -25,3 +25,7 @@ After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision
 ## Adaptive Survive
 
 **Off by default.** When enabled, failed connects may retry with TLS hello fragment (works for some DPI; **slow**). Prefer leaving it off unless you need it.
+
+## While connected
+
+Traffic rates poll every **5s** (single-flight). Health checks need **three** SOCKS misses before a drop. Kill switch requires **TUN**; with system proxy only, apps are not blackholed. Secure DNS (DoH) is off by default for lower first-hit latency.

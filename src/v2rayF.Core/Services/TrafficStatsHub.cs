@@ -28,6 +28,7 @@ public sealed class TrafficStatsHub : IDisposable
     private DateTimeOffset _lastSampleUtc = DateTimeOffset.MinValue;
     private LiveTraffic _latest;
     private int? _connectedPingMs;
+    private int _queryInFlight;
 
     public event Action<LiveTraffic>? Updated;
 
@@ -40,7 +41,10 @@ public sealed class TrafficStatsHub : IDisposable
 
     public LiveTraffic Latest => _latest;
 
-    public TimeSpan PollInterval { get; set; } = TimeSpan.FromMilliseconds(2500);
+    /// <summary>Default poll cadence — avoid spawning <c>xray api</c> more often than this.</summary>
+    public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(5000);
+
+    public TimeSpan PollInterval { get; set; } = DefaultPollInterval;
 
     public TrafficStatsHub(TrafficStatsService? stats = null)
     {
@@ -123,42 +127,55 @@ public sealed class TrafficStatsHub : IDisposable
         {
             try
             {
-                var snap = await Stats.QueryAsync(cancellationToken).ConfigureAwait(false);
-                var now = DateTimeOffset.UtcNow;
-                LiveTraffic live;
-                if (snap is { } traffic)
+                // Single-flight: skip if a prior statsquery process is still running.
+                if (Interlocked.CompareExchange(ref _queryInFlight, 1, 0) == 0)
                 {
-                    long upBps = 0;
-                    long downBps = 0;
-                    if (_lastSampleUtc != DateTimeOffset.MinValue)
+                    try
                     {
-                        var dt = (now - _lastSampleUtc).TotalSeconds;
-                        if (dt > 0.2)
+                        var snap = await Stats.QueryAsync(cancellationToken).ConfigureAwait(false);
+                        var now = DateTimeOffset.UtcNow;
+                        LiveTraffic live;
+                        if (snap is { } traffic)
                         {
-                            upBps = Math.Max(0, (long)((traffic.UplinkBytes - _lastUp) / dt));
-                            downBps = Math.Max(0, (long)((traffic.DownlinkBytes - _lastDown) / dt));
+                            long upBps = 0;
+                            long downBps = 0;
+                            if (_lastSampleUtc != DateTimeOffset.MinValue)
+                            {
+                                var dt = (now - _lastSampleUtc).TotalSeconds;
+                                if (dt > 0.2)
+                                {
+                                    upBps = Math.Max(0, (long)((traffic.UplinkBytes - _lastUp) / dt));
+                                    downBps = Math.Max(0, (long)((traffic.DownlinkBytes - _lastDown) / dt));
+                                }
+                            }
+
+                            _lastUp = traffic.UplinkBytes;
+                            _lastDown = traffic.DownlinkBytes;
+                            _lastSampleUtc = now;
+                            live = new LiveTraffic(traffic.UplinkBytes, traffic.DownlinkBytes, upBps, downBps);
                         }
+                        else
+                        {
+                            live = _latest;
+                        }
+
+                        _latest = live;
+                        Updated?.Invoke(live);
                     }
-
-                    _lastUp = traffic.UplinkBytes;
-                    _lastDown = traffic.DownlinkBytes;
-                    _lastSampleUtc = now;
-                    live = new LiveTraffic(traffic.UplinkBytes, traffic.DownlinkBytes, upBps, downBps);
+                    finally
+                    {
+                        Interlocked.Exchange(ref _queryInFlight, 0);
+                    }
                 }
-                else
-                {
-                    live = _latest;
-                }
-
-                _latest = live;
-                Updated?.Invoke(live);
             }
             catch (OperationCanceledException)
             {
+                Interlocked.Exchange(ref _queryInFlight, 0);
                 return;
             }
             catch
             {
+                Interlocked.Exchange(ref _queryInFlight, 0);
                 // Keep polling.
             }
 

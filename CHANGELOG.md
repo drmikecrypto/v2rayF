@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.15] - 2026-08-15
+
+### Fixed
+
+- Live traffic stats no longer spawn stacked `xray api` processes every 2.5s (5s poll, single-flight, 1.5s timeout) — reduces mid-session “thinking” stutter
+- HealthLoop requires three consecutive SOCKS misses (500ms timeout) before declaring a drop — fewer false “connection dropped” flaps
+- Unexpected core stop no longer flashes Idle/`Disconnected` before Failed status
+- Kill switch arms only with TUN; system-proxy mode no longer blackholes non-proxy apps while Connected
+
+### Changed
+
+- Secure DNS (DoH) and Adaptive Survive default **off** (Settings still opt-in)
+- Quiet update offers no longer overwrite the Connected status line
+
 ## [1.4.14] - 2026-08-15
 
 ### Fixed

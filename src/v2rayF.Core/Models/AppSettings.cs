@@ -30,7 +30,7 @@ public sealed class AppSettings
 
     public bool BlockIpv6 { get; set; } = true;
 
-    public bool DnsThroughProxy { get; set; } = true;
+    public bool DnsThroughProxy { get; set; }
 
     public bool SecureShareEnabled { get; set; }
 

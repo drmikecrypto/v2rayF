@@ -11,7 +11,10 @@ namespace v2rayF.Services;
 public sealed class ProxyCoreService : IAsyncDisposable
 {
     public const int ConnectTimeoutMs = 15000;
-    public const int HealthCheckIntervalMs = 4000;
+    public const int HealthCheckIntervalMs = 5000;
+    public const int HealthPortTimeoutMs = 500;
+    public const int HealthSocksFailThreshold = 3;
+    public const int HealthSocksFailGapMs = 400;
 
     private readonly ICoreEnvironment _environment;
     private readonly LatencyService _latency;
@@ -52,6 +55,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
         return File.Exists(Path.Combine(cores, "geoip.dat")) &&
                File.Exists(Path.Combine(cores, "geosite.dat"));
     }
+
+    /// <summary>True when consecutive SOCKS probe misses should declare the tunnel dead.</summary>
+    public static bool ShouldRaiseOnSocksFails(int consecutiveFails) =>
+        consecutiveFails >= HealthSocksFailThreshold;
 
     public async Task StartAsync(
         ProxyServer server,
@@ -180,6 +187,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     private async Task HealthLoopAsync(CancellationToken cancellationToken)
     {
+        var consecutiveSocksFails = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -191,19 +199,29 @@ public sealed class ProxyCoreService : IAsyncDisposable
                     return;
                 }
 
-                if (!await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+                if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
                         .ConfigureAwait(false))
                 {
-                    // Brief grace: port may flap during reconnect.
-                    await Task.Delay(750, cancellationToken).ConfigureAwait(false);
-                    if (ProcessHost.HasExited ||
-                        !await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
-                            .ConfigureAwait(false))
-                    {
-                        RaiseUnexpectedStop();
-                        return;
-                    }
+                    consecutiveSocksFails = 0;
+                    continue;
                 }
+
+                consecutiveSocksFails++;
+                if (!ShouldRaiseOnSocksFails(consecutiveSocksFails))
+                {
+                    await Task.Delay(HealthSocksFailGapMs, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (ProcessHost.HasExited ||
+                    !await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    RaiseUnexpectedStop();
+                    return;
+                }
+
+                consecutiveSocksFails = 0;
             }
             catch (OperationCanceledException)
             {
@@ -232,7 +250,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         StopHealthMonitor();
         ActiveServer = null;
-        RunningStateChanged?.Invoke(this, false);
+        // Do not fire RunningStateChanged(false) here — that flashed Idle/"Disconnected"
+        // before teardown. UnexpectedStop handler owns UI after SafeTeardown.
         UnexpectedStop?.Invoke(this, EventArgs.Empty);
     }
 
@@ -261,7 +280,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         {
             using var client = new TcpClient();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(200);
+            timeout.CancelAfter(HealthPortTimeoutMs);
             await client.ConnectAsync(host, port, timeout.Token).ConfigureAwait(false);
             return true;
         }

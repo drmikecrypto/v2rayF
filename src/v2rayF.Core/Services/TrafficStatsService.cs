@@ -11,6 +11,8 @@ namespace v2rayF.Services;
 /// <summary>Queries Xray StatsService for outbound proxy uplink/downlink totals.</summary>
 public sealed class TrafficStatsService
 {
+    public const int QueryTimeoutMs = 1500;
+
     public readonly record struct TrafficSnapshot(long UplinkBytes, long DownlinkBytes);
 
     private readonly ICoreEnvironment _environment;
@@ -162,7 +164,7 @@ public sealed class TrafficStatsService
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(2500);
+        timeout.CancelAfter(QueryTimeoutMs);
         try
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);

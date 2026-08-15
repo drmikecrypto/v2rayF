@@ -94,7 +94,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _enablePacketFragment;
 
     [ObservableProperty]
-    private bool _adaptiveSurviveEnabled = true;
+    private bool _adaptiveSurviveEnabled;
 
     [ObservableProperty]
     private bool _subscriptionViaProxy = true;
@@ -275,7 +275,13 @@ public partial class MainWindowViewModel : ViewModelBase
                     ConnectionState = ConnectionState.Connected;
                     StatusText = $"Connected — {StatusSanitizer.Scrub(_proxyCore.ActiveServer?.Name ?? "server")}";
                 }
-                else if (ConnectionState != ConnectionState.Failed)
+                else if (ConnectionState is ConnectionState.Connected or ConnectionState.Failed)
+                {
+                    // Unexpected teardown or Failed — don't flash Idle/"Disconnected".
+                    // HandleUnexpectedCoreStopAsync / Disconnect owns the final StatusText.
+                    IsConnected = false;
+                }
+                else
                 {
                     ConnectionState = ConnectionState.Idle;
                     StatusText = "Disconnected";
@@ -413,7 +419,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 UpdateAvailable = true;
                 UpdateLabel = offer.Version;
                 OnPropertyChanged(nameof(ShowUpdateChrome));
-                if (!IsBusy && !IsUpdating)
+                if (!IsBusy && !IsUpdating && ConnectionState != ConnectionState.Connected)
                     StatusText = $"v{offer.Version} is available — tap Update.";
             }).ConfigureAwait(true);
         }
@@ -545,9 +551,13 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnEnableTunModeChanged(bool value)
     {
         UpdateTunStatus();
+        OnPropertyChanged(nameof(KillSwitchUsable));
         if (value && EnableSystemProxy)
             EnableSystemProxy = false;
     }
+
+    /// <summary>Kill switch only applies with TUN (system-proxy mode must not blackhole apps).</summary>
+    public bool KillSwitchUsable => IsMobile || EnableTunMode;
 
     partial void OnSecureShareEnabledChanged(bool value)
     {
@@ -1255,15 +1265,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await ResumeOnUiAsync().ConfigureAwait(true);
 
-        // Start core first; arm kill switch only after SOCKS is up (fail-closed without blocking dial).
+        // Start core first; arm kill switch only with TUN (system-proxy mode must not blackhole apps).
         await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
         await ResumeOnUiAsync().ConfigureAwait(true);
 
-        if (settings.KillSwitchEnabled)
+        if (settings.KillSwitchEnabled && settings.EnableTunMode)
         {
             await AppServices.KillSwitch.EnableAsync(
                     _proxyCore.ResolveCorePath(),
-                    allowTunInterface: settings.EnableTunMode,
+                    allowTunInterface: true,
                     cancellationToken)
                 .ConfigureAwait(false);
             await ResumeOnUiAsync().ConfigureAwait(true);
@@ -1283,12 +1293,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
         var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({mode}{multi})";
-        if (settings.KillSwitchEnabled && !string.IsNullOrWhiteSpace(AppServices.KillSwitch.LastError) &&
+        if (settings.KillSwitchEnabled && settings.EnableTunMode &&
+            !string.IsNullOrWhiteSpace(AppServices.KillSwitch.LastError) &&
             !AppServices.KillSwitch.IsArmed)
         {
-            status += settings.EnableTunMode
-                ? $" · kill switch not armed ({StatusSanitizer.Scrub(AppServices.KillSwitch.LastError)})"
-                : " · kill switch unavailable (need admin)";
+            status += $" · kill switch not armed ({StatusSanitizer.Scrub(AppServices.KillSwitch.LastError)})";
         }
 
         await SetOnUiAsync(() =>
@@ -1682,13 +1691,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void OnHubTrafficUpdated(TrafficStatsHub.LiveTraffic traffic)
     {
+        var up = TrafficStatsService.FormatUploadRate(traffic.UplinkBps);
+        var down = TrafficStatsService.FormatDownloadRate(traffic.DownlinkBps);
+        var ping = TrafficStatsHub.Shared.ConnectedPingMs is int p and > 0 ? $"{p}" : ConnectedPingText;
+
         RunOnUiThread(() =>
         {
-            UploadTrafficText = TrafficStatsService.FormatUploadRate(traffic.UplinkBps);
-            DownloadTrafficText = TrafficStatsService.FormatDownloadRate(traffic.DownlinkBps);
-            ShowTrafficStats = true;
-            if (TrafficStatsHub.Shared.ConnectedPingMs is int ping and > 0)
-                ConnectedPingText = $"{ping}";
+            if (UploadTrafficText != up)
+                UploadTrafficText = up;
+            if (DownloadTrafficText != down)
+                DownloadTrafficText = down;
+            if (!ShowTrafficStats)
+                ShowTrafficStats = true;
+            if (TrafficStatsHub.Shared.ConnectedPingMs is int and > 0 && ConnectedPingText != ping)
+                ConnectedPingText = ping;
         });
 
         AppServices.OnLiveTraffic?.Invoke(

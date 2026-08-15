@@ -35,9 +35,13 @@
                       IsVisible="{Binding ShowDesktopProxySettings}"/>
 
             <TextBlock Text="Protection" FontWeight="SemiBold" FontSize="15" Margin="0,8,0,0"/>
-            <CheckBox Content="Kill switch" IsChecked="{Binding KillSwitchEnabled}"
+            <CheckBox Content="Kill switch (requires TUN)" IsChecked="{Binding KillSwitchEnabled}"
+                      IsEnabled="{Binding KillSwitchUsable}"
                       IsVisible="{Binding ShowDesktopProxySettings}"/>
-            <CheckBox Content="DNS through proxy" IsChecked="{Binding DnsThroughProxy}"/>
+            <TextBlock Text="Kill switch needs TUN mode; with system proxy only it would block non-proxy apps."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                       IsVisible="{Binding ShowDesktopProxySettings}"/>
+            <CheckBox Content="Secure DNS (DoH)" IsChecked="{Binding DnsThroughProxy}"/>
             <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
             <CheckBox Content="Adaptive Survive (DPI; can slow)" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
