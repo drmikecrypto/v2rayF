@@ -1382,6 +1382,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
         await ResumeOnUiAsync().ConfigureAwait(true);
+        await AppServices.Platform.NotifyVpnReadyAsync(cancellationToken).ConfigureAwait(false);
 
         await AppServices.KillSwitch.EnableAsync(
                 _proxyCore.ResolveCorePath(),

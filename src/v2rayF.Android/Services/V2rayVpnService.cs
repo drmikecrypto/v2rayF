@@ -83,10 +83,23 @@ public class V2rayVpnService : VpnService
 
             var builder = new Builder(this);
             builder.SetSession("v2rayF");
-            builder.SetMtu(1500);
+            builder.SetMtu(XrayConfigBuilder.AndroidTunMtu);
             builder.AddAddress("172.19.0.1", 30);
             builder.AddRoute("0.0.0.0", 0);
-            builder.AddDnsServer("172.19.0.1");
+            builder.AddDnsServer("1.1.1.1");
+            builder.AddDnsServer("8.8.8.8");
+
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            {
+                try
+                {
+                    builder.SetHttpProxy(ProxyInfo.BuildDirectProxy("127.0.0.1", XrayConfigBuilder.HttpPort));
+                }
+                catch
+                {
+                    // Some OEMs reject VPN HTTP proxy; TUN still applies.
+                }
+            }
 
             try
             {
@@ -179,6 +192,33 @@ public class V2rayVpnService : VpnService
     }
 
     public override IBinder? OnBind(Intent? intent) => base.OnBind(intent);
+
+    /// <summary>Re-validate the VPN after Xray is reading the TUN fd (captive portal / Chrome).</summary>
+    public static void ReportVpnReady()
+    {
+        try
+        {
+            var context = Application.Context;
+            if (context is null)
+                return;
+            if (context.GetSystemService(Context.ConnectivityService) is not ConnectivityManager cm)
+                return;
+            var networks = cm.GetAllNetworks();
+            if (networks is null)
+                return;
+            foreach (var network in networks)
+            {
+                var caps = cm.GetNetworkCapabilities(network);
+                if (caps is null || !caps.HasTransport(TransportType.Vpn))
+                    continue;
+                cm.ReportNetworkConnectivity(network, true);
+            }
+        }
+        catch
+        {
+            // Best effort — unvalidated VPN is the pre-fix behavior.
+        }
+    }
 
     public static void Disconnect(Context? context = null)
     {

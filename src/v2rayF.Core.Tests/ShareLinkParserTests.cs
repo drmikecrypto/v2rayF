@@ -169,7 +169,11 @@ public class StreamSettingsBuilderTests
         var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
         var tunSettings = tun["settings"]!.AsObject();
         Assert.Equal(TunConstants.InterfaceName, tunSettings["name"]!.GetValue<string>());
-        Assert.Equal(1500, tunSettings["MTU"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.AndroidTunMtu, tunSettings["MTU"]!.GetValue<int>());
+        var dest = tun["sniffing"]!["destOverride"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.DoesNotContain("quic", dest);
+        Assert.Contains("http", dest);
+        Assert.Contains("tls", dest);
         Assert.Null(tunSettings["fd"]);
         Assert.Null(tunSettings["stack"]);
         Assert.Null(tunSettings["inet4_address"]);
@@ -272,5 +276,55 @@ public class StreamSettingsBuilderTests
         var huStream = XrayConfigBuilder.BuildStreamSettings(hu);
         Assert.Equal("httpupgrade", huStream["network"]!.GetValue<string>());
         Assert.Equal("/up", huStream["httpupgradeSettings"]!["path"]!.GetValue<string>());
+    }
+}
+
+public class AndroidTunRoutingTests
+{
+    private static ProxyServer Sample() => new()
+    {
+        Protocol = ProxyProtocol.VLESS,
+        Address = "1.2.3.4",
+        Port = 443,
+        UserId = Guid.NewGuid().ToString(),
+        Network = "tcp",
+        Security = "tls"
+    };
+
+    [Fact]
+    public void BlockIpv6_LiveBuild_BlackholesAllIpv6()
+    {
+        var settings = new AppSettings { EnableTunMode = true, BlockIpv6 = true, DnsThroughProxy = true };
+        var root = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings, tunFd: 42))!;
+        var rules = root["routing"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "block" &&
+            r["ip"] is JsonArray ips &&
+            ips.Any(i => i!.GetValue<string>() == "::/0"));
+        var dnsServers = root["dns"]!["servers"]!.AsArray();
+        Assert.Contains(dnsServers, s =>
+            s is JsonObject o &&
+            o["address"]?.GetValue<string>()?.StartsWith("https://", StringComparison.Ordinal) == true);
+    }
+
+    [Fact]
+    public void TunFd_DoesNotSniffQuic()
+    {
+        var settings = new AppSettings { EnableTunMode = true };
+        var tun = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings, tunFd: 7))![
+            "inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        var dest = tun["sniffing"]!["destOverride"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
+        Assert.Equal(["http", "tls"], dest);
+    }
+
+    [Fact]
+    public void TunMode_CarvesVpnSubnetBeforeLanDirect()
+    {
+        var settings = new AppSettings { EnableTunMode = true, RoutingMode = RoutingMode.BypassLan };
+        var rules = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings))!["routing"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "dns-out" &&
+            r["ip"] is JsonArray ips &&
+            ips.Any(i => i!.GetValue<string>() == "172.19.0.0/30"));
     }
 }

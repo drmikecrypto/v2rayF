@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-08-17
+
+### Fixed
+
+- Android: Chrome, Brave, Play Store, and Translate failed while Instagram/YouTube worked — IPv6 captured by VpnService was not blackholed in Xray; Chromium had no VPN HTTP proxy; MTU 1500 fragmented on LTE
+- Android TUN sniffing no longer rewrites QUIC; VPN re-validated after Xray is up
+
+### Changed
+
+- Android VPN MTU 1280, DNS 1.1.1.1/8.8.8.8, HTTP proxy `127.0.0.1:10809` (API 29+)
+
 ## [2.0.2] - 2026-08-16
 
 ### Added

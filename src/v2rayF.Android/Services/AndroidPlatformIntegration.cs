@@ -61,6 +61,13 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             .ConfigureAwait(false);
     }
 
+    public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) =>
+        AndroidUiThread.InvokeAsync(() =>
+        {
+            V2rayVpnService.ReportVpnReady();
+            return Task.CompletedTask;
+        });
+
     public Task EnableProxyAsync(CancellationToken cancellationToken = default)
     {
         LastProxyMethod = "Android VPN";

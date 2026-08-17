@@ -17,6 +17,8 @@ public static class XrayConfigBuilder
     public const int ApiPort = 10085;
     public const string GooglePingUrl = "https://www.google.com/generate_204";
     public const int TunMtu = 1500;
+    /// <summary>Android VpnService MTU — inner 1500 + Xray overhead fragments on LTE.</summary>
+    public const int AndroidTunMtu = 1280;
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
@@ -138,7 +140,7 @@ public static class XrayConfigBuilder
             var tunSettings = new JsonObject
             {
                 ["name"] = TunConstants.InterfaceName,
-                ["MTU"] = TunMtu
+                ["MTU"] = tunFd is null ? TunMtu : AndroidTunMtu
             };
 
             if (tunFd is null)
@@ -162,12 +164,7 @@ public static class XrayConfigBuilder
                 ["tag"] = "tun-in",
                 ["protocol"] = "tun",
                 ["settings"] = tunSettings,
-                ["sniffing"] = new JsonObject
-                {
-                    ["enabled"] = true,
-                    ["destOverride"] = new JsonArray { "http", "tls", "quic" },
-                    ["routeOnly"] = true
-                }
+                ["sniffing"] = TunSniffing(tunFd is not null)
             });
         }
 
@@ -445,6 +442,27 @@ public static class XrayConfigBuilder
             ["outboundTag"] = "dns-out"
         });
 
+        if (settings.EnableTunMode)
+        {
+            // VPN DNS subnet sits inside 172.16.0.0/12 — do not Bypass-LAN it to direct.
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["ip"] = new JsonArray { "172.19.0.0/30" },
+                ["outboundTag"] = "dns-out"
+            });
+        }
+
+        if (settings.BlockIpv6)
+        {
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["ip"] = new JsonArray { "::/0" },
+                ["outboundTag"] = "block"
+            });
+        }
+
         // Private LAN stays out of Global except loopback (local apps).
         if (settings.RoutingMode == RoutingMode.Global)
         {
@@ -546,6 +564,19 @@ public static class XrayConfigBuilder
     {
         ["enabled"] = true,
         ["destOverride"] = new JsonArray { "http", "tls", "quic" },
+        ["routeOnly"] = true
+    };
+
+    /// <summary>
+    /// Android TUN (fd inherited): sniff HTTP/TLS only. Chromium QUIC over gVisor hangs Play/Chrome.
+    /// Desktop TUN keeps quic sniff.
+    /// </summary>
+    private static JsonObject TunSniffing(bool androidTunFd) => new()
+    {
+        ["enabled"] = true,
+        ["destOverride"] = androidTunFd
+            ? new JsonArray { "http", "tls" }
+            : new JsonArray { "http", "tls", "quic" },
         ["routeOnly"] = true
     };
 

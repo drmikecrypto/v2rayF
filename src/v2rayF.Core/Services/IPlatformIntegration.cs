@@ -28,6 +28,12 @@ public interface IPlatformIntegration
 
     Task DisableProxyAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// After the proxy core is up, tell the OS the VPN is validated (Android captive-portal).
+    /// Desktop no-op.
+    /// </summary>
+    Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
     string? GetLanIPv4Address();
 }

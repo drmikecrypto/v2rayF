@@ -9,6 +9,18 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 5. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 6. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
 
+## Chrome, Brave, Play Store, or Translate offline (Instagram/YouTube work)
+
+The phone always uses **VpnService TUN**. Instagram/YouTube mostly stay on IPv4 TCP. Chrome, Brave, Play Store, and Translate prefer **IPv6 + HTTP/3**, so they died when the VPN captured `::/0` without Xray blackholing it.
+
+v2.0.3: Xray blackholes IPv6 when **Block IPv6** is on, VPN HTTP proxy `127.0.0.1:10809` (Android 10+), MTU 1280, and the VPN is re-validated after Xray starts.
+
+While testing:
+
+1. Set Android **Private DNS** to **Off** (Settings → Network → Private DNS). Chrome’s own DoH plus VPN DNS fights the tunnel.
+2. Uninstall the old APK, then install **v2.0.3+**.
+3. Connect, then open Chrome and Play Store.
+
 ## Still broken?
 
 With USB debugging enabled:
