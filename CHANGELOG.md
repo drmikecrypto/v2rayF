@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.4] - 2026-08-17
+
+### Fixed
+
+- Android **Vision**: Connected but apps had no internet — gVisor TUN TLS sniff fought Vision splice. TUN destOverride is empty for Vision; other configs keep http/tls sniff
+- IPv6 blackhole is TUN-only so SOCKS/HTTP (health probe, VPN HTTP proxy) are not blocked
+
 ## [2.0.3] - 2026-08-17
 
 ### Fixed

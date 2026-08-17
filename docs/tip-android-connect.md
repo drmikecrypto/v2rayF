@@ -4,10 +4,11 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 
 1. Install the latest **v2rayF-android-arm64.apk** from [Releases](https://github.com/drmikecrypto/v2rayF/releases).
 2. **Uninstall** older versions first (clears bad VPN/core state).
-3. Use a **Compat** VLESS link — avoid `flow=xtls-rprx-vision` on phones.
-4. Tap **Connect** and allow the **VPN** permission when prompted.
-5. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
-6. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
+3. Tap **Connect** and allow the **VPN** permission when prompted.
+4. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
+5. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
+
+**Vision (xtls-rprx-vision)** works on phones from **v2.0.4** (TUN no longer sniffs TLS into the Vision splice). Set Android **Private DNS** to Off if browsers still fail.
 
 ## Chrome, Brave, Play Store, or Translate offline (Instagram/YouTube work)
 
@@ -18,7 +19,7 @@ v2.0.3: Xray blackholes IPv6 when **Block IPv6** is on, VPN HTTP proxy `127.0.0.
 While testing:
 
 1. Set Android **Private DNS** to **Off** (Settings → Network → Private DNS). Chrome’s own DoH plus VPN DNS fights the tunnel.
-2. Uninstall the old APK, then install **v2.0.3+**.
+2. Uninstall the old APK, then install **v2.0.4+**.
 3. Connect, then open Chrome and Play Store.
 
 ## Still broken?

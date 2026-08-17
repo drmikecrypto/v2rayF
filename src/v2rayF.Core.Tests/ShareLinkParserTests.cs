@@ -300,7 +300,9 @@ public class AndroidTunRoutingTests
         Assert.Contains(rules, r =>
             r!["outboundTag"]?.GetValue<string>() == "block" &&
             r["ip"] is JsonArray ips &&
-            ips.Any(i => i!.GetValue<string>() == "::/0"));
+            ips.Any(i => i!.GetValue<string>() == "::/0") &&
+            r["inboundTag"] is JsonArray tags &&
+            tags.Any(t => t!.GetValue<string>() == "tun-in"));
         var dnsServers = root["dns"]!["servers"]!.AsArray();
         Assert.Contains(dnsServers, s =>
             s is JsonObject o &&
@@ -315,6 +317,30 @@ public class AndroidTunRoutingTests
             "inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
         var dest = tun["sniffing"]!["destOverride"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
         Assert.Equal(["http", "tls"], dest);
+    }
+
+    [Fact]
+    public void TunFd_Vision_EmptyDestOverride_NoFragmentOrTcpNoDelay()
+    {
+        var vision = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "tcp",
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            PublicKey = "pk"
+        };
+        var settings = new AppSettings { EnableTunMode = true, EnablePacketFragment = true };
+        var root = JsonNode.Parse(XrayConfigBuilder.Build(vision, settings, tunFd: 42))!;
+        var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Empty(tun["sniffing"]!["destOverride"]!.AsArray());
+        Assert.True(tun["sniffing"]!["routeOnly"]!.GetValue<bool>());
+        Assert.DoesNotContain(root["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
+        var proxy = root["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Null(proxy["streamSettings"]!["sockopt"]);
     }
 
     [Fact]

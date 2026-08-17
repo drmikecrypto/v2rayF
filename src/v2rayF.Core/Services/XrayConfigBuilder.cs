@@ -164,7 +164,7 @@ public static class XrayConfigBuilder
                 ["tag"] = "tun-in",
                 ["protocol"] = "tun",
                 ["settings"] = tunSettings,
-                ["sniffing"] = TunSniffing(tunFd is not null)
+                ["sniffing"] = TunSniffing(tunFd is not null, IsVisionFlow(peers[0]))
             });
         }
 
@@ -458,6 +458,7 @@ public static class XrayConfigBuilder
             rules.Add(new JsonObject
             {
                 ["type"] = "field",
+                ["inboundTag"] = new JsonArray { "tun-in" },
                 ["ip"] = new JsonArray { "::/0" },
                 ["outboundTag"] = "block"
             });
@@ -568,17 +569,36 @@ public static class XrayConfigBuilder
     };
 
     /// <summary>
-    /// Android TUN (fd inherited): sniff HTTP/TLS only. Chromium QUIC over gVisor hangs Play/Chrome.
+    /// Android TUN (fd inherited): sniff HTTP/TLS only — Chromium QUIC over gVisor hangs Play/Chrome.
+    /// Vision + Android TUN: empty destOverride so TLS sniff does not fight Vision splice.
     /// Desktop TUN keeps quic sniff.
     /// </summary>
-    private static JsonObject TunSniffing(bool androidTunFd) => new()
+    private static JsonObject TunSniffing(bool androidTunFd, bool visionPrimary)
     {
-        ["enabled"] = true,
-        ["destOverride"] = androidTunFd
-            ? new JsonArray { "http", "tls" }
-            : new JsonArray { "http", "tls", "quic" },
-        ["routeOnly"] = true
-    };
+        var destOverride = new JsonArray();
+        if (androidTunFd && visionPrimary)
+        {
+            // Empty — TLS destOverride fights Vision splice on gVisor TUN.
+        }
+        else if (androidTunFd)
+        {
+            destOverride.Add("http");
+            destOverride.Add("tls");
+        }
+        else
+        {
+            destOverride.Add("http");
+            destOverride.Add("tls");
+            destOverride.Add("quic");
+        }
+
+        return new JsonObject
+        {
+            ["enabled"] = true,
+            ["destOverride"] = destOverride,
+            ["routeOnly"] = true
+        };
+    }
 
     private static void AppendCustomRules(
         JsonArray rules,
