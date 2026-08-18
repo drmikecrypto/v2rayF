@@ -22,6 +22,12 @@ While testing:
 2. Uninstall the old APK, then install **v2.0.4+**.
 3. Connect, then open Chrome and Play Store.
 
+## WhatsApp offline (other apps work)
+
+WhatsApp uses **TUN DNS**, not the VPN HTTP proxy Chrome uses. v2.0.3 pointed VPN DNS at `1.1.1.1`, which returned AAAA; Block IPv6 then blackholed those packets.
+
+**v2.0.5** sets VPN DNS to `172.19.0.1` so Xray `UseIPv4` applies. Uninstall the old APK, install **v2.0.5+**, reconnect, then force-stop WhatsApp once.
+
 ## Still broken?
 
 With USB debugging enabled:

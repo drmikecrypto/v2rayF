@@ -86,8 +86,8 @@ public class V2rayVpnService : VpnService
             builder.SetMtu(XrayConfigBuilder.AndroidTunMtu);
             builder.AddAddress("172.19.0.1", 30);
             builder.AddRoute("0.0.0.0", 0);
-            builder.AddDnsServer("1.1.1.1");
-            builder.AddDnsServer("8.8.8.8");
+            // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
+            builder.AddDnsServer("172.19.0.1");
 
             if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {

@@ -353,4 +353,34 @@ public class AndroidTunRoutingTests
             r["ip"] is JsonArray ips &&
             ips.Any(i => i!.GetValue<string>() == "172.19.0.0/30"));
     }
+
+    [Fact]
+    public void TunDns_Port53BeforePublicResolverDirect()
+    {
+        var settings = new AppSettings { EnableTunMode = true, BlockIpv6 = true };
+        var rules = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings, tunFd: 42))!["routing"]!["rules"]!.AsArray();
+        var dnsOutIdx = -1;
+        var publicDirectIdx = -1;
+        for (var i = 0; i < rules.Count; i++)
+        {
+            var r = rules[i]!;
+            var port = r["port"]?.GetValue<string>() ?? "";
+            if (r["outboundTag"]?.GetValue<string>() == "dns-out" && port.Contains("53"))
+                dnsOutIdx = i;
+            if (r["outboundTag"]?.GetValue<string>() == "direct" &&
+                r["ip"] is JsonArray ips &&
+                ips.Any(n => n!.GetValue<string>() == "1.1.1.1") &&
+                r["inboundTag"] is JsonArray tags &&
+                tags.Any(t => t!.GetValue<string>() == "dns-module"))
+                publicDirectIdx = i;
+        }
+
+        Assert.True(dnsOutIdx >= 0);
+        Assert.True(publicDirectIdx >= 0);
+        Assert.True(dnsOutIdx < publicDirectIdx);
+        Assert.Contains(rules, r =>
+            r!["outboundTag"]?.GetValue<string>() == "block" &&
+            r["inboundTag"] is JsonArray tags &&
+            tags.Any(t => t!.GetValue<string>() == "tun-in"));
+    }
 }

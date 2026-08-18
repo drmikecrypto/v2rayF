@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.5] - 2026-08-18
+
+### Fixed
+
+- Android **WhatsApp** (and other raw-socket apps) had no internet while Chrome/Instagram worked — VPN DNS was `1.1.1.1` so AAAA hit the TUN IPv6 blackhole. VPN DNS is `172.19.0.1`; port 53/853 hits `dns-out` before public resolvers
+
 ## [2.0.4] - 2026-08-17
 
 ### Fixed

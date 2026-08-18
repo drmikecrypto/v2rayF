@@ -423,23 +423,22 @@ public static class XrayConfigBuilder
             }
         };
 
-        // Public resolvers + DNS module always direct (node bootstrap). DnsThroughProxy only
-        // selects DoH vs UDP servers in BuildDns — never hairpin DNS through the proxy.
+        // App DNS (TUN/local) before public-resolver IP rules, or 1.1.1.1:53 skips dns-out.
+        rules.Add(new JsonObject
+        {
+            ["type"] = "field",
+            ["port"] = "53,853",
+            ["network"] = "udp,tcp",
+            ["outboundTag"] = "dns-out"
+        });
+
+        // DNS module bootstrap only — not TUN packets to 1.1.1.1 / 8.8.8.8.
         rules.Add(PublicDnsDirectRule());
         rules.Add(new JsonObject
         {
             ["type"] = "field",
             ["inboundTag"] = new JsonArray { "dns-module" },
             ["outboundTag"] = "direct"
-        });
-
-        // App DNS on TUN/local → dns outbound (resolved via dns module above).
-        rules.Add(new JsonObject
-        {
-            ["type"] = "field",
-            ["port"] = "53",
-            ["network"] = "udp,tcp",
-            ["outboundTag"] = "dns-out"
         });
 
         if (settings.EnableTunMode)
@@ -538,6 +537,7 @@ public static class XrayConfigBuilder
     private static JsonObject PublicDnsDirectRule() => new()
     {
         ["type"] = "field",
+        ["inboundTag"] = new JsonArray { "dns-module" },
         ["ip"] = new JsonArray { "1.1.1.1", "8.8.8.8" },
         ["outboundTag"] = "direct"
     };

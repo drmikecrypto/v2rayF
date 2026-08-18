@@ -39,7 +39,9 @@ public class ConnectReliabilityConfigTests
             r!["outboundTag"]?.GetValue<string>() == "direct" &&
             r["ip"] is JsonArray ips &&
             ips.Any(i => i!.GetValue<string>() == "1.1.1.1") &&
-            ips.Any(i => i!.GetValue<string>() == "8.8.8.8"));
+            ips.Any(i => i!.GetValue<string>() == "8.8.8.8") &&
+            r["inboundTag"] is JsonArray tags &&
+            tags.Any(t => t!.GetValue<string>() == "dns-module"));
 
         Assert.Contains(rules, r =>
             r!["outboundTag"]?.GetValue<string>() == "direct" &&
