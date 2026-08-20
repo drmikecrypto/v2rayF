@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.7] - 2026-08-20
+
+### Fixed
+
+- Android: VMess-WS / VLESS-TCP / Trojan / SS felt crawl-speed while REALITY+Vision felt fine — VPN HTTP proxy `10809` forced Chromium through CONNECT on top of WS/TLS. Chromium now uses TUN (empty sniff from 2.0.6)
+
+### Changed
+
+- VLESS/VMess default `packetEncoding=xudp` when the share link omits it (explicit values preserved)
+- Docs: green delay ≠ throughput; leave Packet fragment / Adaptive Survive off for non-Vision speed
+
 ## [2.0.6] - 2026-08-20
 
 ### Fixed

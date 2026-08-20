@@ -49,6 +49,52 @@ public class BestInMarketImportTests
     }
 
     [Fact]
+    public void PacketEncoding_DefaultsToXudp_WhenUnset()
+    {
+        var vless = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "tcp",
+            Security = "tls"
+        };
+        var vmess = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VMess,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "ws",
+            Security = "tls",
+            Path = "/ws"
+        };
+
+        foreach (var server in new[] { vless, vmess })
+        {
+            var proxy = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))![
+                "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+            Assert.Equal(
+                XrayConfigBuilder.DefaultPacketEncoding,
+                proxy["settings"]!["vnext"]![0]!["users"]![0]!["packetEncoding"]!.GetValue<string>());
+        }
+    }
+
+    [Fact]
+    public void PacketEncoding_PreservesExplicitLinkValue()
+    {
+        var link =
+            "vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@1.2.3.4:443" +
+            "?type=tcp&security=tls&packetEncoding=packet#p";
+        var server = ShareLinkParser.Parse(link)!;
+        Assert.Equal("packet", server.PacketEncoding);
+        var proxy = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))![
+            "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal("packet", proxy["settings"]!["vnext"]![0]!["users"]![0]!["packetEncoding"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void ClashMeta_ImportsVlessAndHy2()
     {
         var yaml = """

@@ -19,6 +19,8 @@ public static class XrayConfigBuilder
     public const int TunMtu = 1500;
     /// <summary>Android VpnService MTU — inner 1500 + Xray overhead fragments on LTE.</summary>
     public const int AndroidTunMtu = 1280;
+    /// <summary>Default VLESS/VMess UDP packet encoding when the share link omits it.</summary>
+    public const string DefaultPacketEncoding = "xudp";
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
@@ -777,6 +779,8 @@ public static class XrayConfigBuilder
         };
         if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
             user["packetEncoding"] = server.PacketEncoding;
+        else
+            user["packetEncoding"] = DefaultPacketEncoding;
 
         var outbound = new JsonObject
         {
@@ -814,6 +818,8 @@ public static class XrayConfigBuilder
             user["flow"] = server.Flow;
         if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
             user["packetEncoding"] = server.PacketEncoding;
+        else
+            user["packetEncoding"] = DefaultPacketEncoding;
 
         return new JsonObject
         {

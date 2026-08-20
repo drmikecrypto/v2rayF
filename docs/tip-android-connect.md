@@ -10,6 +10,16 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 
 **Vision (xtls-rprx-vision)** works on phones from **v2.0.4** (TUN no longer sniffs TLS into the Vision splice). From **v2.0.6**, Android TUN uses empty sniff for **all** Xray transports (VLESS-TCP, SS, Trojan-WS, VLESS-WS, HTTPUpgrade, Vision) so delay can look green while apps actually work. Set Android **Private DNS** to Off if browsers still fail.
 
+## Good delay but crawl-speed internet (VMess-WS / VLESS-TCP / Trojan / SS)
+
+Green **delay** is TCP + SOCKS health — not Mbps. Connected phone traffic uses **TUN**.
+
+**v2.0.7** stops forcing VPN HTTP proxy `10809` (Chromium now uses TUN like other apps). That CONNECT hop stacked on WS/TLS made non-Vision configs feel far slower than REALITY+Vision.
+
+Also leave **Packet fragment** and **Adaptive Survive** **off** unless DPI blocks Connect — both skip Vision but slow everyone else.
+
+Vision+REALITY will still feel faster than VMess-WS-TLS on the same VPS (splice vs WS framing). That gap is structural, not a bug.
+
 ## Idle “Connected” but no internet (phone or Windows)
 
 After sitting unused, NAT may drop the outbound while the UI still shows Connected. **v2.0.6** adds TCP keepalive and a soft path probe (when traffic is flat); with **Auto-reconnect** on, the app reconnects up to twice. Toggle Disconnect → Connect if it still looks stuck.
@@ -18,17 +28,17 @@ After sitting unused, NAT may drop the outbound while the UI still shows Connect
 
 The phone always uses **VpnService TUN**. Instagram/YouTube mostly stay on IPv4 TCP. Chrome, Brave, Play Store, and Translate prefer **IPv6 + HTTP/3**, so they died when the VPN captured `::/0` without Xray blackholing it.
 
-v2.0.3: Xray blackholes IPv6 when **Block IPv6** is on, VPN HTTP proxy `127.0.0.1:10809` (Android 10+), MTU 1280, and the VPN is re-validated after Xray starts.
+v2.0.3+: Xray blackholes IPv6 when **Block IPv6** is on, MTU 1280, VPN re-validated after Xray starts. From **v2.0.7**, Chromium uses TUN (no VPN HTTP proxy) with empty sniff from 2.0.6.
 
 While testing:
 
 1. Set Android **Private DNS** to **Off** (Settings → Network → Private DNS). Chrome’s own DoH plus VPN DNS fights the tunnel.
-2. Uninstall the old APK, then install **v2.0.4+**.
+2. Uninstall the old APK, then install **v2.0.7+**.
 3. Connect, then open Chrome and Play Store.
 
 ## WhatsApp offline (other apps work)
 
-WhatsApp uses **TUN DNS**, not the VPN HTTP proxy Chrome uses. v2.0.3 pointed VPN DNS at `1.1.1.1`, which returned AAAA; Block IPv6 then blackholed those packets.
+WhatsApp uses **TUN DNS**. v2.0.3 pointed VPN DNS at `1.1.1.1`, which returned AAAA; Block IPv6 then blackholed those packets.
 
 **v2.0.5** sets VPN DNS to `172.19.0.1` so Xray `UseIPv4` applies. Uninstall the old APK, install **v2.0.5+**, reconnect, then force-stop WhatsApp once.
 

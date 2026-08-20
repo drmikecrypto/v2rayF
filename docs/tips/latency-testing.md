@@ -22,9 +22,11 @@ TCP shortlist, then one-GET proxy-path. Vision peers are never mixed into a mult
 
 After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision/REALITY). Connected ping stays the list **TCP** ms — never the HTTPS probe. No repeating HTTPS ping while connected.
 
+Green delay is **not** throughput. VMess-WS-TLS / VLESS-TCP / Trojan / SS can show a low ms number and still feel slower than Vision+REALITY on the same VPS (splice vs WS/TLS framing). On Android, leave **Packet fragment** and **Adaptive Survive** off unless DPI blocks Connect.
+
 ## Adaptive Survive
 
-**Off by default.** When enabled, failed connects may retry with TLS hello fragment (works for some DPI; **slow**). Prefer leaving it off unless you need it.
+**Off by default.** When enabled, failed connects may retry with TLS hello fragment (works for some DPI; **slow** for non-Vision). Prefer leaving it off unless you need it.
 
 ## While connected
 
