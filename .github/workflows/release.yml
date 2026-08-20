@@ -7,15 +7,9 @@ on:
 
 permissions:
   contents: write
-  id-token: write
 
 env:
   XRAY_VERSION: v26.7.28
-  # Set repo variable ARTIFACT_SIGNING_ENABLED=true after Azure Artifact Signing is configured.
-  # See docs/tips/windows-smartscreen.md
-  ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
-  ARTIFACT_SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
-  ARTIFACT_SIGNING_CERT_PROFILE: ${{ vars.ARTIFACT_SIGNING_CERT_PROFILE }}
 
 jobs:
   build:
@@ -87,63 +81,6 @@ jobs:
         if: matrix.android != true
         shell: pwsh
         run: ./scripts/package-all.ps1 -Rid ${{ matrix.rid }} -XrayVersion ${{ env.XRAY_VERSION }}
-
-      # Authenticode via Microsoft Artifact Signing (formerly Trusted Signing).
-      # Signs only v2rayF.exe — not bundled xray/sing-box (third-party).
-      - name: Azure login (Artifact Signing)
-        if: >-
-          startsWith(matrix.rid, 'win-') &&
-          vars.ARTIFACT_SIGNING_ENABLED == 'true'
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Sign v2rayF.exe with Artifact Signing
-        if: >-
-          startsWith(matrix.rid, 'win-') &&
-          vars.ARTIFACT_SIGNING_ENABLED == 'true'
-        uses: azure/artifact-signing-action@v2.0.0
-        with:
-          endpoint: ${{ env.ARTIFACT_SIGNING_ENDPOINT != '' && env.ARTIFACT_SIGNING_ENDPOINT || 'https://eus.codesigning.azure.net/' }}
-          signing-account-name: ${{ env.ARTIFACT_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ env.ARTIFACT_SIGNING_CERT_PROFILE }}
-          files: ${{ github.workspace }}\dist\v2rayF-${{ matrix.rid }}\publish\v2rayF.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-          description: v2rayF
-          description-url: https://github.com/drmikecrypto/v2rayF
-
-      - name: Re-zip Windows package after signing
-        if: >-
-          startsWith(matrix.rid, 'win-') &&
-          vars.ARTIFACT_SIGNING_ENABLED == 'true'
-        shell: pwsh
-        run: |
-          $rid = '${{ matrix.rid }}'
-          $publish = "dist/v2rayF-$rid/publish"
-          $zip = "dist/v2rayF-$rid.zip"
-          $exe = Join-Path $publish 'v2rayF.exe'
-          if (-not (Test-Path $exe)) { throw "Missing $exe after signing" }
-          # Confirm Authenticode is present (best-effort on GHA Windows images).
-          $sig = Get-AuthenticodeSignature $exe
-          Write-Host "Authenticode status: $($sig.Status) publisher=$($sig.SignerCertificate.Subject)"
-          if ($sig.Status -ne 'Valid') {
-            throw "v2rayF.exe Authenticode status is $($sig.Status) (expected Valid)"
-          }
-          if (Test-Path $zip) { Remove-Item -Force $zip }
-          Compress-Archive -Path (Join-Path $publish '*') -DestinationPath $zip -Force
-          Write-Host "Re-created signed $zip"
-
-      - name: Windows signing skipped
-        if: >-
-          startsWith(matrix.rid, 'win-') &&
-          vars.ARTIFACT_SIGNING_ENABLED != 'true'
-        shell: pwsh
-        run: |
-          Write-Host "::notice::Windows Authenticode skipped (set repo variable ARTIFACT_SIGNING_ENABLED=true after Azure Artifact Signing setup — docs/tips/windows-smartscreen.md)"
 
       - uses: actions/upload-artifact@v4
         with:

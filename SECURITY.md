@@ -50,5 +50,3 @@ Encrypted `.v2rayf` vault files use a user passphrase (PBKDF2 + AES-GCM). Prefer
 ### Updates (1.4+)
 
 In-app updates download only from allowed GitHub hosts, verify **SHA256** (release digest or `SHA256SUMS`), and extract with Zip-Slip rejection. Android also checks APK signing fingerprints.
-
-Windows builds can be Authenticode-signed with [Microsoft Artifact Signing](docs/tips/windows-smartscreen.md) so SmartScreen sees a real publisher (GitHub hosting alone does not establish trust).
