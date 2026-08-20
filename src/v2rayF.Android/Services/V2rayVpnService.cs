@@ -89,8 +89,18 @@ public class V2rayVpnService : VpnService
             // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
             builder.AddDnsServer("172.19.0.1");
 
-            // No SetHttpProxy — empty TUN sniff (2.0.6+) lets Chromium use TUN like other apps.
-            // VPN HTTP CONNECT stacked on WS/TLS was a speed tax for non-Vision configs.
+            // Chromium needs VPN HTTP proxy — empty TUN sniff + QUIC over gVisor crawls without it.
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            {
+                try
+                {
+                    builder.SetHttpProxy(ProxyInfo.BuildDirectProxy("127.0.0.1", XrayConfigBuilder.HttpPort));
+                }
+                catch
+                {
+                    // Some OEMs reject VPN HTTP proxy; TUN still applies.
+                }
+            }
 
             try
             {

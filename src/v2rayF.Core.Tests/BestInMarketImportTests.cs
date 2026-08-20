@@ -49,7 +49,7 @@ public class BestInMarketImportTests
     }
 
     [Fact]
-    public void PacketEncoding_DefaultsToXudp_WhenUnset()
+    public void PacketEncoding_OmittedWhenUnset()
     {
         var vless = new ProxyServer
         {
@@ -75,9 +75,7 @@ public class BestInMarketImportTests
         {
             var proxy = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))![
                 "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
-            Assert.Equal(
-                XrayConfigBuilder.DefaultPacketEncoding,
-                proxy["settings"]!["vnext"]![0]!["users"]![0]!["packetEncoding"]!.GetValue<string>());
+            Assert.Null(proxy["settings"]!["vnext"]![0]!["users"]![0]!["packetEncoding"]);
         }
     }
 
