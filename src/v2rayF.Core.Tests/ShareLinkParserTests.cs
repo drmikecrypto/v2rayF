@@ -308,6 +308,23 @@ public class AndroidTunRoutingTests
     }
 
     [Fact]
+    public void DesktopTun_EmptyDestOverride_LikeAndroid()
+    {
+        var settings = new AppSettings { EnableTunMode = true };
+        var tun = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings, tunFd: null))![
+            "inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Empty(tun["sniffing"]!["destOverride"]!.AsArray());
+        Assert.True(tun["sniffing"]!["routeOnly"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void AndroidTunMtu_IsThroughputOriented()
+    {
+        Assert.Equal(1400, XrayConfigBuilder.AndroidTunMtu);
+        Assert.True(XrayConfigBuilder.AndroidTunMtu < XrayConfigBuilder.TunMtu);
+    }
+
+    [Fact]
     public void TunFd_EmptyDestOverride_ForAllAndroidTransports()
     {
         var settings = new AppSettings { EnableTunMode = true };

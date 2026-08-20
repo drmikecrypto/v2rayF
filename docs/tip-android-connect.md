@@ -12,13 +12,11 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 
 ## Good delay but crawl-speed internet (VMess-WS / VLESS-TCP / Trojan / SS)
 
-Green **delay** is TCP + SOCKS health — not Mbps. Connected phone traffic uses **TUN**.
+Green **delay** is TCP health — Connected traffic uses TUN (phone) or system proxy / TUN (desktop). From **v2.0.8**, desktop TUN also uses empty sniff (like Android), Android MTU is **1400**, and Survive fragment is never forced unless you turn Adaptive Survive on.
 
-**v2.0.7** stops forcing VPN HTTP proxy `10809` (Chromium now uses TUN like other apps). That CONNECT hop stacked on WS/TLS made non-Vision configs feel far slower than REALITY+Vision.
+**v2.0.7** stopped VPN HTTP proxy on Android. Leave **Packet fragment** / **Adaptive Survive** **off** unless DPI blocks Connect.
 
-Also leave **Packet fragment** and **Adaptive Survive** **off** unless DPI blocks Connect — both skip Vision but slow everyone else.
-
-Vision+REALITY will still feel faster than VMess-WS-TLS on the same VPS (splice vs WS framing). That gap is structural, not a bug.
+Vision+REALITY will still feel faster than VMess-WS-TLS on the same VPS (splice vs WS framing). That gap is structural.
 
 ## Idle “Connected” but no internet (phone or Windows)
 

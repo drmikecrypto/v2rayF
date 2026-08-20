@@ -20,9 +20,9 @@ TCP shortlist, then one-GET proxy-path. Vision peers are never mixed into a mult
 
 ## Connect health
 
-After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision/REALITY). Connected ping stays the list **TCP** ms — never the HTTPS probe. No repeating HTTPS ping while connected.
+After SOCKS `10808` binds: **warmup GET + one timed GET** (8s normal, 12s Vision/REALITY). Connected UI shows list **TCP** ms and, when available, **path** HTTPS ms (`102 · path 480`). Green TCP alone is not Mbps.
 
-Green delay is **not** throughput. VMess-WS-TLS / VLESS-TCP / Trojan / SS can show a low ms number and still feel slower than Vision+REALITY on the same VPS (splice vs WS/TLS framing). On Android, leave **Packet fragment** and **Adaptive Survive** off unless DPI blocks Connect.
+VMess-WS-TLS / VLESS-TCP / Trojan / SS can show a low TCP number and still feel slower than Vision+REALITY on the same VPS (splice vs WS/TLS framing). Leave **Packet fragment** and **Adaptive Survive** off unless DPI blocks Connect — Survive is no longer forced silently when Smart Connect finds no path.
 
 ## Adaptive Survive
 

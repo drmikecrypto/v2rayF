@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.8] - 2026-08-20
+
+### Fixed
+
+- Desktop TUN still sniffed `http,tls,quic` while Android was empty — same WS/Trojan/SS speed tax on Windows TUN. Empty `destOverride` on all platforms now
+- Smart Connect no longer silently forces Adaptive Survive / packet fragment when every proxy-path fails (that made “Connected” crawl while TCP ping stayed green)
+
+### Changed
+
+- Android VPN MTU **1400** (was 1280) for higher throughput
+- Windows system proxy: HTTP+HTTPS only (drop WinINET `socks=` edge cases; match macOS/Linux)
+- Local SOCKS/HTTP sniff no longer rewrites QUIC
+- Connected ping shows TCP plus path HTTPS when known (`102 · path 480`)
+
 ## [2.0.7] - 2026-08-20
 
 ### Fixed

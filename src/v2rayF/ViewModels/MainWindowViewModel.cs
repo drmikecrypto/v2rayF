@@ -1115,7 +1115,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
                 if (candidates.Count == 0)
                 {
-                    // Do not abort — Adaptive Survive (fragment/Sentinel) may still succeed.
+                    if (!settings.AdaptiveSurviveEnabled)
+                    {
+                        await SetOnUiAsync(() =>
+                        {
+                            StatusText =
+                                "Smart Connect: no usable proxy path. Turn on Adaptive Survive only if DPI blocks Connect (slower).";
+                            ConnectionState = ConnectionState.Failed;
+                        }).ConfigureAwait(true);
+                        return;
+                    }
+
+                    // Opt-in Survive only — never silently enable fragment for speed.
                     candidates = _smartConnect.SelectSurviveConnectOrder(
                         _lastRanking,
                         preferred: null,
@@ -1829,9 +1840,12 @@ public partial class MainWindowViewModel : ViewModelBase
             ShowTrafficStats = true;
             UploadTrafficText = TrafficStatsService.FormatUploadRate(0);
             DownloadTrafficText = TrafficStatsService.FormatDownloadRate(0);
-            // Keep Test All / Smart Connect TCP ms — never overwrite with cold/warm HTTPS probe.
+            // Keep Test All / Smart Connect TCP ms; append connect-path HTTPS when known.
             var tcp = SelectedServer?.LatencyMs is int ms and > 0 ? ms : (int?)null;
-            ConnectedPingText = tcp is > 0 ? $"{tcp}" : "";
+            var path = _proxyCore.LastConnectProbeMs;
+            ConnectedPingText = tcp is > 0
+                ? path is > 0 ? $"{tcp} · path {path}" : $"{tcp}"
+                : path is > 0 ? $"path {path}" : "";
             TrafficStatsHub.Shared.ConnectedPingMs = tcp;
         });
 

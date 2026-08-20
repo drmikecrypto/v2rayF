@@ -17,8 +17,8 @@ public static class XrayConfigBuilder
     public const int ApiPort = 10085;
     public const string GooglePingUrl = "https://www.google.com/generate_204";
     public const int TunMtu = 1500;
-    /// <summary>Android VpnService MTU — inner 1500 + Xray overhead fragments on LTE.</summary>
-    public const int AndroidTunMtu = 1280;
+    /// <summary>Android VpnService MTU — high enough for throughput; avoid 1500+Xray overhead on LTE.</summary>
+    public const int AndroidTunMtu = 1400;
     /// <summary>Default VLESS/VMess UDP packet encoding when the share link omits it.</summary>
     public const string DefaultPacketEncoding = "xudp";
 
@@ -166,7 +166,7 @@ public static class XrayConfigBuilder
                 ["tag"] = "tun-in",
                 ["protocol"] = "tun",
                 ["settings"] = tunSettings,
-                ["sniffing"] = TunSniffing(tunFd is not null)
+                ["sniffing"] = TunSniffing()
             });
         }
 
@@ -566,29 +566,20 @@ public static class XrayConfigBuilder
     private static JsonObject LocalSniffing() => new()
     {
         ["enabled"] = true,
-        ["destOverride"] = new JsonArray { "http", "tls", "quic" },
+        ["destOverride"] = new JsonArray { "http", "tls" },
         ["routeOnly"] = true
     };
 
     /// <summary>
-    /// Android TUN (fd inherited): empty destOverride for all Xray transports —
-    /// TLS/HTTP sniff fights Vision splice and WS/Trojan/SS/httpupgrade on gVisor.
-    /// Desktop TUN keeps http,tls,quic.
+    /// TUN sniffing: empty destOverride on all platforms —
+    /// TLS/HTTP/QUIC sniff fights Vision splice and WS/Trojan/SS/httpupgrade (gVisor and desktop).
     /// </summary>
-    private static JsonObject TunSniffing(bool androidTunFd)
+    private static JsonObject TunSniffing()
     {
-        var destOverride = new JsonArray();
-        if (!androidTunFd)
-        {
-            destOverride.Add("http");
-            destOverride.Add("tls");
-            destOverride.Add("quic");
-        }
-
         return new JsonObject
         {
             ["enabled"] = true,
-            ["destOverride"] = destOverride,
+            ["destOverride"] = new JsonArray(),
             ["routeOnly"] = true
         };
     }
