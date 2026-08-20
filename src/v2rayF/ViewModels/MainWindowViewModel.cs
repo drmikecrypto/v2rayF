@@ -314,6 +314,11 @@ public partial class MainWindowViewModel : ViewModelBase
             _ = HandleUnexpectedCoreStopAsync();
         };
 
+        _proxyCore.PathHealthOk += (_, _) =>
+        {
+            _autoReconnectAttempts = 0;
+        };
+
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
 
@@ -1401,13 +1406,14 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private int _autoReconnectAttempts;
+    public const int MaxAutoReconnectAttempts = 2;
 
     private async Task HandleUnexpectedCoreStopAsync()
     {
         var settings = CollectSettings();
-        var shouldReconnect = settings.AutoReconnectEnabled &&
-                              _autoReconnectAttempts == 0 &&
-                              SelectedServer is not null;
+        var canAutoReconnect = settings.AutoReconnectEnabled && SelectedServer is not null;
+        var remaining = MaxAutoReconnectAttempts - _autoReconnectAttempts;
+        var shouldReconnect = canAutoReconnect && remaining > 0;
 
         try
         {
@@ -1434,50 +1440,64 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!shouldReconnect)
             return;
 
-        _autoReconnectAttempts = 1;
-        try
+        Exception? lastError = null;
+        for (var i = 0; i < remaining; i++)
         {
-            await SetOnUiAsync(() =>
+            _autoReconnectAttempts++;
+            var attempt = _autoReconnectAttempts;
+            try
             {
-                ConnectionState = ConnectionState.Connecting;
-                StatusText = "Connection dropped — reconnecting…";
-                OnPropertyChanged(nameof(ConnectButtonText));
-            }).ConfigureAwait(true);
+                await SetOnUiAsync(() =>
+                {
+                    ConnectionState = ConnectionState.Connecting;
+                    StatusText = attempt > 1
+                        ? $"Connection dropped — reconnecting (try {attempt}/{MaxAutoReconnectAttempts})…"
+                        : "Connection dropped — reconnecting…";
+                    OnPropertyChanged(nameof(ConnectButtonText));
+                }).ConfigureAwait(true);
 
-            // One sticky retry with user settings only (never force Survive/fragment).
-            var server = SelectedServer!;
-            var connectSettings = CollectSettings();
-            connectSettings.EnablePacketFragment = EnablePacketFragment;
-            connectSettings.AdaptiveSurviveEnabled = false;
+                if (attempt > 1)
+                    await Task.Delay(attempt * 1500, CancellationToken.None).ConfigureAwait(false);
 
-            if (IsMobile)
-                await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
-            else
-                await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
+                // Sticky retry with user settings only (never force Survive/fragment).
+                var server = SelectedServer!;
+                var connectSettings = CollectSettings();
+                connectSettings.EnablePacketFragment = EnablePacketFragment;
+                connectSettings.AdaptiveSurviveEnabled = false;
 
-            await SetOnUiAsync(() =>
+                if (IsMobile)
+                    await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
+                else
+                    await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None).ConfigureAwait(false);
+
+                await SetOnUiAsync(() =>
+                {
+                    ConnectionState = ConnectionState.Connected;
+                    StatusText = $"Reconnected — {StatusSanitizer.Scrub(server.Name)}";
+                    OnPropertyChanged(nameof(ConnectButtonText));
+                    OnPropertyChanged(nameof(TrayToolTip));
+                    UpdateSecureShareEndpoint();
+                }).ConfigureAwait(true);
+                _autoReconnectAttempts = 0;
+                return;
+            }
+            catch (Exception ex)
             {
-                ConnectionState = ConnectionState.Connected;
-                StatusText = $"Reconnected — {StatusSanitizer.Scrub(server.Name)}";
-                OnPropertyChanged(nameof(ConnectButtonText));
-                OnPropertyChanged(nameof(TrayToolTip));
-                UpdateSecureShareEndpoint();
-            }).ConfigureAwait(true);
-            _autoReconnectAttempts = 0;
+                lastError = ex;
+            }
         }
-        catch (Exception ex)
+
+        await SetOnUiAsync(() =>
         {
-            await SetOnUiAsync(() =>
-            {
-                ConnectionState = ConnectionState.Failed;
-                StatusText = AppServices.KillSwitch.IsArmed
-                    ? $"Reconnect failed — kill switch still blocking clearnet. Disconnect to restore. ({StatusSanitizer.Scrub(ex.Message)})"
-                    : $"Reconnect failed — {StatusSanitizer.Scrub(ex.Message)}";
-                OnPropertyChanged(nameof(ConnectButtonText));
-                OnPropertyChanged(nameof(TrayToolTip));
-                UpdateSecureShareEndpoint();
-            }).ConfigureAwait(true);
-        }
+            ConnectionState = ConnectionState.Failed;
+            var detail = lastError is null ? "" : $" ({StatusSanitizer.Scrub(lastError.Message)})";
+            StatusText = AppServices.KillSwitch.IsArmed
+                ? $"Reconnect failed — kill switch still blocking clearnet. Disconnect to restore.{detail}"
+                : $"Reconnect failed —{detail.TrimStart()}";
+            OnPropertyChanged(nameof(ConnectButtonText));
+            OnPropertyChanged(nameof(TrayToolTip));
+            UpdateSecureShareEndpoint();
+        }).ConfigureAwait(true);
     }
 
     private async Task SafeTeardownAsync(bool releaseKillSwitch)
@@ -1546,6 +1566,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 ConnectionState = ConnectionState.Idle;
                 StatusText = "Disconnected";
+                _autoReconnectAttempts = 0;
             }).ConfigureAwait(true);
         }
         finally

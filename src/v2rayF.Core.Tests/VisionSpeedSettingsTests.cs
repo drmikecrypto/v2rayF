@@ -212,11 +212,14 @@ public class VisionSpeedSettingsTests
         };
         var json = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!;
         var proxy = json["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
-        Assert.True(proxy["streamSettings"]!["sockopt"]!["tcpNoDelay"]!.GetValue<bool>());
+        var sockopt = proxy["streamSettings"]!["sockopt"]!;
+        Assert.True(sockopt["tcpNoDelay"]!.GetValue<bool>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec, sockopt["tcpKeepAliveIdle"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIntervalSec, sockopt["tcpKeepAliveInterval"]!.GetValue<int>());
     }
 
     [Fact]
-    public void LiveSockopt_SkippedOnVision()
+    public void LiveSockopt_Vision_KeepAliveOnly()
     {
         var server = new ProxyServer
         {
@@ -231,7 +234,52 @@ public class VisionSpeedSettingsTests
         };
         var json = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!;
         var proxy = json["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
-        Assert.Null(proxy["streamSettings"]!["sockopt"]);
+        var sockopt = proxy["streamSettings"]!["sockopt"]!;
+        Assert.Null(sockopt["tcpNoDelay"]);
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec, sockopt["tcpKeepAliveIdle"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIntervalSec, sockopt["tcpKeepAliveInterval"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void LiveSockopt_PlainShadowsocks_HasStreamSettings()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Shadowsocks,
+            Address = "1.2.3.4",
+            Port = 8388,
+            Password = "secret",
+            Cipher = "aes-128-gcm",
+            Network = "tcp",
+            Security = "none"
+        };
+        var json = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!;
+        var proxy = json["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        var sockopt = proxy["streamSettings"]!["sockopt"]!;
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec, sockopt["tcpKeepAliveIdle"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIntervalSec, sockopt["tcpKeepAliveInterval"]!.GetValue<int>());
+        Assert.True(sockopt["tcpNoDelay"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void LiveSockopt_Fragment_MergesDialerProxyWithKeepAlive()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "tcp",
+            Security = "tls"
+        };
+        var json = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings { EnablePacketFragment = true }))!;
+        var proxy = json["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        var sockopt = proxy["streamSettings"]!["sockopt"]!;
+        Assert.Equal("fragment", sockopt["dialerProxy"]!.GetValue<string>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec, sockopt["tcpKeepAliveIdle"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIntervalSec, sockopt["tcpKeepAliveInterval"]!.GetValue<int>());
+        Assert.True(sockopt["tcpNoDelay"]!.GetValue<bool>());
     }
 
     [Fact]

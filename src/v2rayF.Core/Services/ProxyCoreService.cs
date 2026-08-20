@@ -15,6 +15,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int HealthPortTimeoutMs = 500;
     public const int HealthSocksFailThreshold = 3;
     public const int HealthSocksFailGapMs = 400;
+    public const int PathHealthIntervalMs = 60000;
+    public const int PathHealthFailThreshold = 2;
+    public const int PathHealthProbeMs = 8000;
+    public const int PathHealthProbeVisionMs = 12000;
 
     private readonly ICoreEnvironment _environment;
     private readonly LatencyService _latency;
@@ -61,9 +65,28 @@ public sealed class ProxyCoreService : IAsyncDisposable
                File.Exists(Path.Combine(cores, "geosite.dat"));
     }
 
+    /// <summary>Raised when a soft path probe succeeds (reset AutoReconnect budget).</summary>
+    public event EventHandler? PathHealthOk;
+
     /// <summary>True when consecutive SOCKS probe misses should declare the tunnel dead.</summary>
     public static bool ShouldRaiseOnSocksFails(int consecutiveFails) =>
         consecutiveFails >= HealthSocksFailThreshold;
+
+    /// <summary>True when consecutive flat-traffic path probes should declare a zombie tunnel.</summary>
+    public static bool ShouldRaiseOnPathFails(int consecutiveFails) =>
+        consecutiveFails >= PathHealthFailThreshold;
+
+    public static int GetPathHealthProbeMs(ProxyServer? server)
+    {
+        if (server is not null &&
+            (ShareLinkParser.IsVisionFlow(server) ||
+             string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase)))
+            return PathHealthProbeVisionMs;
+        return PathHealthProbeMs;
+    }
+
+    public static bool IsTrafficFlat(TrafficStatsHub.LiveTraffic traffic) =>
+        traffic.UplinkBps + traffic.DownlinkBps <= 0;
 
     public async Task StartAsync(
         ProxyServer server,
@@ -202,6 +225,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private async Task HealthLoopAsync(CancellationToken cancellationToken)
     {
         var consecutiveSocksFails = 0;
+        var consecutivePathFails = 0;
+        var lastPathProbeUtc = DateTimeOffset.UtcNow;
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -217,6 +242,42 @@ public sealed class ProxyCoreService : IAsyncDisposable
                         .ConfigureAwait(false))
                 {
                     consecutiveSocksFails = 0;
+                    var now = DateTimeOffset.UtcNow;
+                    if ((now - lastPathProbeUtc).TotalMilliseconds >= PathHealthIntervalMs &&
+                        IsTrafficFlat(TrafficStatsHub.Shared.Latest))
+                    {
+                        lastPathProbeUtc = now;
+                        var budget = GetPathHealthProbeMs(ActiveServer);
+                        int? pathMs;
+                        try
+                        {
+                            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                            probeCts.CancelAfter(budget);
+                            pathMs = await _latency
+                                .MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                                .ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                        {
+                            pathMs = -1;
+                        }
+
+                        if (pathMs is null or < 0)
+                        {
+                            consecutivePathFails++;
+                            if (ShouldRaiseOnPathFails(consecutivePathFails))
+                            {
+                                RaiseUnexpectedStop();
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            consecutivePathFails = 0;
+                            PathHealthOk?.Invoke(this, EventArgs.Empty);
+                        }
+                    }
+
                     continue;
                 }
 

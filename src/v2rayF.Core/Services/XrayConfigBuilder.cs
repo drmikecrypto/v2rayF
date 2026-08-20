@@ -164,7 +164,7 @@ public static class XrayConfigBuilder
                 ["tag"] = "tun-in",
                 ["protocol"] = "tun",
                 ["settings"] = tunSettings,
-                ["sniffing"] = TunSniffing(tunFd is not null, IsVisionFlow(peers[0]))
+                ["sniffing"] = TunSniffing(tunFd is not null)
             });
         }
 
@@ -569,23 +569,14 @@ public static class XrayConfigBuilder
     };
 
     /// <summary>
-    /// Android TUN (fd inherited): sniff HTTP/TLS only — Chromium QUIC over gVisor hangs Play/Chrome.
-    /// Vision + Android TUN: empty destOverride so TLS sniff does not fight Vision splice.
-    /// Desktop TUN keeps quic sniff.
+    /// Android TUN (fd inherited): empty destOverride for all Xray transports —
+    /// TLS/HTTP sniff fights Vision splice and WS/Trojan/SS/httpupgrade on gVisor.
+    /// Desktop TUN keeps http,tls,quic.
     /// </summary>
-    private static JsonObject TunSniffing(bool androidTunFd, bool visionPrimary)
+    private static JsonObject TunSniffing(bool androidTunFd)
     {
         var destOverride = new JsonArray();
-        if (androidTunFd && visionPrimary)
-        {
-            // Empty — TLS destOverride fights Vision splice on gVisor TUN.
-        }
-        else if (androidTunFd)
-        {
-            destOverride.Add("http");
-            destOverride.Add("tls");
-        }
-        else
+        if (!androidTunFd)
         {
             destOverride.Add("http");
             destOverride.Add("tls");
@@ -725,10 +716,9 @@ public static class XrayConfigBuilder
             !IsVisionFlow(server) &&
             outbound["streamSettings"] is JsonObject stream)
         {
-            stream["sockopt"] = new JsonObject
-            {
-                ["dialerProxy"] = "fragment"
-            };
+            var sockopt = BuildLiveSockopt(server, includeNoDelay: true);
+            sockopt["dialerProxy"] = "fragment";
+            stream["sockopt"] = sockopt;
         }
         else
         {
@@ -748,18 +738,30 @@ public static class XrayConfigBuilder
                 "REALITY requires a public key (pbk). This link is incomplete.");
     }
 
+    public const int TcpKeepAliveIdleSec = 45;
+    public const int TcpKeepAliveIntervalSec = 15;
+
     private static void ApplyLiveSockopt(JsonObject outbound, ProxyServer server)
     {
-        if (IsVisionFlow(server))
-            return;
         if (outbound["streamSettings"] is not JsonObject stream)
-            return;
-
-        stream["sockopt"] = new JsonObject
         {
-            ["tcpNoDelay"] = true,
-            ["tcpKeepAliveInterval"] = 30
+            stream = new JsonObject();
+            outbound["streamSettings"] = stream;
+        }
+
+        stream["sockopt"] = BuildLiveSockopt(server, includeNoDelay: !IsVisionFlow(server));
+    }
+
+    private static JsonObject BuildLiveSockopt(ProxyServer server, bool includeNoDelay)
+    {
+        var sockopt = new JsonObject
+        {
+            ["tcpKeepAliveIdle"] = TcpKeepAliveIdleSec,
+            ["tcpKeepAliveInterval"] = TcpKeepAliveIntervalSec
         };
+        if (includeNoDelay)
+            sockopt["tcpNoDelay"] = true;
+        return sockopt;
     }
 
     private static bool IsVisionFlow(ProxyServer server) =>
@@ -858,6 +860,8 @@ public static class XrayConfigBuilder
         var security = ShareLinkParser.NormalizeSecurity(server.Security);
         if (network is not "tcp" || security is not "none")
             outbound["streamSettings"] = BuildStreamSettings(server);
+        else
+            outbound["streamSettings"] = new JsonObject(); // so live keepalive sockopt can attach
 
         return outbound;
     }

@@ -96,6 +96,10 @@ public class ConnectReliabilityConfigTests
         Assert.Contains(speed["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
         var proxy = speed["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
         Assert.Equal("fragment", proxy["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec,
+            proxy["streamSettings"]!["sockopt"]!["tcpKeepAliveIdle"]!.GetValue<int>());
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIntervalSec,
+            proxy["streamSettings"]!["sockopt"]!["tcpKeepAliveInterval"]!.GetValue<int>());
     }
 
     [Fact]

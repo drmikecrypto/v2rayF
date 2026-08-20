@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.6] - 2026-08-20
+
+### Fixed
+
+- Idle “Connected but no internet” on phone and Windows — NAT can drop the outbound while SOCKS still listens. TCP keepalive (`idle 45` / `interval 15`) on all long-lived outbounds; soft SOCKS path probe every 60s when traffic is flat (2 fails → reconnect)
+- Android TUN: empty `destOverride` for all Xray transports (VLESS-TCP, SS, Trojan-WS, VLESS-WS, HTTPUpgrade, Vision) — TLS/HTTP sniff fought those tunnels the same way it fought Vision
+- Auto-reconnect retries up to **2** times with backoff (was one shot)
+
+### Changed
+
+- Fragment dialer merges with keepalive sockopt instead of replacing it
+- Plain Shadowsocks always gets `streamSettings` so keepalive can attach
+- Vision keepalive only (no `tcpNoDelay`) so splice stays safe
+
 ## [2.0.5] - 2026-08-18
 
 ### Fixed

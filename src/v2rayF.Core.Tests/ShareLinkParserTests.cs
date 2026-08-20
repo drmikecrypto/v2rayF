@@ -171,9 +171,7 @@ public class StreamSettingsBuilderTests
         Assert.Equal(TunConstants.InterfaceName, tunSettings["name"]!.GetValue<string>());
         Assert.Equal(XrayConfigBuilder.AndroidTunMtu, tunSettings["MTU"]!.GetValue<int>());
         var dest = tun["sniffing"]!["destOverride"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
-        Assert.DoesNotContain("quic", dest);
-        Assert.Contains("http", dest);
-        Assert.Contains("tls", dest);
+        Assert.Empty(dest);
         Assert.Null(tunSettings["fd"]);
         Assert.Null(tunSettings["stack"]);
         Assert.Null(tunSettings["inet4_address"]);
@@ -310,13 +308,58 @@ public class AndroidTunRoutingTests
     }
 
     [Fact]
-    public void TunFd_DoesNotSniffQuic()
+    public void TunFd_EmptyDestOverride_ForAllAndroidTransports()
     {
         var settings = new AppSettings { EnableTunMode = true };
-        var tun = JsonNode.Parse(XrayConfigBuilder.Build(Sample(), settings, tunFd: 7))![
-            "inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
-        var dest = tun["sniffing"]!["destOverride"]!.AsArray().Select(n => n!.GetValue<string>()).ToArray();
-        Assert.Equal(["http", "tls"], dest);
+        foreach (var server in new[]
+                 {
+                     Sample(),
+                     new ProxyServer
+                     {
+                         Protocol = ProxyProtocol.Shadowsocks,
+                         Address = "1.2.3.4",
+                         Port = 8388,
+                         Password = "x",
+                         Cipher = "aes-128-gcm"
+                     },
+                     new ProxyServer
+                     {
+                         Protocol = ProxyProtocol.Trojan,
+                         Address = "1.2.3.4",
+                         Port = 443,
+                         Password = "x",
+                         Network = "ws",
+                         Security = "tls",
+                         Path = "/ray",
+                         Host = "cdn.example"
+                     },
+                     new ProxyServer
+                     {
+                         Protocol = ProxyProtocol.VLESS,
+                         Address = "1.2.3.4",
+                         Port = 443,
+                         UserId = Guid.NewGuid().ToString(),
+                         Network = "ws",
+                         Security = "tls",
+                         Path = "/vless",
+                         Host = "cdn.example"
+                     },
+                     new ProxyServer
+                     {
+                         Protocol = ProxyProtocol.VLESS,
+                         Address = "1.2.3.4",
+                         Port = 443,
+                         UserId = Guid.NewGuid().ToString(),
+                         Network = "httpupgrade",
+                         Security = "tls",
+                         Path = "/up"
+                     }
+                 })
+        {
+            var tun = JsonNode.Parse(XrayConfigBuilder.Build(server, settings, tunFd: 7))![
+                "inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+            Assert.Empty(tun["sniffing"]!["destOverride"]!.AsArray());
+        }
     }
 
     [Fact]
@@ -340,7 +383,9 @@ public class AndroidTunRoutingTests
         Assert.True(tun["sniffing"]!["routeOnly"]!.GetValue<bool>());
         Assert.DoesNotContain(root["outbounds"]!.AsArray(), o => o!["tag"]?.GetValue<string>() == "fragment");
         var proxy = root["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
-        Assert.Null(proxy["streamSettings"]!["sockopt"]);
+        var sockopt = proxy["streamSettings"]!["sockopt"]!;
+        Assert.Null(sockopt["tcpNoDelay"]);
+        Assert.Equal(XrayConfigBuilder.TcpKeepAliveIdleSec, sockopt["tcpKeepAliveIdle"]!.GetValue<int>());
     }
 
     [Fact]

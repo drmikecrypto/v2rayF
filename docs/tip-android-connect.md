@@ -8,7 +8,11 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 4. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 5. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
 
-**Vision (xtls-rprx-vision)** works on phones from **v2.0.4** (TUN no longer sniffs TLS into the Vision splice). Set Android **Private DNS** to Off if browsers still fail.
+**Vision (xtls-rprx-vision)** works on phones from **v2.0.4** (TUN no longer sniffs TLS into the Vision splice). From **v2.0.6**, Android TUN uses empty sniff for **all** Xray transports (VLESS-TCP, SS, Trojan-WS, VLESS-WS, HTTPUpgrade, Vision) so delay can look green while apps actually work. Set Android **Private DNS** to Off if browsers still fail.
+
+## Idle “Connected” but no internet (phone or Windows)
+
+After sitting unused, NAT may drop the outbound while the UI still shows Connected. **v2.0.6** adds TCP keepalive and a soft path probe (when traffic is flat); with **Auto-reconnect** on, the app reconnects up to twice. Toggle Disconnect → Connect if it still looks stuck.
 
 ## Chrome, Brave, Play Store, or Translate offline (Instagram/YouTube work)
 
