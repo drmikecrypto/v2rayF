@@ -116,6 +116,8 @@ flowchart LR
 Each desktop package includes **Xray-core** and geo data (`geoip.dat`, `geosite.dat`) — no extra setup. The Android APK bundles the same core and geo files.
 
 > **macOS first launch:** if Gatekeeper blocks the app, run `xattr -cr /path/to/folder` or right-click → Open once.
+>
+> **Windows SmartScreen:** unsigned builds may show “Windows protected your PC.” Signing with [Microsoft Artifact Signing](docs/tips/windows-smartscreen.md) is how releases get a real publisher identity — GitHub hosting alone does not.
 
 ---
 

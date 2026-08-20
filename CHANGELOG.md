@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Windows release Authenticode via Microsoft Artifact Signing (opt-in repo variable) — see [windows-smartscreen.md](docs/tips/windows-smartscreen.md)
+
 ## [2.0.6] - 2026-08-20
 
 ### Fixed
