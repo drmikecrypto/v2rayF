@@ -1,246 +1,167 @@
-# v2rayF — Cross-platform V2Ray / Xray proxy & VPN client
+```
+           ____                 _____
+ __   __ _|___ \ _ __ __ _ _   _|  ___|
+ \ \ / /| | __) | '__/ _` | | | | |_
+  \ V / | |/ __/| | | (_| | |_| |  _|
+   \_/  |_|_____|_|  \__,_|\__, |_|
+                           |___/   dual-core · TUN · fail-closed
+```
 
-**v2rayF** is a free, open-source **V2Ray / Xray / VLESS / VMess / Shadowsocks / Trojan** client for **Windows, macOS, Linux, and Android**. Built for people who need a fast connection behind censorship, with **Smart Connect**, **DNS leak protection**, a **kill switch**, **TUN/VPN mode**, and **Secure Share** so other devices can use the same tunnel.
+# v2rayF
 
-> Download the latest builds: **[Releases](https://github.com/drmikecrypto/v2rayF/releases/latest)** · Docs: [Getting started](docs/GETTING_STARTED.md) · For AI assistants: [llms.txt](llms.txt)
+```
+$ whoami
+drmikecrypto/v2rayF
+
+$ cat /proc/self/cmdline
+Avalonia GUI  ×  Xray-core  ×  sing-box
+Windows · macOS · Linux · Android
+VLESS/REALITY/Vision · VMess · SS · Trojan · Hy2 · TUIC · WG
+
+$ curl -sI https://github.com/drmikecrypto/v2rayF/releases/latest | head -1
+HTTP/2 302  →  grab a zip. no brew. no store tax. MIT.
+```
 
 <p align="center">
-  <a href="https://github.com/drmikecrypto/v2rayF/releases/latest"><img src="https://img.shields.io/github/v/tag/drmikecrypto/v2rayF?style=flat-square&label=release" alt="Latest v2rayF release"></a>
-  <a href="https://github.com/drmikecrypto/v2rayF/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/drmikecrypto/v2rayF/ci.yml?branch=main&style=flat-square" alt="v2rayF CI status"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License"></a>
-  <a href="https://github.com/drmikecrypto/v2rayF/stargazers"><img src="https://img.shields.io/github/stars/drmikecrypto/v2rayF?style=flat-square" alt="GitHub stars"></a>
-  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-informational?style=flat-square" alt="Platforms Windows macOS Linux Android">
-  <img src="https://img.shields.io/badge/protocols-VLESS%20VMess%20SS%20Trojan-informational?style=flat-square" alt="Protocols VLESS VMess Shadowsocks Trojan">
+  <a href="https://github.com/drmikecrypto/v2rayF/releases/latest"><img src="https://img.shields.io/github/v/release/drmikecrypto/v2rayF?style=for-the-badge&label=release&color=222222&labelColor=111111" alt="release"></a>
+  <a href="https://github.com/drmikecrypto/v2rayF/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/drmikecrypto/v2rayF/ci.yml?branch=main&style=for-the-badge&label=ci&color=222222&labelColor=111111" alt="ci"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-222222?style=for-the-badge&labelColor=111111" alt="license"></a>
+  <a href="https://github.com/drmikecrypto/v2rayF/stargazers"><img src="https://img.shields.io/github/stars/drmikecrypto/v2rayF?style=for-the-badge&color=222222&labelColor=111111" alt="stars"></a>
 </p>
 
 ---
 
-## Why v2rayF?
+## tl;dr
 
-| Need | What v2rayF does |
-|------|------------------|
-| One client on every device | Same Avalonia app on desktop + Android APK |
-| Pick the fastest live node | **Smart Connect** ranks by proxy-path RTT, then fails over |
-| Speed across several nodes | **Smart Multipath** (Xray observatory / leastPing balancer) |
-| No DNS / IPv6 leaks | DNS through proxy, IPv6 block, Windows kill switch, crash teardown |
-| Share the tunnel | **Secure Share** — authenticated LAN SOCKS/HTTP for phone↔PC |
-| Modern Xray features | VLESS + REALITY + Vision, TUN, system proxy, geo routing |
+Cross-platform **proxy / TUN client** that speaks the protocols you already paste into `v2rayN` / `v2rayNG` / Clash Meta — then routes your machine through them without pretending to be a “corporate VPN brand.”
 
-Ideal search / product keywords: **v2ray client**, **xray client**, **vless reality client**, **vmess client**, **shadowsocks android windows**, **trojan gui**, **tun vpn proxy**, **anti-censorship proxy**, **dns leak protection kill switch**.
+| Plane | Stack |
+|-------|--------|
+| UI | Avalonia / .NET 10 (one codebase → desktop + APK) |
+| Classic outbounds (desktop) | **Xray-core** |
+| Android classic + Hy2/TUIC/WG | **sing-box** (+ TUN `file_descriptor`) |
+| Local listeners | `127.0.0.1:10808` SOCKS · `127.0.0.1:10809` HTTP |
+| Leak posture | DoH (default), IPv6 blackhole, kill switch, crash teardown |
+
+**[→ Releases](https://github.com/drmikecrypto/v2rayF/releases/latest)** · [Getting started](docs/GETTING_STARTED.md) · [Android tip](docs/tip-android-connect.md) · [llms.txt](llms.txt)
 
 ---
 
-## Architecture
+## packet path
 
-How traffic moves from apps to your proxy node when connected:
+```
+  apps / browser
+        │
+        ├──── system proxy / VpnService HTTP CONNECT ──► :10809
+        │
+        └──── TUN (gVisor Xray │ sing-box system stack) ──► tun-in
+                    │
+                    ▼
+              core (Xray │ sing-box)
+                    │
+                    ▼
+         vless:// · vmess:// · ss:// · trojan:// · hy2:// …
+                    │
+                    ▼
+                 exit node → internet
+```
 
 ```mermaid
 flowchart LR
-  subgraph device [Your device]
-    Apps[Apps / browser]
-    UI[v2rayF UI]
-    Core[v2rayF.Core]
-    Local[SOCKS 10808 / HTTP 10809]
-    Tun[TUN or system proxy]
-  end
-  Xray[Xray-core]
-  Node[VLESS / VMess / SS / Trojan node]
-  Net[Internet]
-
-  Apps --> Tun
-  Tun --> Xray
-  Apps --> Local
-  Local --> Xray
-  UI --> Core
-  Core --> Xray
-  Xray --> Node --> Net
+  Apps --> TunOrProxy[TUN or system proxy]
+  TunOrProxy --> Core[Xray or sing-box]
+  Core --> Node[outbound]
+  Node --> Net[internet]
 ```
 
-Sentinel / leak-shield stack (when enabled):
+Android (v2.2+): classic VLESS/VMess/Trojan/SS/REALITY/Vision hitch a ride on **sing-box TUN** the same way Hy2 already did. Desktop keeps Xray for those. Dual-core on purpose — not a cargo-cult rewrite.
 
-```mermaid
-flowchart TB
-  Start[Connect] --> TunVpn[Establish TUN / VPN]
-  TunVpn --> StartCore[Start Xray]
-  StartCore --> Ready{SOCKS ready?}
-  Ready -->|no| Fail[Teardown]
-  Ready -->|yes| KS[Arm kill switch Windows]
-  KS --> Route[DNS via proxy + IPv6 block]
-  Route --> Ok[Connected]
-  Ok --> Drop{Core dies?}
-  Drop -->|yes| Hold[Keep kill switch / tear VPN]
-  Hold --> User[User taps Disconnect]
-  User --> Clear[Release kill switch]
+---
+
+## opcodes (features)
+
+```
+0x01  Smart Connect     rank by proxy-path generate_204, not marketing latency
+0x02  Adaptive Survive  fragment / Sentinel only when you opt in (never silent)
+0x03  Multipath         Xray observatory / leastPing when you ask for it
+0x04  Secure Share      LAN SOCKS/HTTP with auth — phone rides your exit IP
+0x05  Vault             encrypted secrets + .v2rayf export
+0x06  Sentinel profile  Global + DoH + Block IPv6 + kill switch in one tap
+0x07  Auto-reconnect    zombie tunnel → soft path probe → up to 2 retries
 ```
 
-Smart Connect decision flow:
+Transports we actually parse: TCP · WS · gRPC · H2 · HTTPUpgrade · xHTTP · mKCP · QUIC · REALITY · Vision.
 
-```mermaid
-flowchart TD
-  A[Servers in list] --> B[Phase 1: TCP prefilter]
-  B --> C[Phase 2: proxy-path generate_204]
-  C --> D[Rank: working path first then RTT]
-  D --> E[Prefer REALITY on ties]
-  E --> F[Connect top candidate]
-  F --> G{Up?}
-  G -->|no| H[Next candidate]
-  H --> F
-  G -->|yes| I[Optional multipath peers]
-```
+---
 
-Secure Share — other devices use *your* exit IP:
+## install
 
-```mermaid
-flowchart LR
-  Phone[Phone / PC client] -->|SOCKS or HTTP auth| GW[v2rayF Secure Share on LAN]
-  GW --> Xray[Xray outbound]
-  Xray --> Exit[Proxy exit]
+| Host | Artifact | Entry |
+|------|----------|-------|
+| win-x64 / win-arm64 | `v2rayF-win-*.zip` | `v2rayF.exe` |
+| linux-x64 / linux-arm64 | `v2rayF-linux-*.zip` | `./run-v2rayF.sh` |
+| osx-x64 / osx-arm64 | `v2rayF-osx-*.zip` | `./run-v2rayF.sh` |
+| android-arm64 | `v2rayF-android-arm64.zip` | install the `.apk` |
+
+Cores + `geoip.dat` / `geosite.dat` ship inside the zip. Android: **uninstall → install** when jumping major minors (native libs + signing).
+
+```bash
+# macOS Gatekeeper said no?
+xattr -cr /path/to/extracted/v2rayF
 ```
 
 ---
 
-## Download
+## boot sequence
 
-**[→ Latest release](https://github.com/drmikecrypto/v2rayF/releases/latest)** — pick the zip for your platform:
-
-| Platform | File | Run |
-|----------|------|-----|
-| Windows x64 | `v2rayF-win-x64.zip` | `v2rayF.exe` |
-| Windows ARM64 | `v2rayF-win-arm64.zip` | `v2rayF.exe` |
-| Linux x64 | `v2rayF-linux-x64.zip` | `./run-v2rayF.sh` |
-| Linux ARM64 | `v2rayF-linux-arm64.zip` | `./run-v2rayF.sh` |
-| macOS Intel | `v2rayF-osx-x64.zip` | `./run-v2rayF.sh` |
-| macOS Apple Silicon | `v2rayF-osx-arm64.zip` | `./run-v2rayF.sh` |
-| Android ARM64 | `v2rayF-android-arm64.zip` | Install `v2rayF-android-arm64.apk` |
-
-Each desktop package includes **Xray-core** and geo data (`geoip.dat`, `geosite.dat`) — no extra setup. The Android APK bundles the same core and geo files.
-
-> **macOS first launch:** if Gatekeeper blocks the app, run `xattr -cr /path/to/folder` or right-click → Open once.
-
----
-
-## Features
-
-- **Protocols** — VMess, VLESS (incl. REALITY / Vision / Vision+TLS), Shadowsocks, Trojan, SOCKS
-- **Import** — clipboard, paste box, subscription URL (`https://…`); transports TCP/WS/gRPC/H2/HTTPUpgrade/xHTTP/mKCP/QUIC
-- **Smart Connect** — auto-pick the fastest *working* node; failover on failure
-- **Adaptive Survive** — escalate fragment / Sentinel tactics when Smart Connect cannot stay up
-- **Smart Multipath** — balance across top servers (Xray observatory)
-- **Latency test** — per server or test all (proxy-path preferred)
-- **Routing** — Global/Sentinel, Bypass LAN, Bypass China, Custom Direct / Proxy / Block
-- **Leak shield** — DNS through proxy, IPv6 block, kill switch, crash-aware teardown
-- **Secure Share** — LAN SOCKS/HTTP gateway (LAN-bind by default) for phone↔PC / hotspot clients
-- **Encrypted vault** — secrets at rest + `.v2rayf` export/import between devices
-- **TUN / VPN mode** — full-device capture (Admin on Windows; VPN permission on Android)
-- **System proxy** — Windows, macOS, GNOME, KDE, XFCE (desktop only)
-- **Tray icon** — status at a glance; minimize to tray while connected
-- **Local proxies** — SOCKS `127.0.0.1:10808`, HTTP `127.0.0.1:10809`
-
----
-
-## Quick start
-
-1. Download and extract the zip for your OS from [Releases](https://github.com/drmikecrypto/v2rayF/releases/latest).
-2. Import your share link (`vless://…`, `vmess://…`, `ss://…`, `trojan://…`) or subscription URL.
-3. Optional: **Apply Sentinel profile** for Global routing + DNS through proxy + IPv6 block + kill switch.
-4. Enable **Smart Connect** (or select a server) → **Connect**.
-5. Browse — system proxy or TUN routes traffic; use Secure Share to point other devices at the LAN gateway.
-
-See [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md), [routing rules](docs/tips/routing-rules.md), and [Secure Share](docs/tips/secure-share.md).
-
----
-
-## Platform support matrix
-
-```mermaid
-flowchart LR
-  subgraph desktop [Desktop]
-    W[Windows<br/>proxy + TUN + kill switch]
-    M[macOS<br/>proxy + TUN]
-    L[Linux<br/>proxy + TUN]
-  end
-  subgraph mobile [Mobile]
-    A[Android<br/>VpnService always]
-  end
-  XF[Xray-core<br/>VLESS REALITY SS Trojan]
-  W --> XF
-  M --> XF
-  L --> XF
-  A --> XF
+```
+1. unzip release
+2. paste vless://… | vmess://… | ss://… | trojan://… | hy2://…  (or subscription URL)
+3. optional: Apply Sentinel profile
+4. Smart Connect  XOR  pick a row
+5. Connect
+6. Private DNS = Off on Android if Chromium fights you
 ```
 
-| OS | System proxy | TUN / VPN | Kill switch | Secure Share |
-|----|--------------|-----------|-------------|--------------|
-| Windows | Yes | Admin TUN | Windows Firewall | Yes |
-| macOS | Yes | Tun docs / elevated | TUN `strict_route` | Yes |
-| Linux | GNOME/KDE/XFCE | Elevated TUN | TUN `strict_route` | Yes |
-| Android | N/A (VpnService) | Always (VPN) | VPN hold | Yes |
-| iOS | Not shipping | — | — | — |
+```
+$ ss -ltn | grep 1080
+LISTEN  127.0.0.1:10808   # socks
+LISTEN  127.0.0.1:10809   # http
+```
+
+Docs worth reading once: [routing](docs/tips/routing-rules.md) · [Secure Share](docs/tips/secure-share.md) · [latency ≠ Mbps](docs/tips/latency-testing.md) · [engine roadmap](docs/roadmap-engine-first.md)
 
 ---
 
-## Project structure
+## matrix
 
-```mermaid
-flowchart TB
-  subgraph src [src/]
-    Core[v2rayF.Core<br/>models, Xray config, stores]
-    UI[v2rayF<br/>Avalonia UI + ViewModels]
-    Desk[v2rayF.Desktop<br/>Windows macOS Linux]
-    And[v2rayF.Android<br/>VpnService + libxray]
-  end
-  UI --> Core
-  Desk --> UI
-  And --> UI
-  Desk --> Core
-  And --> Core
-  Scripts[scripts/ packaging] --> Desk
-  Scripts --> And
-  CI[.github/workflows] --> Scripts
-```
+| OS | system proxy | TUN | kill switch | Secure Share |
+|----|--------------|-----|-------------|--------------|
+| Windows | yes | Admin TUN | Firewall | yes |
+| macOS | yes | elevated TUN | `strict_route` | yes |
+| Linux | GNOME/KDE/XFCE | elevated TUN | `strict_route` | yes |
+| Android | N/A | VpnService always | VPN hold | yes |
+| iOS | — | not shipping | — | — |
+
+---
+
+## tree
 
 ```
 v2rayF/
 ├── src/
-│   ├── v2rayF.Core/      # Shared models & services (Xray, parsing, stores)
-│   ├── v2rayF/           # Shared Avalonia UI (ViewModels, Views)
-│   ├── v2rayF.Desktop/   # Desktop entry + bundled cores/
-│   └── v2rayF.Android/   # Android entry + VPN services
-├── scripts/              # Packaging & launch scripts
-├── .github/workflows/    # CI + release automation
-├── docs/                 # User guides and tips
-└── llms.txt              # Machine-readable project summary for LLMs
+│   ├── v2rayF.Core/     # builders, stores, Smart Connect, dual-core runtime
+│   ├── v2rayF/          # Avalonia UI + ViewModels
+│   ├── v2rayF.Desktop/  # Win/macOS/Linux host + cores/
+│   └── v2rayF.Android/  # VpnService + posix_spawn TUN fd
+├── scripts/             # package-all / package-android-release
+├── docs/                # tips, release notes, roadmap
+└── .github/workflows/   # ci + tag → multi-OS release
 ```
 
 ---
 
-## FAQ (search & assistants)
-
-**What is v2rayF?**  
-A cross-platform GUI client for Xray-core that speaks VLESS, VMess, Shadowsocks, Trojan, and SOCKS on Windows, macOS, Linux, and Android.
-
-**Is v2rayF a VPN?**  
-It can run in **TUN / VPN mode** (full-device capture) or set the **system HTTP proxy**. The data plane is still your Xray outbound (e.g. VLESS+REALITY), not a proprietary VPN protocol.
-
-**Does it support VLESS REALITY?**  
-Yes. Import `vless://` links with REALITY (`security=reality`, `pbk`, `sid`) and optional Vision (`flow=xtls-rprx-vision`). Vision also works with `security=tls`. Transports include TCP, WS, gRPC, H2, HTTPUpgrade, xHTTP, mKCP, and QUIC.
-
-**How do I stop DNS leaks?**  
-Enable **DNS through proxy** (default in Sentinel profile) and prefer TUN/VPN mode. On Windows, enable the **kill switch** so clearnet is blocked if the core drops.
-
-**How is this different from v2rayN / v2rayNG / Hiddify?**  
-v2rayF focuses on one Avalonia codebase across desktop + Android, Smart Connect / multipath, and an explicit Sentinel leak-shield profile with Secure Share for LAN clients.
-
----
-
-## Build from source
-
-### Requirements
-
-- [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- PowerShell 7+ (for packaging)
-
-### Run in dev (desktop)
+## from source
 
 ```bash
 git clone https://github.com/drmikecrypto/v2rayF.git
@@ -248,48 +169,42 @@ cd v2rayF
 dotnet run --project src/v2rayF.Desktop/v2rayF.Desktop.csproj
 ```
 
-Place `xray` / `xray.exe` in `src/v2rayF.Desktop/cores/` for local connects, or run the packager (downloads Xray automatically):
-
 ```powershell
+# drop xray(+sing-box) into Desktop/cores/  — or let the packager fetch them
 pwsh -File scripts/package-all.ps1
-```
 
-### Build Android APK
-
-Requires the [.NET Android workload](https://learn.microsoft.com/dotnet/android/overview):
-
-```powershell
 dotnet workload install android
-pwsh -File scripts/package-android.ps1      # download Xray for Android assets
 pwsh -File scripts/package-android-release.ps1
 ```
 
-Output: `dist/v2rayF-android-arm64.zip` containing the signed-ready APK.
+Needs [.NET 10 SDK](https://dotnet.microsoft.com/download) + PowerShell 7+.
 
 ---
 
-## Contributing
+## FAQ for humans & scrapers
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+**VPN or proxy?**  
+Both skins, same guts: your outbound is still VLESS/REALITY/SS/… — not a proprietary “v2rayF protocol.”
 
-- [Report a bug](https://github.com/drmikecrypto/v2rayF/issues/new?template=bug_report.md)
-- [Request a feature](https://github.com/drmikecrypto/v2rayF/issues/new?template=feature_request.md)
-- [Security issues](SECURITY.md)
+**REALITY / Vision?**  
+Yes. `security=reality` + `pbk`/`sid`; `flow=xtls-rprx-vision` (also with TLS).
 
----
+**DNS leaks?**  
+DoH is **on by default** (v2.2). Prefer TUN. Windows: kill switch. Android: Private DNS Off.
 
-## Legal & credits
-
-- Licensed under [MIT](LICENSE).
-- Uses [Xray-core](https://github.com/XTLS/Xray-core) (bundled in releases, not committed to this repo).
-- UI built with [Avalonia UI](https://avaloniaui.net/).
-
-**Use only on networks and servers you are authorized to access.** Circumventing restrictions may be illegal in your jurisdiction.
+**vs v2rayN / v2rayNG / Hiddify / V2Box?**  
+One Avalonia tree across desktop+Android, explicit Sentinel leak profile, Secure Share, dual-core (Xray + sing-box). Not a fork with a new coat of paint.
 
 ---
 
-## Discoverability
+## contribute / legal
 
-Official homepage for downloads: [github.com/drmikecrypto/v2rayF/releases/latest](https://github.com/drmikecrypto/v2rayF/releases/latest)
+- [CONTRIBUTING](CONTRIBUTING.md) · [bug](https://github.com/drmikecrypto/v2rayF/issues/new?template=bug_report.md) · [feature](https://github.com/drmikecrypto/v2rayF/issues/new?template=feature_request.md) · [SECURITY](SECURITY.md)
+- MIT · ships [Xray-core](https://github.com/XTLS/Xray-core) + [sing-box](https://github.com/SagerNet/sing-box) in release artifacts (not in git)
+- UI: [Avalonia](https://avaloniaui.net/)
 
-Related topics: `v2ray` · `xray` · `vless` · `vmess` · `reality` · `shadowsocks` · `trojan` · `proxy` · `vpn-client` · `tun` · `kill-switch` · `dns-leak` · `anti-censorship` · `avalonia` · `android` · `windows` · `linux` · `macos`
+**Only use on networks and servers you are authorized to access.**
+
+```
+# eof — patches welcome; cargo-cult PRs get icmp unreachable
+```
