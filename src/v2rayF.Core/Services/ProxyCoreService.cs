@@ -50,7 +50,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public string ResolveCorePath() => _environment.GetCorePath();
 
     public string ResolveCorePathFor(ProxyServer server) =>
-        CoreRuntime.RequiresSingBox(server) ? _environment.GetSingBoxPath() : _environment.GetCorePath();
+        CoreRuntime.UseSingBox(server) ? _environment.GetSingBoxPath() : _environment.GetCorePath();
 
     public string ResolveCoresDirectory() => _environment.GetCoresDirectory();
 
@@ -97,9 +97,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
     {
         await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
 
+        var useSingBox = CoreRuntime.UseSingBox(server);
         if (!IsCoreAvailableFor(server))
             throw new FileNotFoundException(
-                CoreRuntime.RequiresSingBox(server)
+                useSingBox
                     ? "sing-box core not found. Place sing-box in the cores folder."
                     : "Xray core not found.",
                 ResolveCorePathFor(server));
@@ -108,7 +109,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             throw new InvalidOperationException(AppServices.Platform.TunRequirementMessage);
 
         if (settings.RoutingMode == RoutingMode.BypassChina && !HasGeoFiles() &&
-            !CoreRuntime.RequiresSingBox(server))
+            !useSingBox)
             throw new InvalidOperationException(
                 "Bypass China routing requires geoip.dat and geosite.dat in the cores folder.");
 
@@ -118,23 +119,23 @@ public sealed class ProxyCoreService : IAsyncDisposable
         if (settings.SecureShareEnabled)
             XrayConfigBuilder.EnsureShareCredentials(settings);
 
-        var useSingBox = CoreRuntime.RequiresSingBox(server);
         if (useSingBox && multipathServers is { Count: > 0 })
             multipathServers = null; // sing-box multipath not in this build
 
         var configJson = useSingBox
-            ? SingBoxConfigBuilder.Build(server, settings)
+            ? SingBoxConfigBuilder.Build(server, settings, tunFd: tunFd)
             : XrayConfigBuilder.Build(server, settings, tunFd, multipathServers);
         var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
         Directory.CreateDirectory(configDir);
         _configPath = Path.Combine(configDir, useSingBox ? "singbox-config.json" : "config.json");
         await File.WriteAllTextAsync(_configPath, configJson, cancellationToken).ConfigureAwait(false);
 
+        // Pass TUN fd for both cores — sing-box uses file_descriptor:3; Xray uses xray.tun.fd env.
         await ProcessHost.StartAsync(
             ResolveCorePathFor(server),
             _configPath,
             ResolveCoresDirectory(),
-            useSingBox ? null : tunFd,
+            tunFd,
             cancellationToken).ConfigureAwait(false);
 
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -144,7 +145,6 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         if (ProcessHost.HasExited)
         {
-            // Let async stdout/stderr drainers finish before reading the error buffer.
             await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
             var error = ProcessHost.GetRecentError();
             await StopAsync(cancellationToken).ConfigureAwait(false);
@@ -153,19 +153,42 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
         LastConnectProbeMs = null;
-        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var healthBudget = LatencyService.GetConnectHealthProbeMs(server);
-        probeCts.CancelAfter(healthBudget);
-        int? probeMs;
-        try
+        var probeMs = await ProbeConnectPathAsync(server, healthBudget: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        // If DoH was off and the gate failed, one automatic Secure-DNS retry (no fragment).
+        if (probeMs is null or < 0 && !settings.DnsThroughProxy)
         {
-            probeMs = await _latency
-                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, healthBudget)
+            var dohSettings = CloneSettingsWithDoH(settings);
+            await StopAsync(cancellationToken).ConfigureAwait(false);
+            Interlocked.Exchange(ref _unexpectedHandled, 0);
+
+            configJson = useSingBox
+                ? SingBoxConfigBuilder.Build(server, dohSettings, tunFd: tunFd)
+                : XrayConfigBuilder.Build(server, dohSettings, tunFd, multipathServers);
+            await File.WriteAllTextAsync(_configPath!, configJson, cancellationToken).ConfigureAwait(false);
+
+            await ProcessHost.StartAsync(
+                ResolveCorePathFor(server),
+                _configPath!,
+                ResolveCoresDirectory(),
+                tunFd,
+                cancellationToken).ConfigureAwait(false);
+
+            using var readyTimeout2 = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            readyTimeout2.CancelAfter(ConnectTimeoutMs);
+            await WaitForCoreReadyAsync(readyTimeout2.Token).ConfigureAwait(false);
+
+            if (ProcessHost.HasExited)
+            {
+                await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
+                var error = ProcessHost.GetRecentError();
+                await StopAsync(cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
+            }
+
+            probeMs = await ProbeConnectPathAsync(server, healthBudget: null, cancellationToken)
                 .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            probeMs = -1;
         }
 
         if (probeMs is null or < 0)
@@ -180,6 +203,55 @@ public sealed class ProxyCoreService : IAsyncDisposable
         ActiveServer = server;
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
+    }
+
+    private async Task<int?> ProbeConnectPathAsync(
+        ProxyServer server,
+        int? healthBudget,
+        CancellationToken cancellationToken)
+    {
+        var budget = healthBudget ?? LatencyService.GetConnectHealthProbeMs(server);
+        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        probeCts.CancelAfter(budget);
+        try
+        {
+            return await _latency
+                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return -1;
+        }
+    }
+
+    private static AppSettings CloneSettingsWithDoH(AppSettings settings)
+    {
+        // Shallow copy via JSON is heavy; mutate a clone of key fields for the retry only.
+        return new AppSettings
+        {
+            RoutingMode = settings.RoutingMode,
+            CustomDirectRules = settings.CustomDirectRules,
+            CustomProxyRules = settings.CustomProxyRules,
+            CustomBlockRules = settings.CustomBlockRules,
+            EnableTunMode = settings.EnableTunMode,
+            EnableSystemProxy = settings.EnableSystemProxy,
+            SmartConnectEnabled = settings.SmartConnectEnabled,
+            SmartMultipathEnabled = settings.SmartMultipathEnabled,
+            KillSwitchEnabled = settings.KillSwitchEnabled,
+            BlockIpv6 = settings.BlockIpv6,
+            DnsThroughProxy = true,
+            SecureShareEnabled = settings.SecureShareEnabled,
+            ShareBindPort = settings.ShareBindPort,
+            ShareAuthUser = settings.ShareAuthUser,
+            ShareAuthPass = settings.ShareAuthPass,
+            ShareListenAllInterfaces = settings.ShareListenAllInterfaces,
+            EnablePacketFragment = settings.EnablePacketFragment,
+            SubscriptionViaProxy = settings.SubscriptionViaProxy,
+            AndroidBypassPackages = settings.AndroidBypassPackages,
+            AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled,
+            AutoReconnectEnabled = settings.AutoReconnectEnabled
+        };
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

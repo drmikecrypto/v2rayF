@@ -53,7 +53,7 @@ public class StableLiveConnectionTests
     {
         var s = new AppSettings();
         Assert.False(s.AdaptiveSurviveEnabled);
-        Assert.False(s.DnsThroughProxy);
+        Assert.True(s.DnsThroughProxy);
         Assert.False(s.EnablePacketFragment);
     }
 

@@ -6,68 +6,160 @@ using v2rayF.Models;
 
 namespace v2rayF.Services;
 
-/// <summary>Builds a minimal sing-box config with mixed SOCKS/HTTP on the same ports as Xray live mode.</summary>
+/// <summary>
+/// Builds sing-box JSON: mixed SOCKS/HTTP (same ports as Xray live) and optional Android TUN via inherited fd 3.
+/// </summary>
 public static class SingBoxConfigBuilder
 {
     public static int SocksPort => XrayConfigBuilder.SocksPort;
     public static int HttpPort => XrayConfigBuilder.HttpPort;
+    /// <summary>Matches AndroidJavaCoreProcessHost InheritedTunFd (posix_spawn dup2).</summary>
+    public const int InheritedTunFd = 3;
 
     public static string Build(
         ProxyServer server,
         AppSettings settings,
-        int? socksPort = null)
+        int? socksPort = null,
+        int? tunFd = null)
     {
         var listen = socksPort ?? SocksPort;
         var outbound = BuildOutbound(server);
+        var inbounds = new JsonArray
+        {
+            new JsonObject
+            {
+                ["type"] = "mixed",
+                ["tag"] = "mixed-in",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = listen
+            }
+        };
+
+        // Chromium SetHttpProxy targets 10809; keep a second mixed listener for parity with Xray.
+        if (listen != HttpPort)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "mixed",
+                ["tag"] = "mixed-http",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = HttpPort
+            });
+        }
+
+        if (tunFd is int fd && fd >= 0)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "tun",
+                ["tag"] = "tun-in",
+                ["interface_name"] = TunConstants.InterfaceName,
+                ["mtu"] = XrayConfigBuilder.AndroidTunMtu,
+                ["inet4_address"] = new JsonArray { "172.19.0.1/30" },
+                ["auto_route"] = false,
+                ["strict_route"] = false,
+                ["stack"] = "system",
+                ["file_descriptor"] = InheritedTunFd,
+                ["sniff"] = true,
+                ["sniff_override_destination"] = false
+            });
+        }
+
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "warn" },
-            ["inbounds"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "mixed",
-                    ["tag"] = "mixed-in",
-                    ["listen"] = "127.0.0.1",
-                    ["listen_port"] = listen
-                }
-            },
+            ["inbounds"] = inbounds,
             ["outbounds"] = new JsonArray
             {
                 outbound,
                 new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
                 new JsonObject { ["type"] = "block", ["tag"] = "block" }
             },
-            ["route"] = new JsonObject
-            {
-                ["final"] = "proxy",
-                ["auto_detect_interface"] = true
-            }
+            ["route"] = BuildRoute(settings),
+            ["dns"] = BuildDns(settings, server)
         };
-
-        if (settings.BlockIpv6)
-        {
-            var rules = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["ip_version"] = 6,
-                    ["outbound"] = "block"
-                },
-                new JsonObject
-                {
-                    ["ip_is_private"] = true,
-                    ["outbound"] = "direct"
-                }
-            };
-            root["route"]!["rules"] = rules;
-        }
 
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
     public static string BuildSpeedtest(ProxyServer server, int socksPort) =>
-        Build(server, new AppSettings { DnsThroughProxy = false }, socksPort);
+        Build(server, new AppSettings(), socksPort);
+
+    private static JsonObject BuildRoute(AppSettings settings)
+    {
+        var rules = new JsonArray();
+        if (settings.BlockIpv6)
+        {
+            rules.Add(new JsonObject
+            {
+                ["ip_version"] = 6,
+                ["outbound"] = "block"
+            });
+        }
+
+        rules.Add(new JsonObject
+        {
+            ["ip_is_private"] = true,
+            ["outbound"] = "direct"
+        });
+
+        return new JsonObject
+        {
+            ["rules"] = rules,
+            ["final"] = "proxy",
+            ["auto_detect_interface"] = true
+        };
+    }
+
+    private static JsonObject BuildDns(AppSettings settings, ProxyServer server)
+    {
+        var servers = new JsonArray();
+        // Bootstrap: resolve outbound host via UDP (avoids DoH chicken-and-egg).
+        if (!string.IsNullOrWhiteSpace(server.Address) &&
+            !System.Net.IPAddress.TryParse(server.Address, out _))
+        {
+            servers.Add(new JsonObject
+            {
+                ["tag"] = "bootstrap",
+                ["address"] = "1.1.1.1",
+                ["detour"] = "direct",
+                ["domain"] = new JsonArray { server.Address }
+            });
+        }
+
+        if (settings.DnsThroughProxy)
+        {
+            servers.Add(new JsonObject
+            {
+                ["tag"] = "doh",
+                ["address"] = "https://1.1.1.1/dns-query",
+                ["detour"] = "direct"
+            });
+            servers.Add(new JsonObject
+            {
+                ["tag"] = "doh-google",
+                ["address"] = "https://8.8.8.8/dns-query",
+                ["detour"] = "direct"
+            });
+        }
+        else
+        {
+            servers.Add(new JsonObject
+            {
+                ["tag"] = "udp",
+                ["address"] = "1.1.1.1",
+                ["detour"] = "direct"
+            });
+        }
+
+        var dns = new JsonObject
+        {
+            ["servers"] = servers,
+            ["strategy"] = settings.BlockIpv6 ? "ipv4_only" : "prefer_ipv4",
+            ["final"] = settings.DnsThroughProxy ? "doh" : "udp"
+        };
+        return dns;
+    }
 
     private static JsonObject BuildOutbound(ProxyServer server)
     {
@@ -77,9 +169,132 @@ public static class SingBoxConfigBuilder
             ProxyProtocol.Tuic => BuildTuic(server),
             ProxyProtocol.WireGuard => BuildWireGuard(server),
             ProxyProtocol.AnyTls => BuildAnyTls(server),
+            ProxyProtocol.VLESS => BuildVless(server),
+            ProxyProtocol.VMess => BuildVmess(server),
+            ProxyProtocol.Trojan => BuildTrojan(server),
+            ProxyProtocol.Shadowsocks => BuildShadowsocks(server),
             _ => throw new InvalidOperationException(
                 $"Protocol {server.Protocol} is not a sing-box outbound in this builder.")
         };
+    }
+
+    private static JsonObject BuildVless(ProxyServer server)
+    {
+        ShareLinkParser.NormalizeVisionFlow(server);
+        var o = new JsonObject
+        {
+            ["type"] = "vless",
+            ["tag"] = "proxy",
+            ["server"] = server.Address,
+            ["server_port"] = server.Port,
+            ["uuid"] = server.UserId
+        };
+        if (!string.IsNullOrWhiteSpace(server.Flow))
+            o["flow"] = server.Flow;
+        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
+            o["packet_encoding"] = server.PacketEncoding;
+        ApplyTlsAndTransport(o, server);
+        return o;
+    }
+
+    private static JsonObject BuildVmess(ProxyServer server)
+    {
+        var o = new JsonObject
+        {
+            ["type"] = "vmess",
+            ["tag"] = "proxy",
+            ["server"] = server.Address,
+            ["server_port"] = server.Port,
+            ["uuid"] = server.UserId,
+            ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher,
+            ["alter_id"] = server.AlterId
+        };
+        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
+            o["packet_encoding"] = server.PacketEncoding;
+        ApplyTlsAndTransport(o, server);
+        return o;
+    }
+
+    private static JsonObject BuildTrojan(ProxyServer server)
+    {
+        var o = new JsonObject
+        {
+            ["type"] = "trojan",
+            ["tag"] = "proxy",
+            ["server"] = server.Address,
+            ["server_port"] = server.Port,
+            ["password"] = server.Password
+        };
+        ApplyTlsAndTransport(o, server);
+        return o;
+    }
+
+    private static JsonObject BuildShadowsocks(ProxyServer server)
+    {
+        return new JsonObject
+        {
+            ["type"] = "shadowsocks",
+            ["tag"] = "proxy",
+            ["server"] = server.Address,
+            ["server_port"] = server.Port,
+            ["method"] = string.IsNullOrWhiteSpace(server.Cipher) ? "aes-128-gcm" : server.Cipher,
+            ["password"] = server.Password
+        };
+    }
+
+    private static void ApplyTlsAndTransport(JsonObject outbound, ProxyServer server)
+    {
+        var security = ShareLinkParser.NormalizeSecurity(server.Security);
+        if (security is "tls" or "reality")
+            outbound["tls"] = BuildTls(server, security == "reality");
+
+        var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        if (network is "ws" or "websocket")
+        {
+            var ws = new JsonObject
+            {
+                ["type"] = "ws",
+                ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path
+            };
+            if (!string.IsNullOrWhiteSpace(server.Host))
+                ws["headers"] = new JsonObject { ["Host"] = server.Host };
+            if (server.MaxEarlyData > 0)
+            {
+                ws["max_early_data"] = server.MaxEarlyData;
+                if (!string.IsNullOrWhiteSpace(server.EarlyDataHeaderName))
+                    ws["early_data_header_name"] = server.EarlyDataHeaderName;
+            }
+
+            outbound["transport"] = ws;
+        }
+        else if (network is "grpc")
+        {
+            outbound["transport"] = new JsonObject
+            {
+                ["type"] = "grpc",
+                ["service_name"] = string.IsNullOrWhiteSpace(server.ServiceName) ? "" : server.ServiceName
+            };
+        }
+        else if (network is "httpupgrade")
+        {
+            var hu = new JsonObject
+            {
+                ["type"] = "httpupgrade",
+                ["path"] = string.IsNullOrWhiteSpace(server.Path) ? "/" : server.Path
+            };
+            if (!string.IsNullOrWhiteSpace(server.Host))
+                hu["host"] = server.Host;
+            outbound["transport"] = hu;
+        }
+        else if (network is "h2" or "http")
+        {
+            var h2 = new JsonObject { ["type"] = "http" };
+            if (!string.IsNullOrWhiteSpace(server.Path))
+                h2["path"] = server.Path;
+            if (!string.IsNullOrWhiteSpace(server.Host))
+                h2["host"] = new JsonArray { server.Host };
+            outbound["transport"] = h2;
+        }
     }
 
     private static JsonObject BuildHysteria2(ProxyServer server)
@@ -102,14 +317,13 @@ public static class SingBoxConfigBuilder
                 ["type"] = "salamander",
                 ["password"] = server.Path
             };
-        o["tls"] = BuildTls(server);
+        o["tls"] = BuildTls(server, reality: false);
         return o;
     }
 
     private static JsonObject BuildTuic(ProxyServer server)
     {
         var congestion = string.IsNullOrWhiteSpace(server.Mode) ? "bbr" : server.Mode;
-        // Mode holds congestion_control; never treat udp_relay_mode values as congestion.
         if (congestion is "native" or "quic")
             congestion = "bbr";
 
@@ -125,13 +339,12 @@ public static class SingBoxConfigBuilder
         };
         if (!string.IsNullOrWhiteSpace(server.UdpRelayMode))
             o["udp_relay_mode"] = server.UdpRelayMode.Trim();
-        o["tls"] = BuildTls(server);
+        o["tls"] = BuildTls(server, reality: false);
         return o;
     }
 
     private static JsonObject BuildWireGuard(ProxyServer server)
     {
-        // Private key in Password; peer public key in PublicKey; optional reserved in ShortId.
         var peer = new JsonObject
         {
             ["server"] = server.Address,
@@ -170,7 +383,6 @@ public static class SingBoxConfigBuilder
 
     private static JsonArray BuildLocalAddress(ProxyServer server)
     {
-        // Path may hold comma-separated local addresses; default common CGNAT-style.
         if (!string.IsNullOrWhiteSpace(server.Path) && server.Path.Contains('/'))
         {
             var arr = new JsonArray();
@@ -192,16 +404,18 @@ public static class SingBoxConfigBuilder
             ["server_port"] = server.Port,
             ["password"] = server.Password
         };
-        o["tls"] = BuildTls(server);
+        o["tls"] = BuildTls(server, reality: false);
         return o;
     }
 
-    private static JsonObject BuildTls(ProxyServer server)
+    private static JsonObject BuildTls(ProxyServer server, bool reality)
     {
         var tls = new JsonObject
         {
             ["enabled"] = true,
-            ["server_name"] = string.IsNullOrWhiteSpace(server.Sni) ? server.Address : server.Sni,
+            ["server_name"] = string.IsNullOrWhiteSpace(server.Sni)
+                ? (string.IsNullOrWhiteSpace(server.Host) ? server.Address : server.Host)
+                : server.Sni,
             ["insecure"] = server.AllowInsecure
         };
         if (!string.IsNullOrWhiteSpace(server.Alpn))
@@ -212,13 +426,22 @@ public static class SingBoxConfigBuilder
             tls["alpn"] = alpn;
         }
 
-        if (!string.IsNullOrWhiteSpace(server.Fingerprint) &&
-            !server.Fingerprint.Equals("chrome", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(server.Fingerprint))
         {
             tls["utls"] = new JsonObject
             {
                 ["enabled"] = true,
                 ["fingerprint"] = server.Fingerprint
+            };
+        }
+
+        if (reality)
+        {
+            tls["reality"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["public_key"] = server.PublicKey,
+                ["short_id"] = string.IsNullOrWhiteSpace(server.ShortId) ? "" : server.ShortId
             };
         }
 

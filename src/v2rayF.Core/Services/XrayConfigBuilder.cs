@@ -275,7 +275,7 @@ public static class XrayConfigBuilder
         {
             SocksPort = socksPort,
             EnableFragment = enableFragment,
-            Settings = new AppSettings { DnsThroughProxy = false }
+            Settings = new AppSettings() // same DNS defaults as live Connect (DoH on)
         });
 
     public static void EnsureShareCredentials(AppSettings settings)

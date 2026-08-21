@@ -29,9 +29,9 @@ public sealed class LatencyService
     public const int RankProbeTimeoutMs = 4000;
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
-    public const int ConnectHealthProbeMs = 8000;
+    public const int ConnectHealthProbeMs = 12000;
     /// <summary>Connect gate budget for Vision / REALITY.</summary>
-    public const int ConnectHealthProbeVisionMs = 12000;
+    public const int ConnectHealthProbeVisionMs = 16000;
     public const int TcpConnectTimeoutMs = 1500;
     public const int SocksPollTimeoutMs = 50;
     public const int HttpConnectTimeoutMs = 2000;
@@ -204,7 +204,7 @@ public sealed class LatencyService
             var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
-            var useSingBox = CoreRuntime.RequiresSingBox(server);
+            var useSingBox = CoreRuntime.UseSingBox(server);
             var configPath = Path.Combine(configDir, useSingBox ? $"speedtest-sb-{socksPort}.json" : $"speedtest-{socksPort}.json");
             var configJson = useSingBox
                 ? SingBoxConfigBuilder.BuildSpeedtest(server, socksPort)

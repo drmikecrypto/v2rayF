@@ -139,4 +139,95 @@ public class DualCoreSingBoxTests
             r!["ip_version"]?.GetValue<int>() == 6 &&
             r["outbound"]?.GetValue<string>() == "block");
     }
+
+    [Fact]
+    public void VlessRealityVision_BuildsSingBoxOutbound()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "tcp",
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            PublicKey = "pk",
+            ShortId = "abcd",
+            Sni = "www.example.com"
+        };
+        var json = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings()))!;
+        var proxy = json["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal("vless", proxy["type"]!.GetValue<string>());
+        Assert.Equal("xtls-rprx-vision", proxy["flow"]!.GetValue<string>());
+        Assert.True(proxy["tls"]!["reality"]!["enabled"]!.GetValue<bool>());
+        Assert.Equal("pk", proxy["tls"]!["reality"]!["public_key"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void VmessWsTls_AndTrojan_AndSs_Build()
+    {
+        var vmess = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VMess,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Network = "ws",
+            Security = "tls",
+            Path = "/ws",
+            Host = "cdn.example"
+        };
+        var trojan = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Trojan,
+            Address = "1.2.3.4",
+            Port = 443,
+            Password = "pw",
+            Network = "ws",
+            Security = "tls",
+            Path = "/t",
+            Host = "cdn.example"
+        };
+        var ss = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Shadowsocks,
+            Address = "1.2.3.4",
+            Port = 8388,
+            Password = "pw",
+            Cipher = "aes-128-gcm"
+        };
+
+        Assert.Equal("vmess", JsonNode.Parse(SingBoxConfigBuilder.Build(vmess, new AppSettings()))![
+            "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!["type"]!.GetValue<string>());
+        Assert.Equal("trojan", JsonNode.Parse(SingBoxConfigBuilder.Build(trojan, new AppSettings()))![
+            "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!["type"]!.GetValue<string>());
+        Assert.Equal("shadowsocks", JsonNode.Parse(SingBoxConfigBuilder.Build(ss, new AppSettings()))![
+            "outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!["type"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void AndroidTunFd_AddsTunInboundWithInheritedFd()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var json = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 7))!;
+        var tun = json["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Equal("tun", tun["type"]!.GetValue<string>());
+        Assert.Equal(SingBoxConfigBuilder.InheritedTunFd, tun["file_descriptor"]!.GetValue<int>());
+        Assert.False(tun["auto_route"]!.GetValue<bool>());
+        Assert.Equal("system", tun["stack"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void ConnectHealthBudgets_AreSoftened()
+    {
+        Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(16000, LatencyService.ConnectHealthProbeVisionMs);
+    }
+
+    [Fact]
+    public void DnsThroughProxy_DefaultsOn()
+    {
+        Assert.True(new AppSettings().DnsThroughProxy);
+    }
 }

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-08-22
+
+### Added
+
+- Android: VLESS / VMess / Trojan / Shadowsocks / REALITY / Vision run on **sing-box** with TUN `file_descriptor` (V2Box-class path); desktop keeps Xray for classic protocols
+- Connect gate: automatic one-shot Secure DNS retry when DoH was off and HTTPS probe failed (no silent fragment)
+
+### Changed
+
+- **Secure DNS (DoH) defaults ON** — Connect works without babysitting DNS on poisoned UDP :53 networks
+- Test delay / speedtest DNS uses the same defaults as live Connect
+- Connect health budgets **12s** / **16s** Vision (was 8s / 12s)
+- sing-box mixed listeners on both **10808** and **10809** for Chromium SetHttpProxy parity
+- Android VPN HTTP proxy **kept** until sing-box TUN is proven for Chrome (see tip-android-connect)
+
 ## [2.0.9] - 2026-08-20
 
 ### Fixed
