@@ -140,8 +140,8 @@ Docs worth reading once: [routing](docs/tips/routing-rules.md) · [Secure Share]
 | Windows | yes | Admin TUN | Firewall | yes |
 | macOS | yes | elevated TUN | `strict_route` | yes |
 | Linux | GNOME/KDE/XFCE | elevated TUN | `strict_route` | yes |
-| Android | N/A | VpnService always | VPN hold | yes |
-| iOS | — | not shipping | — | — |
+| Android | yes | VpnService always | VPN hold | yes |
+| iOS | — | Soon | — | — |
 
 ---
 
