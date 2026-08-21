@@ -215,6 +215,79 @@ public class SmartConnectShortlistTests
         Assert.Equal(a.Id, survive[0].Id);
     }
 
+    [Fact]
+    public void Speedtest_UsesUdpDns_AndSingBoxOmitsEphemeralHttpPort()
+    {
+        var server = new ProxyServer
+        {
+            Name = "hy2-node",
+            Protocol = ProxyProtocol.Hysteria2,
+            Address = "example.com",
+            Port = 443,
+            Id = Guid.NewGuid(),
+            Password = "secret",
+            Sni = "www.cloudflare.com"
+        };
+
+        var ephemeral = 34567;
+        var xrayJson = XrayConfigBuilder.BuildSpeedtest(
+            new ProxyServer
+            {
+                Name = "vless-node",
+                Protocol = ProxyProtocol.VLESS,
+                Address = "example.com",
+                Port = 443,
+                Id = Guid.NewGuid(),
+                UserId = Guid.NewGuid().ToString(),
+                Security = "tls",
+                Network = "tcp"
+            },
+            ephemeral);
+        var xrayDns = JsonNode.Parse(xrayJson)!["dns"]!["servers"]!.AsArray()
+            .Select(n => n is JsonValue v ? v.GetValue<string>() : n?["address"]?.GetValue<string>() ?? "")
+            .ToList();
+        Assert.DoesNotContain(xrayDns, a => a.StartsWith("https://", StringComparison.Ordinal));
+
+        var sbPorts = JsonNode.Parse(SingBoxConfigBuilder.BuildSpeedtest(server, ephemeral))!
+            ["inbounds"]!.AsArray()
+            .Select(i => i!["listen_port"]?.GetValue<int>() ?? -1)
+            .ToList();
+        Assert.Contains(ephemeral, sbPorts);
+        Assert.DoesNotContain(XrayConfigBuilder.HttpPort, sbPorts);
+
+        var livePorts = JsonNode.Parse(
+                SingBoxConfigBuilder.Build(server, new AppSettings { DnsThroughProxy = false }))!
+            ["inbounds"]!.AsArray()
+            .Select(i => i!["listen_port"]?.GetValue<int>() ?? -1)
+            .ToList();
+        Assert.Contains(XrayConfigBuilder.SocksPort, livePorts);
+        Assert.Contains(XrayConfigBuilder.HttpPort, livePorts);
+    }
+
+    [Fact]
+    public void PreferSingBoxOnAndroid_IsDisabled()
+    {
+        var classic = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString()
+        };
+        Assert.False(CoreRuntime.PreferSingBoxOnAndroid(classic));
+        Assert.False(CoreRuntime.UseSingBox(classic));
+
+        var hy2 = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Hysteria2,
+            Address = "1.2.3.4",
+            Port = 443,
+            Password = "x"
+        };
+        Assert.True(CoreRuntime.RequiresSingBox(hy2));
+        Assert.True(CoreRuntime.UseSingBox(hy2));
+    }
+
     private sealed class FakeEnv : ICoreEnvironment
     {
         public string GetDataDirectory() => Path.GetTempPath();

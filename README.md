@@ -39,7 +39,8 @@ Cross-platform **proxy / TUN client** that speaks the protocols you already past
 |-------|--------|
 | UI | Avalonia / .NET 10 (one codebase → desktop + APK) |
 | Classic outbounds (desktop) | **Xray-core** |
-| Android classic + Hy2/TUIC/WG | **sing-box** (+ TUN `file_descriptor`) |
+| Android / desktop classic | **Xray** (+ Android TUN / HTTP proxy) |
+| Hy2 / TUIC / WG / anytls | **sing-box** (+ TUN `file_descriptor` on Android) |
 | Local listeners | `127.0.0.1:10808` SOCKS · `127.0.0.1:10809` HTTP |
 | Leak posture | DoH (default), IPv6 blackhole, kill switch, crash teardown |
 
@@ -74,7 +75,7 @@ flowchart LR
   Node --> Net[internet]
 ```
 
-Android (v2.2+): classic VLESS/VMess/Trojan/SS/REALITY/Vision hitch a ride on **sing-box TUN** the same way Hy2 already did. Desktop keeps Xray for those. Dual-core on purpose — not a cargo-cult rewrite.
+Android: classic VLESS/VMess/Trojan/SS/REALITY/Vision on **Xray** (2.2.1); Hy2/TUIC/WG on **sing-box**. Desktop same split. Dual-core on purpose — not a cargo-cult rewrite.
 
 ---
 

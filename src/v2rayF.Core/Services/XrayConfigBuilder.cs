@@ -275,7 +275,8 @@ public static class XrayConfigBuilder
         {
             SocksPort = socksPort,
             EnableFragment = enableFragment,
-            Settings = new AppSettings() // same DNS defaults as live Connect (DoH on)
+            // UDP DNS for probes — DoH default is for live Connect only (v2.2.1).
+            Settings = new AppSettings { DnsThroughProxy = false }
         });
 
     public static void EnsureShareCredentials(AppSettings settings)

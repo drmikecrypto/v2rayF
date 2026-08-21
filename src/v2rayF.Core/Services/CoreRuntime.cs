@@ -13,15 +13,10 @@ public static class CoreRuntime
             or ProxyProtocol.AnyTls;
 
     /// <summary>
-    /// Android classic protocols use sing-box TUN (V2Box-class path).
-    /// Desktop keeps Xray for VLESS/VMess/Trojan/SS.
+    /// Disabled in v2.2.1 — Android classic-on-sing-box caused universal timeouts.
+    /// Classic VLESS/VMess/Trojan/SS stay on Xray (desktop + Android) until TUN path is re-proven.
     /// </summary>
-    public static bool PreferSingBoxOnAndroid(ProxyServer server) =>
-        AppServices.Platform?.IsMobile == true &&
-        server.Protocol is ProxyProtocol.VLESS
-            or ProxyProtocol.VMess
-            or ProxyProtocol.Trojan
-            or ProxyProtocol.Shadowsocks;
+    public static bool PreferSingBoxOnAndroid(ProxyServer server) => false;
 
     public static bool UseSingBox(ProxyServer server) =>
         RequiresSingBox(server) || PreferSingBoxOnAndroid(server);

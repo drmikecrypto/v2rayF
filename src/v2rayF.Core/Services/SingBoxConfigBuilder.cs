@@ -35,8 +35,9 @@ public static class SingBoxConfigBuilder
             }
         };
 
-        // Chromium SetHttpProxy targets 10809; keep a second mixed listener for parity with Xray.
-        if (listen != HttpPort)
+        // Live Connect only: Chromium SetHttpProxy targets 10809. Ephemeral speedtest must not
+        // also bind 10809 (parallel Test All workers clash → timeout).
+        if (listen == SocksPort)
         {
             inbounds.Add(new JsonObject
             {
@@ -83,7 +84,7 @@ public static class SingBoxConfigBuilder
     }
 
     public static string BuildSpeedtest(ProxyServer server, int socksPort) =>
-        Build(server, new AppSettings(), socksPort);
+        Build(server, new AppSettings { DnsThroughProxy = false }, socksPort);
 
     private static JsonObject BuildRoute(AppSettings settings)
     {

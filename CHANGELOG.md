@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-08-22
+
+### Fixed
+
+- Emergency: **all configs timing out** after 2.2.0 — Test delay / Connect broken on every machine
+- Android classic protocols (VLESS/VMess/Trojan/SS) back on **Xray** (sing-box classic path rolled back until re-proven)
+- Test delay / speedtest uses **UDP DNS** again (DoH stays default for live Connect + auto-retry)
+- sing-box speedtest no longer binds **10809** on ephemeral ports (parallel Test All clash)
+
 ## [2.2.0] - 2026-08-22
 
 ### Added
