@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.2] - 2026-08-23
+
+### Fixed
+
+- Android **Instagram Direct** dark while feed/reels worked — Direct (MQTT/raw sockets) needs TUN; classic protocols again use **sing-box** `stack: system` on Android (V2Box-class path)
+- Keeps v2.2.1 safeguards: speedtest **UDP DNS**, no ephemeral **10809** bind; VPN HTTP proxy `10809` still on for Chromium/feed
+
+### Changed
+
+- Android classic VLESS/VMess/Trojan/SS/REALITY/Vision → **sing-box** TUN again; desktop classic stays **Xray**
+
 ## [2.2.1] - 2026-08-22
 
 ### Fixed

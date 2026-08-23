@@ -8,28 +8,25 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 4. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 5. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
 
-## v2.2.1 — classic Android on Xray again
+## v2.2.2 — Instagram Direct + classic sing-box TUN
 
-**v2.2.0** routed Android classic protocols through sing-box and forced DoH into speedtest; that made **every** config show timeout. **v2.2.1** restores:
+Instagram **feed/reels** often use VPN HTTP proxy `10809`. **Direct** (MQTT / raw sockets) must go through **TUN**.
 
-- Classic VLESS/VMess/Trojan/SS/REALITY/Vision → **Xray** on Android (same as desktop)
-- Hy2/TUIC/WG/anytls → sing-box only
-- Test delay → UDP DNS; Connect keeps DoH default + auto DoH retry
-- VPN HTTP proxy `10809` kept (2.0.9 lesson)
+**v2.2.2** runs Android classic VLESS/VMess/Trojan/SS/REALITY/Vision on **sing-box** (`stack: system`) so Direct matches V2Box-class TUN. VPN HTTP proxy stays for Chromium. Speedtest still uses UDP DNS and does not bind ephemeral `10809` (v2.2.1).
 
-Set Android **Private DNS** to Off. Leave Packet fragment / Adaptive Survive off unless DPI blocks Connect.
+After Connect: set Android **Private DNS** Off, then **force-stop Instagram** once before opening Direct.
 
-## v2.2.0 — Android sing-box engine (rolled back for classic)
+## v2.2.1 — timeout emergency (speedtest)
 
-Attempted V2Box-class path for classic protocols on sing-box TUN; rolled back in 2.2.1. Hy2 path unchanged.
+Universal Test delay / Connect timeouts fixed via UDP DNS for speedtest and no ephemeral 10809 clash. Classic briefly back on Xray; superseded for Android TUN by 2.2.2.
 
 ## Idle “Connected” but no internet
 
 **v2.0.6** keepalive + soft path probe; Auto-reconnect up to twice.
 
-## Chrome / WhatsApp
+## Chrome / WhatsApp / Instagram
 
-IPv6 blackhole + VPN DNS `172.19.0.1` (v2.0.5). HTTP proxy for Chromium kept.
+IPv6 blackhole + VPN DNS `172.19.0.1` (v2.0.5). HTTP proxy for Chromium/feed; raw-socket chat needs healthy TUN (2.2.2 sing-box on Android classic).
 
 ## Still broken?
 

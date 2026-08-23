@@ -265,7 +265,7 @@ public class SmartConnectShortlistTests
     }
 
     [Fact]
-    public void PreferSingBoxOnAndroid_IsDisabled()
+    public void PreferSingBoxOnAndroid_ClassicUsesSingBoxOnlyWhenMobile()
     {
         var classic = new ProxyServer
         {
@@ -274,9 +274,6 @@ public class SmartConnectShortlistTests
             Port = 443,
             UserId = Guid.NewGuid().ToString()
         };
-        Assert.False(CoreRuntime.PreferSingBoxOnAndroid(classic));
-        Assert.False(CoreRuntime.UseSingBox(classic));
-
         var hy2 = new ProxyServer
         {
             Protocol = ProxyProtocol.Hysteria2,
@@ -284,8 +281,45 @@ public class SmartConnectShortlistTests
             Port = 443,
             Password = "x"
         };
-        Assert.True(CoreRuntime.RequiresSingBox(hy2));
-        Assert.True(CoreRuntime.UseSingBox(hy2));
+
+        var prev = AppServices.Platform;
+        try
+        {
+            AppServices.Platform = new FakePlatform(isMobile: false);
+            Assert.False(CoreRuntime.PreferSingBoxOnAndroid(classic));
+            Assert.False(CoreRuntime.UseSingBox(classic));
+            Assert.True(CoreRuntime.RequiresSingBox(hy2));
+            Assert.True(CoreRuntime.UseSingBox(hy2));
+
+            AppServices.Platform = new FakePlatform(isMobile: true);
+            Assert.True(CoreRuntime.PreferSingBoxOnAndroid(classic));
+            Assert.True(CoreRuntime.UseSingBox(classic));
+            Assert.True(CoreRuntime.UseSingBox(hy2));
+        }
+        finally
+        {
+            AppServices.Platform = prev!;
+        }
+    }
+
+    private sealed class FakePlatform : IPlatformIntegration
+    {
+        public FakePlatform(bool isMobile) => IsMobile = isMobile;
+
+        public bool IsMobile { get; }
+        public bool CanUseTunMode => IsMobile;
+        public string TunRequirementMessage => "";
+        public string? LastProxyMethod => null;
+        public string? LastEstablishError => null;
+        public Task<int?> EstablishVpnAsync(
+            IReadOnlyList<string>? bypassPackages = null,
+            bool blockIpv6 = true,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<int?>(null);
+        public Task EnableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DisableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public string? GetLanIPv4Address() => null;
     }
 
     private sealed class FakeEnv : ICoreEnvironment
