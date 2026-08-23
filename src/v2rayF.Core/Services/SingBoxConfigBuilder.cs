@@ -16,6 +16,9 @@ public static class SingBoxConfigBuilder
     public static int HttpPort => XrayConfigBuilder.HttpPort;
     /// <summary>Matches AndroidJavaCoreProcessHost InheritedTunFd (posix_spawn dup2).</summary>
     public const int InheritedTunFd = 3;
+    public const string BootstrapDnsTag = "bootstrap";
+    public const string UdpDnsTag = "udp";
+    public const string DohDnsTag = "doh";
 
     public static string Build(
         ProxyServer server,
@@ -118,16 +121,22 @@ public static class SingBoxConfigBuilder
     private static JsonObject BuildDns(AppSettings settings, ProxyServer server)
     {
         var servers = new JsonArray();
-        // Bootstrap: resolve outbound host via UDP (avoids DoH chicken-and-egg).
-        if (!string.IsNullOrWhiteSpace(server.Address) &&
-            !System.Net.IPAddress.TryParse(server.Address, out _))
+        var rules = new JsonArray();
+        var hasBootstrap = NeedsBootstrapDns(server);
+
+        if (hasBootstrap)
         {
             servers.Add(new JsonObject
             {
-                ["tag"] = "bootstrap",
-                ["address"] = "1.1.1.1",
-                ["detour"] = "direct",
-                ["domain"] = new JsonArray { server.Address }
+                ["type"] = "udp",
+                ["tag"] = BootstrapDnsTag,
+                ["server"] = "1.1.1.1"
+            });
+            rules.Add(new JsonObject
+            {
+                ["domain"] = new JsonArray { server.Address },
+                ["action"] = "route",
+                ["server"] = BootstrapDnsTag
             });
         }
 
@@ -135,24 +144,24 @@ public static class SingBoxConfigBuilder
         {
             servers.Add(new JsonObject
             {
-                ["tag"] = "doh",
-                ["address"] = "https://1.1.1.1/dns-query",
-                ["detour"] = "direct"
+                ["type"] = "https",
+                ["tag"] = DohDnsTag,
+                ["server"] = "1.1.1.1"
             });
             servers.Add(new JsonObject
             {
+                ["type"] = "https",
                 ["tag"] = "doh-google",
-                ["address"] = "https://8.8.8.8/dns-query",
-                ["detour"] = "direct"
+                ["server"] = "8.8.8.8"
             });
         }
         else
         {
             servers.Add(new JsonObject
             {
-                ["tag"] = "udp",
-                ["address"] = "1.1.1.1",
-                ["detour"] = "direct"
+                ["type"] = "udp",
+                ["tag"] = UdpDnsTag,
+                ["server"] = "1.1.1.1"
             });
         }
 
@@ -160,14 +169,28 @@ public static class SingBoxConfigBuilder
         {
             ["servers"] = servers,
             ["strategy"] = settings.BlockIpv6 ? "ipv4_only" : "prefer_ipv4",
-            ["final"] = settings.DnsThroughProxy ? "doh" : "udp"
+            ["final"] = settings.DnsThroughProxy ? DohDnsTag : UdpDnsTag
         };
+        if (rules.Count > 0)
+            dns["rules"] = rules;
         return dns;
+    }
+
+    private static bool NeedsBootstrapDns(ProxyServer server) =>
+        !string.IsNullOrWhiteSpace(server.Address) &&
+        !System.Net.IPAddress.TryParse(server.Address, out _);
+
+    private static void ApplyDomainResolver(JsonObject outbound, ProxyServer server)
+    {
+        if (!NeedsBootstrapDns(server))
+            return;
+
+        outbound["domain_resolver"] = BootstrapDnsTag;
     }
 
     private static JsonObject BuildOutbound(ProxyServer server)
     {
-        return server.Protocol switch
+        var outbound = server.Protocol switch
         {
             ProxyProtocol.Hysteria2 => BuildHysteria2(server),
             ProxyProtocol.Tuic => BuildTuic(server),
@@ -180,6 +203,8 @@ public static class SingBoxConfigBuilder
             _ => throw new InvalidOperationException(
                 $"Protocol {server.Protocol} is not a sing-box outbound in this builder.")
         };
+        ApplyDomainResolver(outbound, server);
+        return outbound;
     }
 
     private static JsonObject BuildVless(ProxyServer server)

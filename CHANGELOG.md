@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.8] - 2026-08-23
+
+### Fixed
+
+- Android Connect **sing-box legacy DNS** — live config uses sing-box **1.12** DNS server format (`type` + `server`), bootstrap **dns rules**, and outbound **`domain_resolver`** for hostname nodes
+- Connect timeout errors prefer **FATAL/ERROR** stderr lines instead of truncated migration URL fragments (`migrate-to-new-dns-server-formats`)
+
 ## [2.2.7] - 2026-08-23
 
 ### Fixed

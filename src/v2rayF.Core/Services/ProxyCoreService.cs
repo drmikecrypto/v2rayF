@@ -438,23 +438,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
 
         await StopAsync(cancellationToken).ConfigureAwait(false);
-        var detail = TrimRecentOutput(recent, 200);
+        var detail = CoreStartupErrorFormatter.ExtractActionableLine(recent, 200);
         var message = string.IsNullOrWhiteSpace(detail)
             ? $"{coreLabel} core did not become ready in time."
             : $"{coreLabel} core did not become ready in time: {detail}";
         throw new TimeoutException(message);
-    }
-
-    private static string TrimRecentOutput(string output, int maxChars)
-    {
-        if (string.IsNullOrWhiteSpace(output))
-            return "";
-
-        var trimmed = output.Trim();
-        if (trimmed.Length <= maxChars)
-            return StatusSanitizer.Scrub(trimmed);
-
-        return StatusSanitizer.Scrub(trimmed[^maxChars..].TrimStart());
     }
 
     private static async Task<bool> IsPortOpenAsync(string host, int port, CancellationToken cancellationToken)

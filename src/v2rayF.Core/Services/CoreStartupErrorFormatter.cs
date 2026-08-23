@@ -18,6 +18,11 @@ public static class CoreStartupErrorFormatter
             return "Proxy core rejected the config. Update the app or check the server link.";
         }
 
+        if (ContainsLegacyDnsWarning(output))
+        {
+            return "sing-box DNS config is outdated. Update the app to the latest release.";
+        }
+
         if (output.Contains("FATAL", StringComparison.Ordinal) &&
             output.Contains("tun", StringComparison.OrdinalIgnoreCase))
         {
@@ -52,11 +57,40 @@ public static class CoreStartupErrorFormatter
             return "Android VPN tunnel fd was lost. Disconnect, grant VPN permission again, then Connect.";
         }
 
-        var lastLine = output;
-        var newline = output.LastIndexOf('\n');
-        if (newline >= 0 && newline < output.Length - 1)
-            lastLine = output[(newline + 1)..].Trim();
+        return StatusSanitizer.Scrub(ExtractActionableLine(output));
+    }
 
-        return StatusSanitizer.Scrub(lastLine);
+    /// <summary>Prefer FATAL/ERROR lines over trailing URL fragments from sing-box stderr.</summary>
+    public static string ExtractActionableLine(string output, int maxChars = 200)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return "";
+
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = lines[i];
+            if (line.Contains("FATAL", StringComparison.Ordinal) ||
+                line.Contains("ERROR", StringComparison.Ordinal))
+                return TrimToMax(StatusSanitizer.Scrub(line), maxChars);
+        }
+
+        if (ContainsLegacyDnsWarning(output))
+            return "Legacy DNS config warning (update app if Connect keeps failing).";
+
+        var lastLine = lines.Length > 0 ? lines[^1] : output.Trim();
+        return TrimToMax(StatusSanitizer.Scrub(lastLine), maxChars);
+    }
+
+    private static bool ContainsLegacyDnsWarning(string output) =>
+        output.Contains("legacy DNS", StringComparison.OrdinalIgnoreCase) ||
+        output.Contains("migrate-to-new-dns-server-formats", StringComparison.OrdinalIgnoreCase);
+
+    private static string TrimToMax(string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxChars)
+            return text;
+
+        return text[^maxChars..].TrimStart();
     }
 }
