@@ -79,7 +79,7 @@ function Apply-SingBoxTunFdPatch([string]$InboundPath) {
                 return
             }
             catch {
-                throw "Could not apply sing-box TUN fd patch to $InboundPath: $($_.Exception.Message)"
+                throw "Could not apply sing-box TUN fd patch to ${InboundPath}: $($_.Exception.Message)"
             }
             finally {
                 Pop-Location

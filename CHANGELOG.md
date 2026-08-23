@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.7] - 2026-08-23
+
+### Fixed
+
+- **Release CI** — PowerShell parse error in `package-android.ps1` (`$InboundPath:` → `${InboundPath}:`) blocked v2.2.6 Android build
+- CI Android asset step uses `-AllowUnpatchedSingBox` when NDK/Go are unavailable (release still builds patched `libsingbox.so`)
+
 ## [2.2.6] - 2026-08-23
 
 ### Fixed

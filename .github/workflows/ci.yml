@@ -39,7 +39,7 @@ jobs:
 
       - name: Download Android Xray assets
         shell: pwsh
-        run: ./scripts/package-android.ps1
+        run: ./scripts/package-android.ps1 -AllowUnpatchedSingBox
 
       - name: Build Android
         run: dotnet build src/v2rayF.Android/v2rayF.Android.csproj -c Release -f net10.0-android

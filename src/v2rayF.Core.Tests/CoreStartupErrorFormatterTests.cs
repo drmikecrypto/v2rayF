@@ -8,7 +8,7 @@ public class CoreStartupErrorFormatterTests
     public void Format_Empty_ReturnsGenericImmediateExit()
     {
         Assert.Equal(
-            "Xray core exited immediately after start.",
+            "Proxy core exited immediately after start.",
             CoreStartupErrorFormatter.Format(""));
     }
 
