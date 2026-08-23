@@ -7,7 +7,8 @@ using v2rayF.Models;
 namespace v2rayF.Services;
 
 /// <summary>
-/// Builds sing-box JSON: mixed SOCKS/HTTP (same ports as Xray live) and optional Android TUN via inherited fd 3.
+/// Builds sing-box JSON: mixed SOCKS/HTTP (same ports as Xray live) and optional Android TUN
+/// (VPN fd inherited as fd 3 via posix_spawn; core reads SING_BOX_TUN_FD env).
 /// </summary>
 public static class SingBoxConfigBuilder
 {
@@ -56,11 +57,10 @@ public static class SingBoxConfigBuilder
                 ["tag"] = "tun-in",
                 ["interface_name"] = TunConstants.InterfaceName,
                 ["mtu"] = XrayConfigBuilder.AndroidTunMtu,
-                ["inet4_address"] = new JsonArray { "172.19.0.1/30" },
+                ["address"] = new JsonArray { "172.19.0.1/30" },
                 ["auto_route"] = false,
                 ["strict_route"] = false,
                 ["stack"] = "system",
-                ["file_descriptor"] = InheritedTunFd,
                 ["sniff"] = true,
                 ["sniff_override_destination"] = false
             });

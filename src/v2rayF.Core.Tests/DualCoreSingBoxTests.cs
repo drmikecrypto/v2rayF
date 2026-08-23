@@ -207,13 +207,14 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_AddsTunInboundWithInheritedFd()
+    public void AndroidTunFd_AddsTunInboundWithoutInvalidFileDescriptorField()
     {
         var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
         var json = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 7))!;
         var tun = json["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
         Assert.Equal("tun", tun["type"]!.GetValue<string>());
-        Assert.Equal(SingBoxConfigBuilder.InheritedTunFd, tun["file_descriptor"]!.GetValue<int>());
+        Assert.Null(tun["file_descriptor"]);
+        Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
         Assert.Equal("system", tun["stack"]!.GetValue<string>());
     }

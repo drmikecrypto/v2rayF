@@ -281,6 +281,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
             var envp = BuildEnvpPointer(
                 ("LD_LIBRARY_PATH", nativeLibDir),
                 ("TMPDIR", workingDirectory),
+                ("SING_BOX_TUN_FD", InheritedTunFd.ToString()),
                 ("xray.tun.fd", InheritedTunFd.ToString()),
                 ("XRAY_TUN_FD", InheritedTunFd.ToString()),
                 ("PATH", "/system/bin:/system/xbin"),

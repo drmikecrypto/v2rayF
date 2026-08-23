@@ -133,7 +133,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _configPath = Path.Combine(configDir, useSingBox ? "singbox-config.json" : "config.json");
         await File.WriteAllTextAsync(_configPath, configJson, cancellationToken).ConfigureAwait(false);
 
-        // Pass TUN fd for both cores — sing-box uses file_descriptor:3; Xray uses xray.tun.fd env.
+        // Pass TUN fd for both cores — sing-box reads SING_BOX_TUN_FD (patched libsingbox.so); Xray uses xray.tun.fd env.
         await ProcessHost.StartAsync(
             ResolveCorePathFor(server),
             _configPath,

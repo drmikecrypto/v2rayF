@@ -1,7 +1,7 @@
 Place Android cores here (not committed to git):
 
   libxray.so     — from Xray-android-arm64-v8a.zip (xray binary)
-  libsingbox.so  — from sing-box-*-android-arm64.tar.gz (sing-box binary)
+  libsingbox.so  — patched sing-box android-arm64 (reads SING_BOX_TUN_FD for VPN TUN)
 
 Download:
   https://github.com/XTLS/Xray-core/releases

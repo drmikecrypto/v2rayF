@@ -12,6 +12,7 @@ public static class CoreStartupErrorFormatter
 
         if (output.Contains("decode config", StringComparison.OrdinalIgnoreCase) ||
             output.Contains("invalid config", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("unknown field", StringComparison.OrdinalIgnoreCase) ||
             output.Contains("unmarshal", StringComparison.OrdinalIgnoreCase))
         {
             return "Proxy core rejected the config. Update the app or check the server link.";

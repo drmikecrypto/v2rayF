@@ -1,0 +1,17 @@
+--- a/protocol/tun/inbound.go
++++ b/protocol/tun/inbound.go
+@@ -358,6 +358,13 @@ func (t *Inbound) Start(stage adapter.StartStage) error {
+ 		} else {
+ 			if HookBeforeCreatePlatformInterface != nil {
+ 				HookBeforeCreatePlatformInterface()
+ 			}
++			if C.IsAndroid && tunOptions.FileDescriptor == 0 {
++				if fdStr := os.Getenv("SING_BOX_TUN_FD"); fdStr != "" {
++					if fd, parseErr := strconv.Atoi(fdStr); parseErr == nil && fd > 0 {
++						tunOptions.FileDescriptor = fd
++					}
++				}
++			}
+ 			tunInterface, err = tun.New(tunOptions)
+ 		}
+ 		monitor.Finish()

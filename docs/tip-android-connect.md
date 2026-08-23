@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.2.6 — sing-box TUN fd (not JSON `file_descriptor`)
+
+sing-box **1.12** rejects `file_descriptor` in config. **2.2.6** passes the VPN fd via **`SING_BOX_TUN_FD`** to a patched **libsingbox.so** (built in release CI). Use in-app **Update** — do not stay on 2.2.5 for Connect.
+
 ## v2.2.4 — sing-box bundled in APK
 
 Connect needs **libsingbox.so** for Android classic (and Hy2). Older APKs only shipped libxray.so. **2.2.4** includes both; in-app Update is enough.

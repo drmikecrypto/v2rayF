@@ -80,6 +80,9 @@ public class ConnectReadyWaitTests
 
         Assert.False(withTun["route"]!["auto_detect_interface"]!.GetValue<bool>());
         Assert.True(withoutTun["route"]!["auto_detect_interface"]!.GetValue<bool>());
+        var tun = withTun["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Null(tun["file_descriptor"]);
+        Assert.Contains("172.19.0.1/30", tun["address"]!.AsArray().Select(a => a!.GetValue<string>()));
     }
 
     [Fact]

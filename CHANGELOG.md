@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-08-23
+
+### Fixed
+
+- Android Connect **sing-box config rejected** — removed invalid JSON field `file_descriptor` (not supported in sing-box 1.12)
+- TUN inbound uses **`address`** (1.12 schema); VPN fd is passed via **`SING_BOX_TUN_FD`** env to a **patched libsingbox.so** built in release CI
+
 ## [2.2.5] - 2026-08-23
 
 ### Fixed
