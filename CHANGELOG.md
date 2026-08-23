@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-08-24
+
+### Fixed
+
+- Android **WhatsApp / Telegram / Instagram Direct** offline while feed worked — TUN uses full **gVisor** stack plus **FakeIP** DNS (`198.18.0.0/15`) so messaging apps no longer depend on VpnService UDP DNS round-trips
+
 ## [2.2.10] - 2026-08-24
 
 ### Fixed

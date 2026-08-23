@@ -216,7 +216,7 @@ public class DualCoreSingBoxTests
         Assert.Null(tun["file_descriptor"]);
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
-        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
+        Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
     }
 
     [Fact]
@@ -277,6 +277,27 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void AndroidTunFd_UsesFakeIpForAppDns()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var dns = JsonNode.Parse(
+            SingBoxConfigBuilder.Build(server, new AppSettings { DnsThroughProxy = true }, tunFd: 7))!["dns"]!;
+
+        var fake = Assert.Single(
+            dns["servers"]!.AsArray().Where(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag));
+        Assert.Equal("fakeip", fake!["type"]!.GetValue<string>());
+        Assert.Equal(SingBoxConfigBuilder.FakeIpInet4Range, fake["inet4_range"]!.GetValue<string>());
+        Assert.True(dns["independent_cache"]!.GetValue<bool>());
+
+        Assert.Contains(
+            dns["rules"]!.AsArray(),
+            r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag &&
+                 r["query_type"] is JsonArray qt &&
+                 qt.Any(t => t!.GetValue<string>() == "A") &&
+                 qt.Any(t => t!.GetValue<string>() == "AAAA"));
+    }
+
+    [Fact]
     public void BuildWithoutTun_OmitsHijackDnsRules()
     {
         var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
@@ -285,6 +306,9 @@ public class DualCoreSingBoxTests
         Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "hijack-dns");
         Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "sniff");
         Assert.Equal(SingBoxConfigBuilder.DohDnsTag, root["dns"]!["final"]!.GetValue<string>());
+        Assert.DoesNotContain(
+            root["dns"]!["servers"]!.AsArray(),
+            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
     }
 
     [Fact]

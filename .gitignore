@@ -37,6 +37,9 @@ project.lock.json
 # Publish artifacts outside dist/
 publish/
 
+# Local agent knowledge graph (never publish)
+graphify-out/
+
 # Android signing (never commit keystores / passwords)
 *.jks
 *.keystore

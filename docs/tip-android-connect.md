@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.3.0 — WhatsApp / Telegram / Direct (FakeIP + gVisor)
+
+**2.3.0** uses full **gVisor** TUN and **FakeIP** DNS for messaging apps. If chats stay offline while feed works on 2.2.x, Update to **2.3.0**, then force-stop those apps once.
+
 ## v2.2.10 — Direct + Telegram (TUN UDP)
 
 **2.2.10** switches Android TUN to **`mixed`** stack and forces UDP DNS for VpnService. If Direct/Telegram stay offline while feed works on 2.2.9, Update to **2.2.10**, then force-stop those apps once.

@@ -19,6 +19,8 @@ public static class SingBoxConfigBuilder
     public const string BootstrapDnsTag = "bootstrap";
     public const string UdpDnsTag = "udp";
     public const string DohDnsTag = "doh";
+    public const string FakeIpDnsTag = "fakeip";
+    public const string FakeIpInet4Range = "198.18.0.0/15";
 
     public static string Build(
         ProxyServer server,
@@ -63,8 +65,8 @@ public static class SingBoxConfigBuilder
                 ["address"] = new JsonArray { "172.19.0.1/30" },
                 ["auto_route"] = false,
                 ["strict_route"] = false,
-                // mixed: system TCP + gVisor UDP — VpnService DNS is UDP; system stack often drops it.
-                ["stack"] = "mixed",
+                // Full gVisor: VpnService inherited fd — system/mixed still drop messaging-app TUN traffic.
+                ["stack"] = "gvisor",
                 ["sniff"] = true,
                 ["sniff_override_destination"] = false
             });
@@ -147,8 +149,8 @@ public static class SingBoxConfigBuilder
         var rules = new JsonArray();
         var hasBootstrap = NeedsBootstrapDns(server);
         // Live Android VPN: hijacked app DNS must use UDP (DoH is unreliable under VpnService).
-        var forceUdp = tunFd is int fd && fd >= 0;
-        var useDoh = settings.DnsThroughProxy && !forceUdp;
+        var useTun = tunFd is int fd && fd >= 0;
+        var useDoh = settings.DnsThroughProxy && !useTun;
 
         if (hasBootstrap)
         {
@@ -191,12 +193,30 @@ public static class SingBoxConfigBuilder
             });
         }
 
+        // FakeIP: apps get immediate A answers; real resolve happens in-core (WhatsApp/Telegram/Direct).
+        if (useTun)
+        {
+            servers.Add(new JsonObject
+            {
+                ["type"] = "fakeip",
+                ["tag"] = FakeIpDnsTag,
+                ["inet4_range"] = FakeIpInet4Range
+            });
+            rules.Add(new JsonObject
+            {
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = FakeIpDnsTag
+            });
+        }
+
         var dns = new JsonObject
         {
             ["servers"] = servers,
             ["strategy"] = settings.BlockIpv6 ? "ipv4_only" : "prefer_ipv4",
             ["final"] = useDoh ? DohDnsTag : UdpDnsTag
         };
+        if (useTun)
+            dns["independent_cache"] = true;
         if (rules.Count > 0)
             dns["rules"] = rules;
         return dns;
