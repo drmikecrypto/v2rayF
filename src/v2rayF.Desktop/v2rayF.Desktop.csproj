@@ -4,9 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>2.2.9</Version>
-    <FileVersion>2.2.9.0</FileVersion>
-    <InformationalVersion>2.2.9</InformationalVersion>
+    <Version>2.2.10</Version>
+    <FileVersion>2.2.10.0</FileVersion>
+    <InformationalVersion>2.2.10</InformationalVersion>
     <Product>v2rayF</Product>
     <Description>v2rayF desktop client for Windows, macOS, and Linux.</Description>
     <RepositoryUrl>https://github.com/drmikecrypto/v2rayF</RepositoryUrl>

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.10] - 2026-08-24
+
+### Fixed
+
+- Android **Instagram Direct** / **Telegram** stuck offline while feed worked — TUN stack is now **`mixed`** (gVisor UDP for VpnService DNS) and live Connect forces **UDP DNS** (not DoH) for hijacked app queries
+
 ## [2.2.9] - 2026-08-23
 
 ### Fixed

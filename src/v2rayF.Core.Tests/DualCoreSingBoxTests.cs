@@ -216,7 +216,7 @@ public class DualCoreSingBoxTests
         Assert.Null(tun["file_descriptor"]);
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
-        Assert.Equal("system", tun["stack"]!.GetValue<string>());
+        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
     }
 
     [Fact]
@@ -228,12 +228,16 @@ public class DualCoreSingBoxTests
 
         Assert.Equal("sniff", rules[0]!["action"]!.GetValue<string>());
 
+        var protocolHijackIdx = -1;
         var portHijackIdx = -1;
         var subnetHijackIdx = -1;
         var privateDirectIdx = -1;
         for (var i = 0; i < rules.Count; i++)
         {
             var r = rules[i]!;
+            if (r["action"]?.GetValue<string>() == "hijack-dns" &&
+                r["protocol"]?.GetValue<string>() == "dns")
+                protocolHijackIdx = i;
             if (r["action"]?.GetValue<string>() == "hijack-dns" &&
                 r["port"] is JsonArray ports &&
                 ports.Any(p => p!.GetValue<int>() == 53))
@@ -247,21 +251,40 @@ public class DualCoreSingBoxTests
                 privateDirectIdx = i;
         }
 
+        Assert.True(protocolHijackIdx >= 0, "expected protocol dns hijack-dns rule");
         Assert.True(portHijackIdx >= 0, "expected port 53 hijack-dns rule");
         Assert.True(subnetHijackIdx >= 0, "expected 172.19.0.0/30 hijack-dns rule");
         Assert.True(privateDirectIdx >= 0, "expected ip_is_private direct rule");
+        Assert.True(protocolHijackIdx < portHijackIdx);
         Assert.True(portHijackIdx < privateDirectIdx);
         Assert.True(subnetHijackIdx < privateDirectIdx);
+    }
+
+    [Fact]
+    public void AndroidTunFd_ForcesUdpDnsEvenWhenDohEnabled()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var dns = JsonNode.Parse(
+            SingBoxConfigBuilder.Build(server, new AppSettings { DnsThroughProxy = true }, tunFd: 7))!["dns"]!;
+        Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, dns["final"]!.GetValue<string>());
+        Assert.Contains(
+            dns["servers"]!.AsArray(),
+            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
+                 s["type"]?.GetValue<string>() == "udp");
+        Assert.DoesNotContain(
+            dns["servers"]!.AsArray(),
+            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.DohDnsTag);
     }
 
     [Fact]
     public void BuildWithoutTun_OmitsHijackDnsRules()
     {
         var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
-        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings()))!
-            ["route"]!["rules"]!.AsArray();
+        var root = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings { DnsThroughProxy = true }))!;
+        var rules = root["route"]!["rules"]!.AsArray();
         Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "hijack-dns");
         Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "sniff");
+        Assert.Equal(SingBoxConfigBuilder.DohDnsTag, root["dns"]!["final"]!.GetValue<string>());
     }
 
     [Fact]

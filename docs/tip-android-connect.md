@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.2.10 — Direct + Telegram (TUN UDP)
+
+**2.2.10** switches Android TUN to **`mixed`** stack and forces UDP DNS for VpnService. If Direct/Telegram stay offline while feed works on 2.2.9, Update to **2.2.10**, then force-stop those apps once.
+
 ## v2.2.9 — Instagram Direct TUN DNS
 
 **2.2.9** hijacks VPN DNS (`172.19.0.1:53`) into sing-box so Instagram **Direct** (MQTT) works again. Feed/reels already used HTTP proxy `10809`. After Update: Private DNS Off → Connect → **force-stop Instagram once**.

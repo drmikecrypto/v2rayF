@@ -63,7 +63,8 @@ public static class SingBoxConfigBuilder
                 ["address"] = new JsonArray { "172.19.0.1/30" },
                 ["auto_route"] = false,
                 ["strict_route"] = false,
-                ["stack"] = "system",
+                // mixed: system TCP + gVisor UDP — VpnService DNS is UDP; system stack often drops it.
+                ["stack"] = "mixed",
                 ["sniff"] = true,
                 ["sniff_override_destination"] = false
             });
@@ -80,7 +81,7 @@ public static class SingBoxConfigBuilder
                 new JsonObject { ["type"] = "block", ["tag"] = "block" }
             },
             ["route"] = BuildRoute(settings, tunFd),
-            ["dns"] = BuildDns(settings, server)
+            ["dns"] = BuildDns(settings, server, tunFd)
         };
 
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
@@ -99,6 +100,11 @@ public static class SingBoxConfigBuilder
         if (hasTun)
         {
             rules.Add(new JsonObject { ["action"] = "sniff" });
+            rules.Add(new JsonObject
+            {
+                ["protocol"] = "dns",
+                ["action"] = "hijack-dns"
+            });
             rules.Add(new JsonObject
             {
                 ["port"] = new JsonArray { 53, 853 },
@@ -135,11 +141,14 @@ public static class SingBoxConfigBuilder
         };
     }
 
-    private static JsonObject BuildDns(AppSettings settings, ProxyServer server)
+    private static JsonObject BuildDns(AppSettings settings, ProxyServer server, int? tunFd = null)
     {
         var servers = new JsonArray();
         var rules = new JsonArray();
         var hasBootstrap = NeedsBootstrapDns(server);
+        // Live Android VPN: hijacked app DNS must use UDP (DoH is unreliable under VpnService).
+        var forceUdp = tunFd is int fd && fd >= 0;
+        var useDoh = settings.DnsThroughProxy && !forceUdp;
 
         if (hasBootstrap)
         {
@@ -157,7 +166,7 @@ public static class SingBoxConfigBuilder
             });
         }
 
-        if (settings.DnsThroughProxy)
+        if (useDoh)
         {
             servers.Add(new JsonObject
             {
@@ -186,7 +195,7 @@ public static class SingBoxConfigBuilder
         {
             ["servers"] = servers,
             ["strategy"] = settings.BlockIpv6 ? "ipv4_only" : "prefer_ipv4",
-            ["final"] = settings.DnsThroughProxy ? DohDnsTag : UdpDnsTag
+            ["final"] = useDoh ? DohDnsTag : UdpDnsTag
         };
         if (rules.Count > 0)
             dns["rules"] = rules;
