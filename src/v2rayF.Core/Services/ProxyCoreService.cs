@@ -101,7 +101,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         if (!IsCoreAvailableFor(server))
             throw new FileNotFoundException(
                 useSingBox
-                    ? "sing-box core not found. Place sing-box in the cores folder."
+                    ? "sing-box core not found. Use in-app Update to get a build that includes sing-box, or place the binary next to Xray in cores/ (desktop)."
                     : "Xray core not found.",
                 ResolveCorePathFor(server));
 

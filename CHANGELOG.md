@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-08-23
+
+### Fixed
+
+- Android Connect **“sing-box core not found”** — APK now ships **libsingbox.so** (in-app Update refreshes native libs; uninstall not required)
+- `GetSingBoxPath` uses `nativeLibraryDir` like Xray (files/cores/sing-box is not executable on Android 10+)
+
 ## [2.2.3] - 2026-08-23
 
 ### Fixed

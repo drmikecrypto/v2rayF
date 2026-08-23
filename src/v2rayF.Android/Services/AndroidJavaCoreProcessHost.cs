@@ -72,10 +72,10 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
         await StopAsync(cancellationToken).ConfigureAwait(false);
 
         if (!System.IO.File.Exists(corePath))
-            throw new System.IO.FileNotFoundException("Xray core not found.", corePath);
+            throw new System.IO.FileNotFoundException("Core binary not found.", corePath);
 
         if (!System.IO.File.Exists(configPath))
-            throw new System.IO.FileNotFoundException("Xray config not found.", configPath);
+            throw new System.IO.FileNotFoundException("Core config not found.", configPath);
 
         lock (_lock)
             _recentOutput = "";

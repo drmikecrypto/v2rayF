@@ -10,6 +10,7 @@ namespace v2rayF.Android.Services;
 public sealed class AndroidCoreEnvironment : ICoreEnvironment
 {
     private const string CoreLibraryName = "libxray.so";
+    private const string SingBoxLibraryName = "libsingbox.so";
     private readonly SemaphoreSlim _ensureLock = new(1, 1);
     private volatile bool _ensureComplete;
 
@@ -41,17 +42,13 @@ public sealed class AndroidCoreEnvironment : ICoreEnvironment
         }
     }
 
-    public string GetCorePath()
-    {
-        var nativeLibDir = Application.Context!.ApplicationInfo!.NativeLibraryDir;
-        if (string.IsNullOrEmpty(nativeLibDir))
-            throw new InvalidOperationException("Native library directory is unavailable.");
+    public string GetCorePath() => ResolveNativeLibrary(CoreLibraryName);
 
-        return Path.Combine(nativeLibDir, CoreLibraryName);
-    }
-
-    public string GetSingBoxPath() =>
-        Path.Combine(GetCoresDirectory(), "sing-box");
+    /// <summary>
+    /// sing-box is packaged as libsingbox.so (same SELinux exec rules as libxray.so).
+    /// files/cores/sing-box is not executable on Android 10+.
+    /// </summary>
+    public string GetSingBoxPath() => ResolveNativeLibrary(SingBoxLibraryName);
 
     public string GetCoresDirectory() =>
         Path.Combine(Application.Context!.FilesDir!.AbsolutePath, "cores");
@@ -63,14 +60,26 @@ public sealed class AndroidCoreEnvironment : ICoreEnvironment
         return dir;
     }
 
+    private static string ResolveNativeLibrary(string fileName)
+    {
+        var nativeLibDir = Application.Context!.ApplicationInfo!.NativeLibraryDir;
+        if (string.IsNullOrEmpty(nativeLibDir))
+            throw new InvalidOperationException("Native library directory is unavailable.");
+
+        return Path.Combine(nativeLibDir, fileName);
+    }
+
     private static void RemoveLegacyCoreExtract(string coresDir)
     {
-        var legacyPath = Path.Combine(coresDir, "xray");
-        if (!File.Exists(legacyPath))
-            return;
+        foreach (var name in new[] { "xray", "sing-box" })
+        {
+            var legacyPath = Path.Combine(coresDir, name);
+            if (!File.Exists(legacyPath))
+                continue;
 
-        try { File.Delete(legacyPath); }
-        catch { /* best effort */ }
+            try { File.Delete(legacyPath); }
+            catch { /* best effort */ }
+        }
     }
 
     private static async Task ExtractAssetIfMissingAsync(string assetName, string destPath, CancellationToken cancellationToken)

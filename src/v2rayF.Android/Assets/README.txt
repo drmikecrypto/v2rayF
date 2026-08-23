@@ -3,8 +3,8 @@ Place Android geo assets here (not committed to git):
   geoip.dat
   geosite.dat
 
-The Xray core is packaged separately as NativeLibs/arm64-v8a/libxray.so.
+Cores are packaged separately under NativeLibs/arm64-v8a/:
+  libxray.so
+  libsingbox.so
 
-Download: https://github.com/XTLS/Xray-core/releases
-
-Run: pwsh -File scripts/package-android.ps1
+Download Xray + sing-box via: pwsh -File scripts/package-android.ps1
