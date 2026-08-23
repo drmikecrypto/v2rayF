@@ -11,6 +11,9 @@ namespace v2rayF.Services;
 public sealed class ProxyCoreService : IAsyncDisposable
 {
     public const int ConnectTimeoutMs = 15000;
+    /// <summary>Extra SOCKS bind budget for sing-box + Android VPN TUN (system stack).</summary>
+    public const int SingBoxTunReadyBonusMs = 7000;
+    public const int CoreReadyPollMs = 50;
     public const int HealthCheckIntervalMs = 5000;
     public const int HealthPortTimeoutMs = 500;
     public const int HealthSocksFailThreshold = 3;
@@ -141,15 +144,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         readyTimeout.CancelAfter(ConnectTimeoutMs);
 
-        await WaitForCoreReadyAsync(readyTimeout.Token).ConfigureAwait(false);
-
-        if (ProcessHost.HasExited)
-        {
-            await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
-            var error = ProcessHost.GetRecentError();
-            await StopAsync(cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
-        }
+        await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
         // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
         LastConnectProbeMs = null;
@@ -177,15 +172,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
             using var readyTimeout2 = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             readyTimeout2.CancelAfter(ConnectTimeoutMs);
-            await WaitForCoreReadyAsync(readyTimeout2.Token).ConfigureAwait(false);
-
-            if (ProcessHost.HasExited)
-            {
-                await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
-                var error = ProcessHost.GetRecentError();
-                await StopAsync(cancellationToken).ConfigureAwait(false);
-                throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
-            }
+            await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
             probeMs = await ProbeConnectPathAsync(server, healthBudget: null, cancellationToken)
                 .ConfigureAwait(false);
@@ -402,23 +389,72 @@ public sealed class ProxyCoreService : IAsyncDisposable
         UnexpectedStop?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task WaitForCoreReadyAsync(CancellationToken cancellationToken)
+    /// <summary>Transport-aware SOCKS bind budget for live Connect (uses full ConnectTimeoutMs cap).</summary>
+    public static int GetConnectReadyWaitMs(ProxyServer server, bool useSingBox, int? tunFd)
     {
-        for (var i = 0; i < 80; i++)
+        var waitMs = LatencyService.GetCoreReadyWaitMs(server);
+        if (useSingBox && tunFd is int fd && fd >= 0)
+            waitMs += SingBoxTunReadyBonusMs;
+        return Math.Min(ConnectTimeoutMs, waitMs);
+    }
+
+    private async Task WaitForCoreReadyAsync(
+        ProxyServer server,
+        bool useSingBox,
+        int? tunFd,
+        CancellationToken cancellationToken)
+    {
+        var waitMs = GetConnectReadyWaitMs(server, useSingBox, tunFd);
+        var deadline = Environment.TickCount64 + waitMs;
+        while (Environment.TickCount64 < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             if (ProcessHost.HasExited)
+            {
+                await Task.Delay(150, CancellationToken.None).ConfigureAwait(false);
+                var error = ProcessHost.GetRecentError();
+                await StopAsync(cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
+            }
+
+            if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+                    .ConfigureAwait(false))
                 return;
 
-            if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken).ConfigureAwait(false))
-                return;
-
-            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(CoreReadyPollMs, cancellationToken).ConfigureAwait(false);
         }
 
-        if (!await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken).ConfigureAwait(false))
-            throw new TimeoutException("Xray core did not become ready in time.");
+        if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+                .ConfigureAwait(false))
+            return;
+
+        var coreLabel = CoreRuntime.CoreLabel(server);
+        var recent = ProcessHost.GetRecentError();
+        if (ProcessHost.HasExited)
+        {
+            await StopAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(CoreStartupErrorFormatter.Format(recent));
+        }
+
+        await StopAsync(cancellationToken).ConfigureAwait(false);
+        var detail = TrimRecentOutput(recent, 200);
+        var message = string.IsNullOrWhiteSpace(detail)
+            ? $"{coreLabel} core did not become ready in time."
+            : $"{coreLabel} core did not become ready in time: {detail}";
+        throw new TimeoutException(message);
+    }
+
+    private static string TrimRecentOutput(string output, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return "";
+
+        var trimmed = output.Trim();
+        if (trimmed.Length <= maxChars)
+            return StatusSanitizer.Scrub(trimmed);
+
+        return StatusSanitizer.Scrub(trimmed[^maxChars..].TrimStart());
     }
 
     private static async Task<bool> IsPortOpenAsync(string host, int port, CancellationToken cancellationToken)

@@ -31,6 +31,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
     private int _spawnedPid = -1;
     private int _stdoutReadFd = -1;
     private string _recentOutput = "";
+    private string _lastCorePath = "";
     private bool _manualStop;
     private CancellationTokenSource? _watchCts;
 
@@ -78,7 +79,10 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
             throw new System.IO.FileNotFoundException("Core config not found.", configPath);
 
         lock (_lock)
+        {
             _recentOutput = "";
+            _lastCorePath = corePath;
+        }
 
         var nativeLibDir = Application.Context?.ApplicationInfo?.NativeLibraryDir ?? workingDirectory;
 
@@ -96,13 +100,13 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
         catch (IOException ex)
         {
             throw new InvalidOperationException(
-                $"Xray core failed to start: {ex.Message}. Reinstall the app or check that your device is ARM64.",
+                $"{CoreLabel(corePath)} failed to start: {ex.Message}. Use in-app Update or check that your device is ARM64.",
                 ex);
         }
         catch (Exception ex) when (ex is not InvalidOperationException and not System.IO.FileNotFoundException)
         {
             throw new InvalidOperationException(
-                $"Xray core failed to start: {ex.Message}. Reinstall the app or check that your device is ARM64.",
+                $"{CoreLabel(corePath)} failed to start: {ex.Message}. Use in-app Update or check that your device is ARM64.",
                 ex);
         }
     }
@@ -184,7 +188,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
                     var code = _process.ExitValue();
                     var output = _recentOutput.Trim();
                     return string.IsNullOrEmpty(output)
-                        ? $"Xray exited with code {code}"
+                        ? $"{CoreLabelFromRecent()} exited with code {code}"
                         : output;
                 }
                 catch (IllegalThreadStateException)
@@ -195,10 +199,22 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
 
             var text = _recentOutput.Trim();
             return string.IsNullOrEmpty(text) && _spawnedPid > 0
-                ? $"Xray exited (pid was {_spawnedPid})"
+                ? $"{CoreLabelFromRecent()} exited (pid was {_spawnedPid})"
                 : text;
         }
     }
+
+    private static string CoreLabel(string corePath)
+    {
+        var name = System.IO.Path.GetFileName(corePath);
+        if (name.Contains("singbox", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("sing-box", StringComparison.OrdinalIgnoreCase))
+            return "sing-box core";
+        return "Proxy core";
+    }
+
+    private string CoreLabelFromRecent() =>
+        string.IsNullOrEmpty(_lastCorePath) ? "Proxy core" : CoreLabel(_lastCorePath);
 
     private void StartWithProcessBuilder(
         string corePath,
@@ -236,7 +252,7 @@ public sealed class AndroidJavaCoreProcessHost : ICoreProcessHost
     {
         var pipe = new int[2];
         if (NativePipe(pipe) != 0)
-            throw new InvalidOperationException("Failed to create stdout pipe for Xray.");
+            throw new InvalidOperationException("Failed to create stdout pipe for proxy core.");
 
         var stdoutRead = pipe[0];
         var stdoutWrite = pipe[1];

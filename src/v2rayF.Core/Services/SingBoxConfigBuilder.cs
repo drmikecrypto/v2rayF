@@ -76,7 +76,7 @@ public static class SingBoxConfigBuilder
                 new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
                 new JsonObject { ["type"] = "block", ["tag"] = "block" }
             },
-            ["route"] = BuildRoute(settings),
+            ["route"] = BuildRoute(settings, tunFd),
             ["dns"] = BuildDns(settings, server)
         };
 
@@ -86,7 +86,7 @@ public static class SingBoxConfigBuilder
     public static string BuildSpeedtest(ProxyServer server, int socksPort) =>
         Build(server, new AppSettings { DnsThroughProxy = false }, socksPort);
 
-    private static JsonObject BuildRoute(AppSettings settings)
+    private static JsonObject BuildRoute(AppSettings settings, int? tunFd = null)
     {
         var rules = new JsonArray();
         if (settings.BlockIpv6)
@@ -104,11 +104,14 @@ public static class SingBoxConfigBuilder
             ["outbound"] = "direct"
         });
 
+        // Android VPN Connect owns routing; auto_detect can stall sing-box startup.
+        var autoDetect = !(tunFd is int fd && fd >= 0);
+
         return new JsonObject
         {
             ["rules"] = rules,
             ["final"] = "proxy",
-            ["auto_detect_interface"] = true
+            ["auto_detect_interface"] = autoDetect
         };
     }
 

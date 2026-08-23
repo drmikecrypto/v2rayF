@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.5] - 2026-08-23
+
+### Fixed
+
+- Android Connect **“Xray core did not become ready in time”** — ready gate now uses the full **15s** Connect budget (was ~4s) with extra time for **sing-box + VPN TUN**
+- Connect timeout errors show the correct core label (**sing-box** vs Xray) and trimmed stderr when the process stays alive
+- sing-box live config sets **`auto_detect_interface: false`** when Android VPN TUN is active (avoids startup stalls)
+
 ## [2.2.4] - 2026-08-23
 
 ### Fixed

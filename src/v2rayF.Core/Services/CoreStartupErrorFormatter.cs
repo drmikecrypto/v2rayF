@@ -2,13 +2,26 @@ using System;
 
 namespace v2rayF.Services;
 
-/// <summary>Maps raw Xray stdout/stderr into actionable connect-status messages.</summary>
+/// <summary>Maps raw proxy-core stdout/stderr into actionable connect-status messages.</summary>
 public static class CoreStartupErrorFormatter
 {
     public static string Format(string output)
     {
         if (string.IsNullOrWhiteSpace(output))
-            return "Xray core exited immediately after start.";
+            return "Proxy core exited immediately after start.";
+
+        if (output.Contains("decode config", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("invalid config", StringComparison.OrdinalIgnoreCase) ||
+            output.Contains("unmarshal", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Proxy core rejected the config. Update the app or check the server link.";
+        }
+
+        if (output.Contains("FATAL", StringComparison.Ordinal) &&
+            output.Contains("tun", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Android VPN tunnel fd was lost. Disconnect, grant VPN permission again, then Connect.";
+        }
 
         if (output.Contains("10808", StringComparison.Ordinal) ||
             output.Contains("10809", StringComparison.Ordinal) ||
