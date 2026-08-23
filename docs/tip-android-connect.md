@@ -8,17 +8,21 @@ If **Connect** closes the app or fails on Samsung / Android 12+ devices:
 4. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 5. After upgrading, **uninstall** then install the new APK so VPN/core native libs refresh cleanly.
 
+## v2.2.3 — Test delay on Xray, Connect on sing-box
+
+**Test delay / ping** for classic protocols uses **Xray** (2.2.2 put speedtest on sing-box and every ping timed out). Live **Connect** on Android classic still uses **sing-box** TUN for Instagram Direct.
+
 ## v2.2.2 — Instagram Direct + classic sing-box TUN
 
 Instagram **feed/reels** often use VPN HTTP proxy `10809`. **Direct** (MQTT / raw sockets) must go through **TUN**.
 
-**v2.2.2** runs Android classic VLESS/VMess/Trojan/SS/REALITY/Vision on **sing-box** (`stack: system`) so Direct matches V2Box-class TUN. VPN HTTP proxy stays for Chromium. Speedtest still uses UDP DNS and does not bind ephemeral `10809` (v2.2.1).
+**v2.2.2** runs Android classic VLESS/VMess/Trojan/SS/REALITY/Vision on **sing-box** (`stack: system`) for live Connect. VPN HTTP proxy stays for Chromium.
 
 After Connect: set Android **Private DNS** Off, then **force-stop Instagram** once before opening Direct.
 
 ## v2.2.1 — timeout emergency (speedtest)
 
-Universal Test delay / Connect timeouts fixed via UDP DNS for speedtest and no ephemeral 10809 clash. Classic briefly back on Xray; superseded for Android TUN by 2.2.2.
+Universal Test delay / Connect timeouts fixed via UDP DNS for speedtest and no ephemeral 10809 clash.
 
 ## Idle “Connected” but no internet
 

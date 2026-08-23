@@ -294,7 +294,10 @@ public class SmartConnectShortlistTests
             AppServices.Platform = new FakePlatform(isMobile: true);
             Assert.True(CoreRuntime.PreferSingBoxOnAndroid(classic));
             Assert.True(CoreRuntime.UseSingBox(classic));
+            Assert.False(CoreRuntime.RequiresSingBox(classic));
+            Assert.False(CoreRuntime.UseSingBoxForSpeedtest(classic));
             Assert.True(CoreRuntime.UseSingBox(hy2));
+            Assert.True(CoreRuntime.UseSingBoxForSpeedtest(hy2));
         }
         finally
         {

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-08-23
+
+### Fixed
+
+- Universal **Test delay / ping timeouts** after 2.2.2 — speedtest no longer uses Android classic-on-sing-box; classic ping stays on **Xray**
+- Live Connect still uses **sing-box** TUN on Android classic (Instagram Direct path from 2.2.2)
+
 ## [2.2.2] - 2026-08-23
 
 ### Fixed

@@ -113,7 +113,10 @@ public sealed class LatencyService
         try
         {
             await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
-            if (File.Exists(_environment.GetCorePath()))
+            var corePath = CoreRuntime.UseSingBoxForSpeedtest(server)
+                ? _environment.GetSingBoxPath()
+                : _environment.GetCorePath();
+            if (File.Exists(corePath))
             {
                 proxyMs = await MeasureViaCoreAsync(server, enableFragment, cancellationToken)
                     .ConfigureAwait(false);
@@ -166,9 +169,14 @@ public sealed class LatencyService
             return -1;
 
         await _environment.EnsureCoreAsync(cancellationToken).ConfigureAwait(false);
-        if (!File.Exists(_environment.GetCorePath()))
+        var corePath = CoreRuntime.UseSingBoxForSpeedtest(server)
+            ? _environment.GetSingBoxPath()
+            : _environment.GetCorePath();
+        if (!File.Exists(corePath))
         {
-            LastProbeError = "Xray core not found.";
+            LastProbeError = CoreRuntime.UseSingBoxForSpeedtest(server)
+                ? "sing-box core not found."
+                : "Xray core not found.";
             return -1;
         }
 
@@ -204,7 +212,8 @@ public sealed class LatencyService
             var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
-            var useSingBox = CoreRuntime.UseSingBox(server);
+            // Speedtest: classic on Xray even when live Connect prefers sing-box on Android.
+            var useSingBox = CoreRuntime.UseSingBoxForSpeedtest(server);
             var configPath = Path.Combine(configDir, useSingBox ? $"speedtest-sb-{socksPort}.json" : $"speedtest-{socksPort}.json");
             var configJson = useSingBox
                 ? SingBoxConfigBuilder.BuildSpeedtest(server, socksPort)

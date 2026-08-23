@@ -27,6 +27,12 @@ public static class CoreRuntime
     public static bool UseSingBox(ProxyServer server) =>
         RequiresSingBox(server) || PreferSingBoxOnAndroid(server);
 
+    /// <summary>
+    /// Test delay / speedtest only. Classic stays on Xray even when PreferSingBoxOnAndroid
+    /// (live Connect) is true — Android sing-box speedtest caused universal timeouts in 2.2.2.
+    /// </summary>
+    public static bool UseSingBoxForSpeedtest(ProxyServer server) => RequiresSingBox(server);
+
     public static string CoreLabel(ProxyServer server) =>
         UseSingBox(server) ? "sing-box" : "Xray";
 }
