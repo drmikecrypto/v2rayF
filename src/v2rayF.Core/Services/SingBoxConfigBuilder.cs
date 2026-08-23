@@ -92,6 +92,25 @@ public static class SingBoxConfigBuilder
     private static JsonObject BuildRoute(AppSettings settings, int? tunFd = null)
     {
         var rules = new JsonArray();
+        var hasTun = tunFd is int fd && fd >= 0;
+
+        // Android VpnService DNS is 172.19.0.1 — hijack into the DNS module before
+        // ip_is_private → direct (same role as Xray dns-out for Instagram Direct / MQTT).
+        if (hasTun)
+        {
+            rules.Add(new JsonObject { ["action"] = "sniff" });
+            rules.Add(new JsonObject
+            {
+                ["port"] = new JsonArray { 53, 853 },
+                ["action"] = "hijack-dns"
+            });
+            rules.Add(new JsonObject
+            {
+                ["ip_cidr"] = new JsonArray { "172.19.0.0/30" },
+                ["action"] = "hijack-dns"
+            });
+        }
+
         if (settings.BlockIpv6)
         {
             rules.Add(new JsonObject
@@ -108,13 +127,11 @@ public static class SingBoxConfigBuilder
         });
 
         // Android VPN Connect owns routing; auto_detect can stall sing-box startup.
-        var autoDetect = !(tunFd is int fd && fd >= 0);
-
         return new JsonObject
         {
             ["rules"] = rules,
             ["final"] = "proxy",
-            ["auto_detect_interface"] = autoDetect
+            ["auto_detect_interface"] = !hasTun
         };
     }
 

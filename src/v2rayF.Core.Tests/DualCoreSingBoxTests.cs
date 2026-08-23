@@ -220,6 +220,51 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void AndroidTunFd_HijackDnsRulesPrecedePrivateDirect()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 7))!
+            ["route"]!["rules"]!.AsArray();
+
+        Assert.Equal("sniff", rules[0]!["action"]!.GetValue<string>());
+
+        var portHijackIdx = -1;
+        var subnetHijackIdx = -1;
+        var privateDirectIdx = -1;
+        for (var i = 0; i < rules.Count; i++)
+        {
+            var r = rules[i]!;
+            if (r["action"]?.GetValue<string>() == "hijack-dns" &&
+                r["port"] is JsonArray ports &&
+                ports.Any(p => p!.GetValue<int>() == 53))
+                portHijackIdx = i;
+            if (r["action"]?.GetValue<string>() == "hijack-dns" &&
+                r["ip_cidr"] is JsonArray cidrs &&
+                cidrs.Any(c => c!.GetValue<string>() == "172.19.0.0/30"))
+                subnetHijackIdx = i;
+            if (r["ip_is_private"]?.GetValue<bool>() == true &&
+                r["outbound"]?.GetValue<string>() == "direct")
+                privateDirectIdx = i;
+        }
+
+        Assert.True(portHijackIdx >= 0, "expected port 53 hijack-dns rule");
+        Assert.True(subnetHijackIdx >= 0, "expected 172.19.0.0/30 hijack-dns rule");
+        Assert.True(privateDirectIdx >= 0, "expected ip_is_private direct rule");
+        Assert.True(portHijackIdx < privateDirectIdx);
+        Assert.True(subnetHijackIdx < privateDirectIdx);
+    }
+
+    [Fact]
+    public void BuildWithoutTun_OmitsHijackDnsRules()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings()))!
+            ["route"]!["rules"]!.AsArray();
+        Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "hijack-dns");
+        Assert.DoesNotContain(rules, r => r!["action"]?.GetValue<string>() == "sniff");
+    }
+
+    [Fact]
     public void ConnectHealthBudgets_AreSoftened()
     {
         Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);

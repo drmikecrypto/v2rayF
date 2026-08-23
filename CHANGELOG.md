@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.9] - 2026-08-23
+
+### Fixed
+
+- Android **Instagram Direct** offline while feed/reels worked — sing-box TUN now **hijack-dns** for port 53/853 and VPN subnet `172.19.0.0/30` before `ip_is_private → direct` (Xray dns-out parity for MQTT/raw sockets)
+
 ## [2.2.8] - 2026-08-23
 
 ### Fixed

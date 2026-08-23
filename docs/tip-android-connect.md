@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.2.9 — Instagram Direct TUN DNS
+
+**2.2.9** hijacks VPN DNS (`172.19.0.1:53`) into sing-box so Instagram **Direct** (MQTT) works again. Feed/reels already used HTTP proxy `10809`. After Update: Private DNS Off → Connect → **force-stop Instagram once**.
+
 ## v2.2.8 — sing-box 1.12 DNS (Connect fix)
 
 **2.2.8** migrates live sing-box DNS to the 1.12 schema. If Connect showed `did not become ready in time: …migrate-to-new-dns-server-formats`, update to **2.2.8**.
