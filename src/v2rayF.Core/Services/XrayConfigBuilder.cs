@@ -464,6 +464,9 @@ public static class XrayConfigBuilder
             });
         }
 
+        if (settings.EnableTunMode)
+            AppendProcessAppNetworkRules(rules, settings);
+
         // Private LAN stays out of Global except loopback (local apps).
         if (settings.RoutingMode == RoutingMode.Global)
         {
@@ -533,6 +536,40 @@ public static class XrayConfigBuilder
             ["domainStrategy"] = settings.RoutingMode == RoutingMode.BypassChina ? "IPIfNonMatch" : "AsIs",
             ["rules"] = rules
         };
+    }
+
+    /// <summary>
+    /// Desktop App Network: process → direct / blackhole while TUN captures traffic.
+    /// </summary>
+    private static void AppendProcessAppNetworkRules(JsonArray rules, AppSettings settings)
+    {
+        var block = AppNetworkPolicy.GetBlockIds(settings, mobile: false);
+        if (block.Count > 0)
+        {
+            var names = new JsonArray();
+            foreach (var name in block)
+                names.Add(name);
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["process"] = names,
+                ["outboundTag"] = "block"
+            });
+        }
+
+        var direct = AppNetworkPolicy.GetDirectIds(settings, mobile: false);
+        if (direct.Count > 0)
+        {
+            var names = new JsonArray();
+            foreach (var name in direct)
+                names.Add(name);
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["process"] = names,
+                ["outboundTag"] = "direct"
+            });
+        }
     }
 
     private static JsonObject PublicDnsDirectRule() => new()

@@ -236,6 +236,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
             EnablePacketFragment = settings.EnablePacketFragment,
             SubscriptionViaProxy = settings.SubscriptionViaProxy,
             AndroidBypassPackages = settings.AndroidBypassPackages,
+            AndroidBlockPackages = settings.AndroidBlockPackages,
+            DesktopDirectProcesses = settings.DesktopDirectProcesses,
+            DesktopBlockProcesses = settings.DesktopBlockProcesses,
             AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled,
             AutoReconnectEnabled = settings.AutoReconnectEnabled
         };

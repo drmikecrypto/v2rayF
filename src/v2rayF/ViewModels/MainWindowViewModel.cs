@@ -108,7 +108,19 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _settingsOpen;
 
     [ObservableProperty]
+    private bool _appNetworkOpen;
+
+    [ObservableProperty]
     private string _androidBypassPackages = "";
+
+    [ObservableProperty]
+    private string _androidBlockPackages = "";
+
+    [ObservableProperty]
+    private string _desktopDirectProcesses = "";
+
+    [ObservableProperty]
+    private string _desktopBlockProcesses = "";
 
     [ObservableProperty]
     private string _secureShareEndpoint = "";
@@ -209,6 +221,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool ShowAndroidBypass => IsMobile;
 
+    /// <summary>App Network on Android always; on Desktop when TUN is available/used.</summary>
+    public bool ShowAppNetwork => IsMobile || ShowDesktopProxySettings;
+
+    public AppNetworkViewModel AppNetwork { get; }
+
     public bool HasSelectedServer => SelectedServer is not null;
 
     public bool HasSavedSubscription => !string.IsNullOrWhiteSpace(SubscriptionUrl);
@@ -272,6 +289,23 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _smartConnect = new SmartConnectService(_latencyService);
+        AppNetwork = new AppNetworkViewModel(
+            getSettings: () =>
+            {
+                CollectSettings();
+                return _settings;
+            },
+            saveSettingsAsync: async settings =>
+            {
+                AndroidBypassPackages = settings.AndroidBypassPackages;
+                AndroidBlockPackages = settings.AndroidBlockPackages;
+                DesktopDirectProcesses = settings.DesktopDirectProcesses;
+                DesktopBlockProcesses = settings.DesktopBlockProcesses;
+                await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
+            },
+            reconnectIfConnectedAsync: ReconnectToApplyAppNetworkAsync,
+            setStatus: text => StatusText = text,
+            isMobile: IsMobile);
 
         _proxyCore.RunningStateChanged += (_, running) =>
         {
@@ -528,6 +562,9 @@ public partial class MainWindowViewModel : ViewModelBase
         ShareListenAllInterfaces = settings.ShareListenAllInterfaces;
         SubscriptionViaProxy = settings.SubscriptionViaProxy;
         AndroidBypassPackages = settings.AndroidBypassPackages;
+        AndroidBlockPackages = settings.AndroidBlockPackages;
+        DesktopDirectProcesses = settings.DesktopDirectProcesses;
+        DesktopBlockProcesses = settings.DesktopBlockProcesses;
         VaultUnlocked = _vault.IsUnlocked;
         UpdateTunStatus();
         UpdateSecureShareEndpoint();
@@ -555,6 +592,9 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.AutoReconnectEnabled = AutoReconnectEnabled;
         _settings.SubscriptionViaProxy = SubscriptionViaProxy;
         _settings.AndroidBypassPackages = AndroidBypassPackages;
+        _settings.AndroidBlockPackages = AndroidBlockPackages;
+        _settings.DesktopDirectProcesses = DesktopDirectProcesses;
+        _settings.DesktopBlockProcesses = DesktopBlockProcesses;
         return _settings;
     }
 
@@ -648,11 +688,6 @@ public partial class MainWindowViewModel : ViewModelBase
         return "VPN permission is required.";
     }
 
-    private static IReadOnlyList<string> ParsePackageList(string raw) =>
-        string.IsNullOrWhiteSpace(raw)
-            ? []
-            : raw.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
     [RelayCommand]
     private async Task OpenSettingsAsync()
     {
@@ -664,6 +699,45 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         SettingsOpen = false;
         await SaveSettingsAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task OpenAppNetworkAsync()
+    {
+        AppNetworkOpen = true;
+        await AppNetwork.OnOpenedAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private async Task CloseAppNetworkAsync()
+    {
+        await AppNetwork.OnClosedAsync().ConfigureAwait(true);
+        AppNetworkOpen = false;
+        AndroidBypassPackages = _settings.AndroidBypassPackages;
+        AndroidBlockPackages = _settings.AndroidBlockPackages;
+        DesktopDirectProcesses = _settings.DesktopDirectProcesses;
+        DesktopBlockProcesses = _settings.DesktopBlockProcesses;
+        await SaveSettingsAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReconnectToApplyAppNetworkAsync()
+    {
+        if (!IsConnected && ConnectionState != ConnectionState.Connected)
+        {
+            StatusText = "App Network saved — connect to apply.";
+            return;
+        }
+
+        var server = SelectedServer ?? _proxyCore.ActiveServer;
+        await DisconnectAsync().ConfigureAwait(true);
+        if (server is null)
+        {
+            StatusText = "App Network saved.";
+            return;
+        }
+
+        StatusText = "Reconnecting to apply App Network…";
+        await ConnectWithOrchestrationAsync(server).ConfigureAwait(true);
     }
 
     [RelayCommand]
@@ -1379,7 +1453,7 @@ public partial class MainWindowViewModel : ViewModelBase
         CancellationToken cancellationToken)
     {
         await SetOnUiAsync(() => StatusText = "Starting VPN…").ConfigureAwait(true);
-        var bypass = ParsePackageList(settings.AndroidBypassPackages);
+        var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
         var tunFd = await AppServices.Platform.EstablishVpnAsync(bypass, settings.BlockIpv6, cancellationToken)
             .ConfigureAwait(false);
 

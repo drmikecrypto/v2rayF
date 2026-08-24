@@ -157,6 +157,20 @@ public static class SingBoxConfigBuilder
             });
         }
 
+        // App Network Block: packages stay on TUN but never reach the internet.
+        var blockPackages = AppNetworkPolicy.GetBlockIds(settings, mobile: true);
+        if (hasTun && blockPackages.Count > 0)
+        {
+            var names = new JsonArray();
+            foreach (var pkg in blockPackages)
+                names.Add(pkg);
+            rules.Add(new JsonObject
+            {
+                ["package_name"] = names,
+                ["outbound"] = "block"
+            });
+        }
+
         rules.Add(new JsonObject
         {
             ["ip_is_private"] = true,

@@ -52,8 +52,17 @@ public sealed class AppSettings
     /// <summary>When connected, fetch subscriptions via local HTTP proxy.</summary>
     public bool SubscriptionViaProxy { get; set; } = true;
 
-    /// <summary>Package names (Android) excluded from the VPN tunnel.</summary>
+    /// <summary>Package names (Android) excluded from the VPN tunnel (App Network Direct).</summary>
     public string AndroidBypassPackages { get; set; } = "";
+
+    /// <summary>Package names (Android) blocked via TUN package_name → block while VPN is up.</summary>
+    public string AndroidBlockPackages { get; set; } = "";
+
+    /// <summary>Process names (Desktop TUN) routed to direct egress (App Network Direct).</summary>
+    public string DesktopDirectProcesses { get; set; } = "";
+
+    /// <summary>Process names (Desktop TUN) routed to blackhole (App Network Block).</summary>
+    public string DesktopBlockProcesses { get; set; } = "";
 
     public string LastGoodServerId { get; set; } = "";
 

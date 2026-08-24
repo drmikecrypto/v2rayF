@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.4.0 — App Network
+
+**2.4.0** adds **App Network** (Settings): set apps to VPN, Direct (split), or Block. Live rates only while the panel is open. Existing bypass package names become Direct.
+
 ## v2.3.3 — Direct bypasses HTTP proxy
 
 **2.3.3** excludes Instagram/Facebook from VPN HTTP proxy so Direct MQTT uses TUN (with 2.3.2 real DNS). Play Store / Translate still use `10809`. After Update: force-stop Instagram once.

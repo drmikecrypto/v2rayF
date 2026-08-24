@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-08-24
+
+### Added
+
+- **App Network** — pick apps/processes and set **VPN**, **Direct** (split out of VPN), or **Block** (no internet while connected)
+- Android: Direct uses existing `AddDisallowedApplication`; Block uses sing-box `package_name` → `block`; live ↑/↓ rates only while the panel is open
+- Desktop: process Direct/Block via Xray TUN `process` rules (core egress, not OS bypass)
+- Existing `AndroidBypassPackages` lists appear as Direct in App Network
+
 ## [2.3.3] - 2026-08-24
 
 ### Fixed

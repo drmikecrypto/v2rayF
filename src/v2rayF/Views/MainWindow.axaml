@@ -21,6 +21,7 @@
         <vm:MainWindowViewModel/>
     </Design.DataContext>
 
+    <Grid>
     <Grid RowDefinitions="Auto,*,Auto" Margin="20">
         <StackPanel Grid.Row="0" Spacing="12">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10">
@@ -138,6 +139,29 @@
                 <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
                 <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>
             </StackPanel>
+        </Border>
+    </Grid>
+
+        <Border IsVisible="{Binding AppNetworkOpen}"
+                Background="#99000000"
+                Padding="24"
+                ZIndex="20">
+            <Border Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                    CornerRadius="12"
+                    Padding="16"
+                    Width="520"
+                    MaxHeight="640"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <DockPanel LastChildFill="True">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <TextBlock Text="App Network" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="Done" Command="{Binding CloseAppNetworkCommand}"
+                                MinHeight="36" MinWidth="88"/>
+                    </Grid>
+                    <views:AppNetworkPanel DataContext="{Binding AppNetwork}"/>
+                </DockPanel>
+            </Border>
         </Border>
     </Grid>
 </Window>

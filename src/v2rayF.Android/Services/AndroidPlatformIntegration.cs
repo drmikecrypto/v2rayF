@@ -8,12 +8,15 @@ using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
 using Android.Net;
+using v2rayF.Models;
 using v2rayF.Services;
 
 namespace v2rayF.Android.Services;
 
 public sealed class AndroidPlatformIntegration : IPlatformIntegration
 {
+    private readonly AndroidAppNetworkCatalog _appNetwork = new();
+
     public bool IsMobile => true;
 
     public bool CanUseTunMode => true;
@@ -113,4 +116,14 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
 
         return null;
     }
+
+    public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default) =>
+        _appNetwork.GetNetworkAppsAsync(forceRefresh, cancellationToken);
+
+    public Task<IReadOnlyDictionary<string, AppTrafficSnapshot>> GetAppTrafficAsync(
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken = default) =>
+        _appNetwork.GetAppTrafficAsync(ids, cancellationToken);
 }

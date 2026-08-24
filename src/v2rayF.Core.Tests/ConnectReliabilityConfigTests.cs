@@ -323,6 +323,15 @@ public class SmartConnectShortlistTests
         public Task DisableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public string? GetLanIPv4Address() => null;
+        public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
+            bool forceRefresh = false,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<InstalledAppInfo>>([]);
+        public Task<IReadOnlyDictionary<string, AppTrafficSnapshot>> GetAppTrafficAsync(
+            IReadOnlyList<string> ids,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, AppTrafficSnapshot>>(
+                new Dictionary<string, AppTrafficSnapshot>());
     }
 
     private sealed class FakeEnv : ICoreEnvironment

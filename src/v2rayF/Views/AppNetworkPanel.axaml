@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:v2rayF.ViewModels"
+             x:Class="v2rayF.Views.AppNetworkPanel"
+             x:DataType="vm:AppNetworkViewModel">
+    <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Top" Spacing="8" Margin="0,0,0,8">
+            <TextBlock Text="{Binding Subtitle}" FontSize="12" Opacity="0.75"/>
+            <TextBlock Text="{Binding PlatformHint}" TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
+            <TextBox PlaceholderText="Search apps…" Text="{Binding SearchText}"/>
+            <ComboBox ItemsSource="{Binding Filters}"
+                      SelectedItem="{Binding SelectedFilter}"
+                      HorizontalAlignment="Stretch"/>
+            <WrapPanel ItemSpacing="6" LineSpacing="6">
+                <Button Content="Refresh" Command="{Binding RefreshCommand}" MinHeight="36"/>
+                <Button Content="Apply" Command="{Binding ApplyCommand}" Classes="accent" MinHeight="36"/>
+                <Button Content="VPN shown" Command="{Binding SetVisibleModeCommand}"
+                        CommandParameter="Vpn" MinHeight="36"/>
+                <Button Content="Direct shown" Command="{Binding SetVisibleModeCommand}"
+                        CommandParameter="Direct" MinHeight="36"/>
+                <Button Content="Block shown" Command="{Binding SetVisibleModeCommand}"
+                        CommandParameter="Block" MinHeight="36"/>
+            </WrapPanel>
+            <TextBlock Text="Loading…" IsVisible="{Binding IsLoading}" FontSize="12" Opacity="0.7"/>
+        </StackPanel>
+
+        <Expander DockPanel.Dock="Bottom" Header="Advanced (raw lists)"
+                  IsExpanded="{Binding ShowAdvanced}" Margin="0,8,0,0">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Direct" FontSize="12" Opacity="0.8"/>
+                <TextBox AcceptsReturn="True" MinHeight="48" MaxHeight="90"
+                         Text="{Binding AdvancedDirectText}" TextWrapping="Wrap"
+                         PlaceholderText="one id per line"/>
+                <TextBlock Text="Block" FontSize="12" Opacity="0.8"/>
+                <TextBox AcceptsReturn="True" MinHeight="48" MaxHeight="90"
+                         Text="{Binding AdvancedBlockText}" TextWrapping="Wrap"
+                         PlaceholderText="one id per line"/>
+            </StackPanel>
+        </Expander>
+
+        <ListBox ItemsSource="{Binding VisibleApps}" SelectionMode="Single">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="vm:AppNetworkItemViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Margin="0,4">
+                        <Border Width="32" Height="32" CornerRadius="6" ClipToBounds="True" Background="#22888888">
+                            <Image Source="{Binding Icon}" Stretch="UniformToFill"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding Id}" FontSize="11" Opacity="0.65" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Text="{Binding ModeLabel, StringFormat='Mode: {0}'}" FontSize="11" Opacity="0.8"/>
+                            <TextBlock Text="{Binding TrafficText}" FontSize="11" Opacity="0.75"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4" IsEnabled="{Binding !IsSelf}">
+                            <ToggleButton Content="VPN" IsChecked="{Binding IsVpn}" Padding="8,4" HorizontalAlignment="Stretch"/>
+                            <ToggleButton Content="Direct" IsChecked="{Binding IsDirect}" Padding="8,4" HorizontalAlignment="Stretch"/>
+                            <ToggleButton Content="Block" IsChecked="{Binding IsBlock}" Padding="8,4" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>

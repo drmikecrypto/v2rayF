@@ -51,9 +51,18 @@
             <CheckBox Content="Fetch subscriptions via proxy when connected"
                       IsChecked="{Binding SubscriptionViaProxy}"
                       IsVisible="{Binding ShowDesktopProxySettings}"/>
-            <TextBlock Text="Per-app bypass (package names)" FontSize="12" Opacity="0.8"
+            <TextBlock Text="App Network" FontSize="12" Opacity="0.8" Margin="0,4,0,0"
+                       IsVisible="{Binding ShowAppNetwork}"/>
+            <TextBlock Text="Per-app VPN / Direct / Block. Direct splits out of the VPN; Block denies internet while connected."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                       IsVisible="{Binding ShowAppNetwork}"/>
+            <Button Content="Open App Network"
+                    Command="{Binding OpenAppNetworkCommand}"
+                    IsVisible="{Binding ShowAppNetwork}"
+                    HorizontalAlignment="Stretch" MinHeight="40"/>
+            <TextBlock Text="Advanced Direct packages (optional)" FontSize="11" Opacity="0.65"
                        IsVisible="{Binding ShowAndroidBypass}"/>
-            <TextBox AcceptsReturn="True" MinHeight="48"
+            <TextBox AcceptsReturn="True" MinHeight="40" MaxHeight="72"
                      Text="{Binding AndroidBypassPackages}"
                      IsVisible="{Binding ShowAndroidBypass}"
                      PlaceholderText="com.example.app"

@@ -11,6 +11,8 @@ v2rayF maps UI presets to Xray `routing` rules (and bundled `geoip.dat` / `geosi
 
 DNS (port 53 and the Xray DNS module) is routed through the proxy when **DNS through proxy** is enabled — it is never forced to clearnet in TUN mode.
 
-## Android per-app bypass
+## App Network (per-app)
 
-On Android, enter package names (one per line) under **Per-app bypass**. Those apps are excluded from the VPN with `VpnService.Builder.AddDisallowedApplication`.
+Use **Settings → Open App Network** to set each app to **VPN**, **Direct**, or **Block**. See [app-network.md](app-network.md).
+
+On Android, **Direct** excludes the package from the VPN with `VpnService.Builder.AddDisallowedApplication` (same mechanism as the old package-name bypass list). **Block** keeps the app on the tunnel and drops its traffic in sing-box.

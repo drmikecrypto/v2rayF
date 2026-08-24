@@ -9,6 +9,7 @@ using System.Runtime.Versioning;
 using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
+using v2rayF.Models;
 using v2rayF.Services;
 
 namespace v2rayF.Desktop.Services;
@@ -17,6 +18,7 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
 {
     private bool _enabled;
     private readonly List<Func<Task>> _disableActions = [];
+    private readonly DesktopAppNetworkCatalog _appNetwork = new();
 
     public bool IsMobile => false;
 
@@ -327,4 +329,14 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             InternetSetOptionWindows(hInternet, dwOption, lpBuffer, dwBufferLength);
     }
+
+    public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
+        bool forceRefresh = false,
+        CancellationToken cancellationToken = default) =>
+        _appNetwork.GetNetworkAppsAsync(forceRefresh, cancellationToken);
+
+    public Task<IReadOnlyDictionary<string, AppTrafficSnapshot>> GetAppTrafficAsync(
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken = default) =>
+        _appNetwork.GetAppTrafficAsync(ids, cancellationToken);
 }
