@@ -217,6 +217,7 @@ public class DualCoreSingBoxTests
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
         Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
+        Assert.True(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
     [Fact]

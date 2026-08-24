@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.3.1 — Instagram Direct (drop VPN HTTP proxy)
+
+**2.3.1** removes Android VPN HTTP proxy so Instagram **Direct** uses TUN like WhatsApp/Telegram. Feed still works via TUN. After Update: force-stop Instagram once.
+
 ## v2.3.0 — WhatsApp / Telegram / Direct (FakeIP + gVisor)
 
 **2.3.0** uses full **gVisor** TUN and **FakeIP** DNS for messaging apps. If chats stay offline while feed works on 2.2.x, Update to **2.3.0**, then force-stop those apps once.

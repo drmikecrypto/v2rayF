@@ -68,7 +68,8 @@ public static class SingBoxConfigBuilder
                 // Full gVisor: VpnService inherited fd — system/mixed still drop messaging-app TUN traffic.
                 ["stack"] = "gvisor",
                 ["sniff"] = true,
-                ["sniff_override_destination"] = false
+                // FakeIP + Meta MQTT TLS need sniffed domain as dial destination (sing-box 1.12).
+                ["sniff_override_destination"] = true
             });
         }
 
