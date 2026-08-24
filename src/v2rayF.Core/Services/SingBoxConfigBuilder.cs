@@ -35,6 +35,22 @@ public static class SingBoxConfigBuilder
         "accountkit.com"
     ];
 
+    /// <summary>
+    /// Android VpnService HTTP proxy exclusion list (wildcards + apex).
+    /// Meta MQTT must bypass CONNECT and use TUN; Play Store keeps the proxy.
+    /// </summary>
+    public static List<string> GetMetaHttpProxyExclusions()
+    {
+        var list = new List<string>(MetaDnsSuffixes.Length * 2);
+        foreach (var suffix in MetaDnsSuffixes)
+        {
+            list.Add("*." + suffix);
+            list.Add(suffix);
+        }
+
+        return list;
+    }
+
     public static string Build(
         ProxyServer server,
         AppSettings settings,

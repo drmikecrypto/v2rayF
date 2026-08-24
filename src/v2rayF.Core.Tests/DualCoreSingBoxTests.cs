@@ -320,6 +320,23 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void MetaHttpProxyExclusions_MirrorDnsSuffixes()
+    {
+        var excl = SingBoxConfigBuilder.GetMetaHttpProxyExclusions();
+        Assert.Contains("*.instagram.com", excl);
+        Assert.Contains("instagram.com", excl);
+        Assert.Contains("*.facebook.com", excl);
+        Assert.Contains("facebook.com", excl);
+        foreach (var suffix in SingBoxConfigBuilder.MetaDnsSuffixes)
+        {
+            Assert.Contains("*." + suffix, excl);
+            Assert.Contains(suffix, excl);
+        }
+
+        Assert.Equal(SingBoxConfigBuilder.MetaDnsSuffixes.Length * 2, excl.Count);
+    }
+
+    [Fact]
     public void BuildWithoutTun_OmitsHijackDnsRules()
     {
         var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-08-24
+
+### Fixed
+
+- Instagram **Direct** still offline after 2.3.2 — Meta hosts now **bypass VPN HTTP proxy** (`ProxyInfo` exclusion list) so MQTT uses TUN + real DNS; Play Store / Translate keep `10809`
+
 ## [2.3.2] - 2026-08-24
 
 ### Fixed
