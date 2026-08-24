@@ -121,8 +121,8 @@ public static class SingBoxConfigBuilder
                 ["address"] = new JsonArray { "172.19.0.1/30" },
                 ["auto_route"] = false,
                 ["strict_route"] = false,
-                // mixed: system TCP (Direct MQTT) + gVisor UDP (VpnService DNS hijack).
-                ["stack"] = "mixed",
+                // Full gVisor: VpnService inherited fd — system/mixed drops TUN traffic (v2.4.1 regression).
+                ["stack"] = "gvisor",
                 ["sniff"] = true,
                 ["sniff_override_destination"] = false
             });
@@ -194,17 +194,6 @@ public static class SingBoxConfigBuilder
             rules.Add(new JsonObject
             {
                 ["package_name"] = names,
-                ["outbound"] = "block"
-            });
-        }
-
-        // Chromium QUIC on TUN bypasses VPN HTTP proxy — block so Play Store/Translate use TCP → 10809.
-        if (hasTun)
-        {
-            rules.Add(new JsonObject
-            {
-                ["inbound"] = new JsonArray { "tun-in" },
-                ["protocol"] = "quic",
                 ["outbound"] = "block"
             });
         }

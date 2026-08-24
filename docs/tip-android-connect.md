@@ -5,9 +5,13 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.4.2 — restore internet after 2.4.1
+
+**2.4.2** fixes total offline on Connect (2.4.1 `mixed` TUN broke VpnService traffic). Update to **2.4.2**, Disconnect once, Private DNS Off → Connect. If Windows still looks dead with kill switch, Disconnect again or reboot.
+
 ## v2.4.1 — Play Store, Translate, Direct
 
-**2.4.1** blocks TUN QUIC (Play Store/Translate use HTTP proxy), restores **mixed** TUN stack for Instagram Direct, and waits for HTTP **10809** before Connected. Private DNS Off → Connect → force-stop Instagram once.
+**2.4.1** blocks TUN QUIC (Play Store/Translate use HTTP proxy), restores **mixed** TUN stack for Instagram Direct, and waits for HTTP **10809** before Connected. Private DNS Off → Connect → force-stop Instagram once. **If everything went offline, skip to 2.4.2.**
 
 ## v2.4.0 — App Network
 

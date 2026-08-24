@@ -39,7 +39,7 @@ Cross-platform **proxy / TUN client** that speaks the protocols you already past
 |-------|--------|
 | UI | Avalonia / .NET 10 (one codebase → desktop + APK) |
 | Classic outbounds (desktop) | **Xray-core** |
-| Android classic | **sing-box** TUN (`stack: mixed`) + HTTP proxy `10809` |
+| Android classic | **sing-box** TUN (`stack: gvisor`) + HTTP proxy `10809` |
 | Hy2 / TUIC / WG / anytls | **sing-box** (+ TUN `file_descriptor` on Android) |
 | Local listeners | `127.0.0.1:10808` SOCKS · `127.0.0.1:10809` HTTP |
 | Leak posture | DoH (default), IPv6 blackhole, kill switch, crash teardown |
@@ -55,7 +55,7 @@ Cross-platform **proxy / TUN client** that speaks the protocols you already past
         │
         ├──── system proxy / VpnService HTTP CONNECT ──► :10809
         │
-        └──── TUN (Xray WinTun │ sing-box mixed stack) ──► tun-in
+        └──── TUN (Xray WinTun │ sing-box gVisor stack) ──► tun-in
                     │
                     ▼
               core (Xray │ sing-box)

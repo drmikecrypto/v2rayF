@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-08-25
+
+### Fixed
+
+- **Everything offline after Connect on 2.4.1** — Android TUN stack restored to **gVisor** (inherited VpnService fd; `mixed` dropped all TUN traffic while local SOCKS/HTTP probes still passed); removed risky TUN QUIC block rule. Keeps Google/Meta real-DNS carve-outs and HTTP `10809` ready wait.
+
 ## [2.4.1] - 2026-08-25
 
 ### Fixed

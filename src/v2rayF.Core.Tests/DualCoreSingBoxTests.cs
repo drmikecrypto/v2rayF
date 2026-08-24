@@ -216,7 +216,7 @@ public class DualCoreSingBoxTests
         Assert.Null(tun["file_descriptor"]);
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
-        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
+        Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
         Assert.False(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
@@ -340,20 +340,18 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_UsesMixedStackAndBlocksQuic()
+    public void AndroidTunFd_UsesGvisorStackAndOmitsQuicBlock()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var root = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!;
         var tun = root["inbounds"]!.AsArray()
             .First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
-        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
+        Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
 
         var rules = root["route"]!["rules"]!.AsArray();
-        var quicBlock = rules.FirstOrDefault(r =>
-            r?["inbound"] is JsonArray &&
-            r["protocol"]?.GetValue<string>() == "quic" &&
+        Assert.DoesNotContain(rules, r =>
+            r?["protocol"]?.GetValue<string>() == "quic" &&
             r["outbound"]?.GetValue<string>() == "block");
-        Assert.NotNull(quicBlock);
     }
 
     [Fact]
