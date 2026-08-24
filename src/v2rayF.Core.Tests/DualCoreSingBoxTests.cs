@@ -216,7 +216,7 @@ public class DualCoreSingBoxTests
         Assert.Null(tun["file_descriptor"]);
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
-        Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
+        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
         Assert.False(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
@@ -333,7 +333,53 @@ public class DualCoreSingBoxTests
             Assert.Contains(suffix, excl);
         }
 
-        Assert.Equal(SingBoxConfigBuilder.MetaDnsSuffixes.Length * 2, excl.Count);
+        Assert.Equal(
+            SingBoxConfigBuilder.MetaDnsSuffixes.Length * 2 +
+            SingBoxConfigBuilder.MetaDnsExactHosts.Length * 2,
+            excl.Count);
+    }
+
+    [Fact]
+    public void AndroidTunFd_UsesMixedStackAndBlocksQuic()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var root = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!;
+        var tun = root["inbounds"]!.AsArray()
+            .First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Equal("mixed", tun["stack"]!.GetValue<string>());
+
+        var rules = root["route"]!["rules"]!.AsArray();
+        var quicBlock = rules.FirstOrDefault(r =>
+            r?["inbound"] is JsonArray &&
+            r["protocol"]?.GetValue<string>() == "quic" &&
+            r["outbound"]?.GetValue<string>() == "block");
+        Assert.NotNull(quicBlock);
+    }
+
+    [Fact]
+    public void AndroidTunFd_GoogleDnsBeforeFakeIp()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var dns = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!["dns"]!;
+        var dnsRules = dns["rules"]!.AsArray();
+
+        var googleIdx = -1;
+        var fakeIdx = -1;
+        for (var i = 0; i < dnsRules.Count; i++)
+        {
+            var r = dnsRules[i]!;
+            if (r["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
+                r["domain_suffix"] is JsonArray gs &&
+                gs.Any(s => s!.GetValue<string>() == "google.com"))
+                googleIdx = i;
+            if (r["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag &&
+                r["domain_suffix"] is null)
+                fakeIdx = i;
+        }
+
+        Assert.True(googleIdx >= 0, "expected Google domain_suffix → udp before FakeIP");
+        Assert.True(fakeIdx >= 0, "expected FakeIP catch-all");
+        Assert.True(googleIdx < fakeIdx);
     }
 
     [Fact]

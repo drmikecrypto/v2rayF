@@ -159,6 +159,18 @@ public sealed class LatencyService
             .ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Android TUN Connect gate: verify VPN HTTP proxy path (Play Store / Translate use 10809).
+    /// </summary>
+    public async Task<int?> MeasureConnectHealthViaHttpAsync(
+        int httpPort,
+        CancellationToken cancellationToken = default,
+        int timeoutMs = ConnectHealthProbeMs)
+    {
+        return await ProbeThroughHttpProxyAsync(httpPort, cancellationToken, timeoutMs, warmThenMeasure: true)
+            .ConfigureAwait(false);
+    }
+
     public async Task<int?> MeasureProxyPathAsync(
         ProxyServer server,
         CancellationToken cancellationToken = default,
@@ -394,6 +406,71 @@ public sealed class LatencyService
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             LastProbeError ??= "Proxy-path HTTPS probe timed out.";
+            return -1;
+        }
+
+        if (firstError is not null)
+            LastProbeError = StatusSanitizer.Scrub(firstError.Message);
+
+        return -1;
+    }
+
+    private async Task<int?> ProbeThroughHttpProxyAsync(
+        int httpPort,
+        CancellationToken cancellationToken,
+        int timeoutMs,
+        bool warmThenMeasure = false)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(timeoutMs);
+
+        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
+        var handler = new SocketsHttpHandler
+        {
+            Proxy = new WebProxy($"http://127.0.0.1:{httpPort}"),
+            UseProxy = true,
+            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs)
+        };
+
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+
+        Exception? firstError = null;
+        try
+        {
+            foreach (var url in PingUrls)
+            {
+                timeout.Token.ThrowIfCancellationRequested();
+
+                if (warmThenMeasure)
+                {
+                    _ = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                    timeout.Token.ThrowIfCancellationRequested();
+
+                    int? best = null;
+                    for (var i = 0; i < ConnectHealthTimedProbeCount; i++)
+                    {
+                        timeout.Token.ThrowIfCancellationRequested();
+                        var timed = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                        if (timed.Ok && timed.Ms >= 0)
+                            best = best is null ? timed.Ms : Math.Min(best.Value, timed.Ms);
+                        else
+                            firstError ??= timed.Error;
+                    }
+
+                    if (best is >= 0)
+                        return best;
+                    continue;
+                }
+
+                var one = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
+                if (one.Ok && one.Ms >= 0)
+                    return one.Ms;
+                firstError ??= one.Error;
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            LastProbeError ??= "HTTP proxy-path HTTPS probe timed out.";
             return -1;
         }
 

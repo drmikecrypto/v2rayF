@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-08-25
+
+### Fixed
+
+- **Play Store / Google Translate** offline on Connect — block TUN **QUIC** (forces TCP → VPN HTTP proxy `10809`); Google domains use **real DNS** before FakeIP; Connect waits for **10809** and probes HTTP proxy path
+- **Instagram Direct** still offline — restore Android TUN **`stack: mixed`** (system TCP for MQTT); expand Meta DNS/proxy exclusions (`fb.com`, `gateway.instagram.com`, …)
+
 ## [2.4.0] - 2026-08-24
 
 ### Added

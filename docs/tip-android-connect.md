@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.4.1 — Play Store, Translate, Direct
+
+**2.4.1** blocks TUN QUIC (Play Store/Translate use HTTP proxy), restores **mixed** TUN stack for Instagram Direct, and waits for HTTP **10809** before Connected. Private DNS Off → Connect → force-stop Instagram once.
+
 ## v2.4.0 — App Network
 
 **2.4.0** adds **App Network** (Settings): set apps to VPN, Direct (split), or Block. Live rates only while the panel is open. Existing bypass package names become Direct.

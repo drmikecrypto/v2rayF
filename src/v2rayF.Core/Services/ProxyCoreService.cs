@@ -148,7 +148,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
         LastConnectProbeMs = null;
-        var probeMs = await ProbeConnectPathAsync(server, healthBudget: null, cancellationToken)
+        var probeMs = await ProbeConnectPathAsync(server, useSingBox, tunFd, healthBudget: null, cancellationToken)
             .ConfigureAwait(false);
 
         // If DoH was off and the gate failed, one automatic Secure-DNS retry (no fragment).
@@ -174,7 +174,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             readyTimeout2.CancelAfter(ConnectTimeoutMs);
             await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
-            probeMs = await ProbeConnectPathAsync(server, healthBudget: null, cancellationToken)
+            probeMs = await ProbeConnectPathAsync(server, useSingBox, tunFd, healthBudget: null, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -182,7 +182,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
         {
             await StopAsync(cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(
-                "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.");
+                RequiresAndroidTunHttpProbe(useSingBox, tunFd)
+                    ? "Proxy path failed after connect (HTTP proxy 10809 probe timed out). Play Store needs the VPN HTTP proxy."
+                    : "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.");
         }
 
         LastConnectProbeMs = probeMs;
@@ -194,6 +196,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     private async Task<int?> ProbeConnectPathAsync(
         ProxyServer server,
+        bool useSingBox,
+        int? tunFd,
         int? healthBudget,
         CancellationToken cancellationToken)
     {
@@ -202,15 +206,28 @@ public sealed class ProxyCoreService : IAsyncDisposable
         probeCts.CancelAfter(budget);
         try
         {
-            return await _latency
+            var socksMs = await _latency
                 .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
                 .ConfigureAwait(false);
+            if (socksMs is null or < 0)
+                return socksMs;
+
+            if (!RequiresAndroidTunHttpProbe(useSingBox, tunFd))
+                return socksMs;
+
+            var httpMs = await _latency
+                .MeasureConnectHealthViaHttpAsync(XrayConfigBuilder.HttpPort, probeCts.Token, budget)
+                .ConfigureAwait(false);
+            return httpMs is null or < 0 ? httpMs : Math.Max(socksMs.Value, httpMs.Value);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return -1;
         }
     }
+
+    private static bool RequiresAndroidTunHttpProbe(bool useSingBox, int? tunFd) =>
+        useSingBox && tunFd is int fd && fd >= 0;
 
     private static AppSettings CloneSettingsWithDoH(AppSettings settings)
     {
@@ -421,15 +438,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 throw new InvalidOperationException(CoreStartupErrorFormatter.Format(error));
             }
 
-            if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
-                    .ConfigureAwait(false))
+            if (await IsCorePortsReadyAsync(useSingBox, tunFd, cancellationToken).ConfigureAwait(false))
                 return;
 
             await Task.Delay(CoreReadyPollMs, cancellationToken).ConfigureAwait(false);
         }
 
-        if (await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
-                .ConfigureAwait(false))
+        if (await IsCorePortsReadyAsync(useSingBox, tunFd, cancellationToken).ConfigureAwait(false))
             return;
 
         var coreLabel = CoreRuntime.CoreLabel(server);
@@ -446,6 +461,23 @@ public sealed class ProxyCoreService : IAsyncDisposable
             ? $"{coreLabel} core did not become ready in time."
             : $"{coreLabel} core did not become ready in time: {detail}";
         throw new TimeoutException(message);
+    }
+
+    private static async Task<bool> IsCorePortsReadyAsync(
+        bool useSingBox,
+        int? tunFd,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+                .ConfigureAwait(false))
+            return false;
+
+        if (RequiresAndroidTunHttpProbe(useSingBox, tunFd) &&
+            !await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.HttpPort, cancellationToken)
+                .ConfigureAwait(false))
+            return false;
+
+        return true;
     }
 
     private static async Task<bool> IsPortOpenAsync(string host, int port, CancellationToken cancellationToken)

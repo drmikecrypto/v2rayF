@@ -32,7 +32,28 @@ public static class SingBoxConfigBuilder
         "fbcdn.net",
         "fbsbx.com",
         "meta.com",
-        "accountkit.com"
+        "accountkit.com",
+        "fb.com",
+        "messenger.com"
+    ];
+
+    /// <summary>Meta hosts matched by exact name (suffix rules miss the apex).</summary>
+    public static readonly string[] MetaDnsExactHosts =
+    [
+        "graph.instagram.com",
+        "gateway.instagram.com"
+    ];
+
+    /// <summary>Play Store / Translate TUN fallback — real IPs, not FakeIP.</summary>
+    public static readonly string[] GoogleDnsSuffixes =
+    [
+        "google.com",
+        "googleapis.com",
+        "gstatic.com",
+        "googleusercontent.com",
+        "android.com",
+        "play.googleapis.com",
+        "ggpht.com"
     ];
 
     /// <summary>
@@ -46,6 +67,12 @@ public static class SingBoxConfigBuilder
         {
             list.Add("*." + suffix);
             list.Add(suffix);
+        }
+
+        foreach (var host in MetaDnsExactHosts)
+        {
+            list.Add(host);
+            list.Add("*." + host);
         }
 
         return list;
@@ -94,8 +121,8 @@ public static class SingBoxConfigBuilder
                 ["address"] = new JsonArray { "172.19.0.1/30" },
                 ["auto_route"] = false,
                 ["strict_route"] = false,
-                // Full gVisor: VpnService inherited fd — system/mixed still drop messaging-app TUN traffic.
-                ["stack"] = "gvisor",
+                // mixed: system TCP (Direct MQTT) + gVisor UDP (VpnService DNS hijack).
+                ["stack"] = "mixed",
                 ["sniff"] = true,
                 ["sniff_override_destination"] = false
             });
@@ -167,6 +194,17 @@ public static class SingBoxConfigBuilder
             rules.Add(new JsonObject
             {
                 ["package_name"] = names,
+                ["outbound"] = "block"
+            });
+        }
+
+        // Chromium QUIC on TUN bypasses VPN HTTP proxy — block so Play Store/Translate use TCP → 10809.
+        if (hasTun)
+        {
+            rules.Add(new JsonObject
+            {
+                ["inbound"] = new JsonArray { "tun-in" },
+                ["protocol"] = "quic",
                 ["outbound"] = "block"
             });
         }
@@ -251,6 +289,28 @@ public static class SingBoxConfigBuilder
             rules.Add(new JsonObject
             {
                 ["domain_suffix"] = metaSuffixes,
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = UdpDnsTag
+            });
+            if (MetaDnsExactHosts.Length > 0)
+            {
+                var metaExact = new JsonArray();
+                foreach (var host in MetaDnsExactHosts)
+                    metaExact.Add(host);
+                rules.Add(new JsonObject
+                {
+                    ["domain"] = metaExact,
+                    ["query_type"] = new JsonArray { "A", "AAAA" },
+                    ["server"] = UdpDnsTag
+                });
+            }
+
+            var googleSuffixes = new JsonArray();
+            foreach (var suffix in GoogleDnsSuffixes)
+                googleSuffixes.Add(suffix);
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = googleSuffixes,
                 ["query_type"] = new JsonArray { "A", "AAAA" },
                 ["server"] = UdpDnsTag
             });
