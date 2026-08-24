@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.3.2 — Play Store + Direct real DNS
+
+**2.3.2** restores VPN HTTP proxy (Play Store / Translate) and resolves Instagram/Facebook **without FakeIP** so Direct MQTT can dial public IPs. WhatsApp/Telegram stay on FakeIP.
+
 ## v2.3.1 — Instagram Direct (drop VPN HTTP proxy)
 
 **2.3.1** removes Android VPN HTTP proxy so Instagram **Direct** uses TUN like WhatsApp/Telegram. Feed still works via TUN. After Update: force-stop Instagram once.

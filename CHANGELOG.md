@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-08-24
+
+### Fixed
+
+- Restored Android VPN **HTTP proxy `10809`** — Play Store / Translate went offline after 2.3.1 removed `SetHttpProxy`
+- Instagram **Direct** MQTT now resolves via **real UDP DNS** (instagram.com / facebook.com suffixes) instead of FakeIP `198.18.x` without SNI; WhatsApp/Telegram stay on FakeIP
+
 ## [2.3.1] - 2026-08-24
 
 ### Fixed

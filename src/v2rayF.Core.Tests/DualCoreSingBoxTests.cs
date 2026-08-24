@@ -217,7 +217,7 @@ public class DualCoreSingBoxTests
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
         Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
-        Assert.True(tun["sniff_override_destination"]!.GetValue<bool>());
+        Assert.False(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -290,8 +290,29 @@ public class DualCoreSingBoxTests
         Assert.Equal(SingBoxConfigBuilder.FakeIpInet4Range, fake["inet4_range"]!.GetValue<string>());
         Assert.True(dns["independent_cache"]!.GetValue<bool>());
 
+        var dnsRules = dns["rules"]!.AsArray();
+        var metaIdx = -1;
+        var fakeIdx = -1;
+        for (var i = 0; i < dnsRules.Count; i++)
+        {
+            var r = dnsRules[i]!;
+            if (r["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
+                r["domain_suffix"] is JsonArray suffixes &&
+                suffixes.Any(s => s!.GetValue<string>() == "instagram.com"))
+                metaIdx = i;
+            if (r["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag &&
+                r["query_type"] is JsonArray qt &&
+                qt.Any(t => t!.GetValue<string>() == "A") &&
+                r["domain_suffix"] is null)
+                fakeIdx = i;
+        }
+
+        Assert.True(metaIdx >= 0, "expected Meta domain_suffix → udp before FakeIP");
+        Assert.True(fakeIdx >= 0, "expected catch-all FakeIP A/AAAA rule");
+        Assert.True(metaIdx < fakeIdx);
+
         Assert.Contains(
-            dns["rules"]!.AsArray(),
+            dnsRules,
             r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag &&
                  r["query_type"] is JsonArray qt &&
                  qt.Any(t => t!.GetValue<string>() == "A") &&

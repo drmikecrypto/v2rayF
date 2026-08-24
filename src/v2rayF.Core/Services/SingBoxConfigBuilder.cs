@@ -22,6 +22,19 @@ public static class SingBoxConfigBuilder
     public const string FakeIpDnsTag = "fakeip";
     public const string FakeIpInet4Range = "198.18.0.0/15";
 
+    /// <summary>Instagram Direct MQTT does not sniff SNI reliably — keep real IPs, not FakeIP.</summary>
+    public static readonly string[] MetaDnsSuffixes =
+    [
+        "instagram.com",
+        "cdninstagram.com",
+        "facebook.com",
+        "facebook.net",
+        "fbcdn.net",
+        "fbsbx.com",
+        "meta.com",
+        "accountkit.com"
+    ];
+
     public static string Build(
         ProxyServer server,
         AppSettings settings,
@@ -68,8 +81,7 @@ public static class SingBoxConfigBuilder
                 // Full gVisor: VpnService inherited fd — system/mixed still drop messaging-app TUN traffic.
                 ["stack"] = "gvisor",
                 ["sniff"] = true,
-                // FakeIP + Meta MQTT TLS need sniffed domain as dial destination (sing-box 1.12).
-                ["sniff_override_destination"] = true
+                ["sniff_override_destination"] = false
             });
         }
 
@@ -194,7 +206,7 @@ public static class SingBoxConfigBuilder
             });
         }
 
-        // FakeIP: apps get immediate A answers; real resolve happens in-core (WhatsApp/Telegram/Direct).
+        // FakeIP: apps get immediate A answers; real resolve happens in-core (WhatsApp/Telegram).
         if (useTun)
         {
             servers.Add(new JsonObject
@@ -202,6 +214,15 @@ public static class SingBoxConfigBuilder
                 ["type"] = "fakeip",
                 ["tag"] = FakeIpDnsTag,
                 ["inet4_range"] = FakeIpInet4Range
+            });
+            var metaSuffixes = new JsonArray();
+            foreach (var suffix in MetaDnsSuffixes)
+                metaSuffixes.Add(suffix);
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = metaSuffixes,
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = UdpDnsTag
             });
             rules.Add(new JsonObject
             {

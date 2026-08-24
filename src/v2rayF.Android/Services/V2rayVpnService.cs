@@ -89,9 +89,19 @@ public class V2rayVpnService : VpnService
             // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
             builder.AddDnsServer("172.19.0.1");
 
-            // Do not SetHttpProxy: Instagram Direct (MQTT) honors VPN HTTP proxy and breaks
-            // over CONNECT while feed works. Force all apps onto TUN (FakeIP + gVisor).
-            // mixed-http :10809 still listens for local probes.
+            // Chromium (Play Store / Translate / IG feed) needs VPN HTTP proxy. Direct MQTT
+            // ignores it and uses TUN; dropping this in 2.3.1 took Play Store offline.
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            {
+                try
+                {
+                    builder.SetHttpProxy(ProxyInfo.BuildDirectProxy("127.0.0.1", XrayConfigBuilder.HttpPort));
+                }
+                catch
+                {
+                    // Some OEMs reject VPN HTTP proxy; TUN still applies.
+                }
+            }
 
             try
             {
