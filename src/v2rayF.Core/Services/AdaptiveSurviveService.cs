@@ -100,6 +100,7 @@ public sealed class AdaptiveSurviveService
         DesktopDirectProcesses = s.DesktopDirectProcesses,
         DesktopBlockProcesses = s.DesktopBlockProcesses,
         LastGoodServerId = s.LastGoodServerId,
+        InstagramDirectHelperEnabled = s.InstagramDirectHelperEnabled,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
         AutoReconnectEnabled = s.AutoReconnectEnabled,
         LastSurviveTactic = s.LastSurviveTactic,

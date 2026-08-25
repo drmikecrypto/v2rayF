@@ -340,6 +340,35 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void AndroidTunFd_UdpDnsDetoursViaProxy()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var root = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!;
+        var udp = root["dns"]!["servers"]!.AsArray()
+            .First(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag)!;
+        Assert.Equal("proxy", udp["detour"]!.GetValue<string>());
+
+        var bootstrap = root["dns"]!["servers"]!.AsArray()
+            .FirstOrDefault(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag);
+        if (bootstrap is not null)
+            Assert.Equal("proxy", bootstrap["detour"]!.GetValue<string>());
+
+        Assert.Contains("edge-mqtt.facebook.com", SingBoxConfigBuilder.MetaDnsExactHosts);
+        Assert.Contains("mqtt-mini.facebook.com", SingBoxConfigBuilder.MetaDnsExactHosts);
+        Assert.Contains("threads.net", SingBoxConfigBuilder.MetaDnsSuffixes);
+    }
+
+    [Fact]
+    public void AndroidTunFd_ProxyOutboundHasDialDefaults()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var proxy = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+            ["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal("10s", proxy["connect_timeout"]!.GetValue<string>());
+        Assert.Equal("30s", proxy["tcp_keep_alive"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void AndroidTunFd_UsesGvisorStackAndOmitsQuicBlock()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
@@ -347,6 +376,7 @@ public class DualCoreSingBoxTests
         var tun = root["inbounds"]!.AsArray()
             .First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
         Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
+        Assert.Equal("5m", tun["udp_timeout"]!.GetValue<string>());
 
         var rules = root["route"]!["rules"]!.AsArray();
         Assert.DoesNotContain(rules, r =>

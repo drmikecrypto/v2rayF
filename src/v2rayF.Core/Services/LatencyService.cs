@@ -165,9 +165,10 @@ public sealed class LatencyService
     public async Task<int?> MeasureConnectHealthViaHttpAsync(
         int httpPort,
         CancellationToken cancellationToken = default,
-        int timeoutMs = ConnectHealthProbeMs)
+        int timeoutMs = ConnectHealthProbeMs,
+        bool warmThenMeasure = false)
     {
-        return await ProbeThroughHttpProxyAsync(httpPort, cancellationToken, timeoutMs, warmThenMeasure: true)
+        return await ProbeThroughHttpProxyAsync(httpPort, cancellationToken, timeoutMs, warmThenMeasure)
             .ConfigureAwait(false);
     }
 

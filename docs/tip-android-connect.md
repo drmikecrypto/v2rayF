@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.5.0 — Instagram Direct + faster Connect
+
+**2.5.0** keeps **gVisor** (do not use 2.4.1). Meta DNS goes through the proxy; MQTT hosts expanded; Connect probes run in parallel. Flow: Private DNS Off → Connect → **force-stop Instagram** once → open Direct. If Direct is still dark, enable **Split Instagram for Direct** in Settings (Instagram then uses clearnet). Keep that toggle off unless needed.
+
 ## v2.4.2 — restore internet after 2.4.1
 
 **2.4.2** fixes total offline on Connect (2.4.1 `mixed` TUN broke VpnService traffic). Update to **2.4.2**, Disconnect once, Private DNS Off → Connect. If Windows still looks dead with kill switch, Disconnect again or reboot.

@@ -18,7 +18,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int HealthPortTimeoutMs = 500;
     public const int HealthSocksFailThreshold = 3;
     public const int HealthSocksFailGapMs = 400;
-    public const int PathHealthIntervalMs = 60000;
+    public const int PathHealthIntervalMs = 45000;
     public const int PathHealthFailThreshold = 2;
     public const int PathHealthProbeMs = 8000;
     public const int PathHealthProbeVisionMs = 12000;
@@ -206,18 +206,25 @@ public sealed class ProxyCoreService : IAsyncDisposable
         probeCts.CancelAfter(budget);
         try
         {
-            var socksMs = await _latency
-                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
-                .ConfigureAwait(false);
+            if (!RequiresAndroidTunHttpProbe(useSingBox, tunFd))
+            {
+                return await _latency
+                    .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                    .ConfigureAwait(false);
+            }
+
+            // Parallel SOCKS + HTTP: SOCKS warms TLS; HTTP skips second warmup (faster Connect).
+            var socksTask = _latency.MeasureConnectHealthViaSocksAsync(
+                XrayConfigBuilder.SocksPort, probeCts.Token, budget);
+            var httpTask = _latency.MeasureConnectHealthViaHttpAsync(
+                XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false);
+            await Task.WhenAll(socksTask, httpTask).ConfigureAwait(false);
+
+            var socksMs = await socksTask.ConfigureAwait(false);
             if (socksMs is null or < 0)
                 return socksMs;
 
-            if (!RequiresAndroidTunHttpProbe(useSingBox, tunFd))
-                return socksMs;
-
-            var httpMs = await _latency
-                .MeasureConnectHealthViaHttpAsync(XrayConfigBuilder.HttpPort, probeCts.Token, budget)
-                .ConfigureAwait(false);
+            var httpMs = await httpTask.ConfigureAwait(false);
             return httpMs is null or < 0 ? httpMs : Math.Max(socksMs.Value, httpMs.Value);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -256,6 +263,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             AndroidBlockPackages = settings.AndroidBlockPackages,
             DesktopDirectProcesses = settings.DesktopDirectProcesses,
             DesktopBlockProcesses = settings.DesktopBlockProcesses,
+            InstagramDirectHelperEnabled = settings.InstagramDirectHelperEnabled,
             AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled,
             AutoReconnectEnabled = settings.AutoReconnectEnabled
         };

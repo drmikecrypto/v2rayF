@@ -34,15 +34,22 @@ public static class SingBoxConfigBuilder
         "meta.com",
         "accountkit.com",
         "fb.com",
-        "messenger.com"
+        "messenger.com",
+        "threads.net"
     ];
 
-    /// <summary>Meta hosts matched by exact name (suffix rules miss the apex).</summary>
+    /// <summary>Meta MQTT / realtime hosts (exact) + graph gateways.</summary>
     public static readonly string[] MetaDnsExactHosts =
     [
         "graph.instagram.com",
-        "gateway.instagram.com"
+        "gateway.instagram.com",
+        "edge-mqtt.facebook.com",
+        "mqtt-mini.facebook.com",
+        "z-m-gateway.facebook.com",
+        "b-graph.facebook.com"
     ];
+
+    public const string InstagramAndroidPackage = "com.instagram.android";
 
     /// <summary>Play Store / Translate TUN fallback — real IPs, not FakeIP.</summary>
     public static readonly string[] GoogleDnsSuffixes =
@@ -124,7 +131,9 @@ public static class SingBoxConfigBuilder
                 // Full gVisor: VpnService inherited fd — system/mixed drops TUN traffic (v2.4.1 regression).
                 ["stack"] = "gvisor",
                 ["sniff"] = true,
-                ["sniff_override_destination"] = false
+                ["sniff_override_destination"] = false,
+                // Long-lived FBNS / MQTT UDP paths — avoid aggressive idle cull.
+                ["udp_timeout"] = "5m"
             });
         }
 
@@ -224,12 +233,15 @@ public static class SingBoxConfigBuilder
 
         if (hasBootstrap)
         {
-            servers.Add(new JsonObject
+            var bootstrap = new JsonObject
             {
                 ["type"] = "udp",
                 ["tag"] = BootstrapDnsTag,
                 ["server"] = "1.1.1.1"
-            });
+            };
+            if (useTun)
+                bootstrap["detour"] = "proxy";
+            servers.Add(bootstrap);
             rules.Add(new JsonObject
             {
                 ["domain"] = new JsonArray { server.Address },
@@ -255,12 +267,16 @@ public static class SingBoxConfigBuilder
         }
         else
         {
-            servers.Add(new JsonObject
+            var udp = new JsonObject
             {
                 ["type"] = "udp",
                 ["tag"] = UdpDnsTag,
                 ["server"] = "1.1.1.1"
-            });
+            };
+            // TUN: resolve via proxy egress (clearnet 1.1.1.1 from VPN-excluded UID is often poisoned).
+            if (useTun)
+                udp["detour"] = "proxy";
+            servers.Add(udp);
         }
 
         // FakeIP: apps get immediate A answers; real resolve happens in-core (WhatsApp/Telegram).
@@ -335,6 +351,13 @@ public static class SingBoxConfigBuilder
         outbound["domain_resolver"] = BootstrapDnsTag;
     }
 
+    /// <summary>Dial defaults for long-lived MQTT / stable tunnels (sing-box 1.12+).</summary>
+    private static void ApplyOutboundDialDefaults(JsonObject outbound)
+    {
+        outbound["connect_timeout"] = "10s";
+        outbound["tcp_keep_alive"] = "30s";
+    }
+
     private static JsonObject BuildOutbound(ProxyServer server)
     {
         var outbound = server.Protocol switch
@@ -351,6 +374,7 @@ public static class SingBoxConfigBuilder
                 $"Protocol {server.Protocol} is not a sing-box outbound in this builder.")
         };
         ApplyDomainResolver(outbound, server);
+        ApplyOutboundDialDefaults(outbound);
         return outbound;
     }
 

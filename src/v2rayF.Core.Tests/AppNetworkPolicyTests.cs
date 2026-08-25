@@ -44,6 +44,22 @@ public class AppNetworkPolicyTests
     }
 
     [Fact]
+    public void SyncInstagramDirectHelper_AddsAndRemovesPackage()
+    {
+        var settings = new AppSettings { InstagramDirectHelperEnabled = true };
+        AppNetworkPolicy.SyncInstagramDirectHelper(settings);
+        Assert.Contains(
+            SingBoxConfigBuilder.InstagramAndroidPackage,
+            AppNetworkPolicy.GetDirectIds(settings, mobile: true));
+
+        settings.InstagramDirectHelperEnabled = false;
+        AppNetworkPolicy.SyncInstagramDirectHelper(settings);
+        Assert.DoesNotContain(
+            SingBoxConfigBuilder.InstagramAndroidPackage,
+            AppNetworkPolicy.GetDirectIds(settings, mobile: true));
+    }
+
+    [Fact]
     public void SelfPackage_CannotBeBlockedOrDirectListed()
     {
         var settings = new AppSettings();

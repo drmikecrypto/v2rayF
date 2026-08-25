@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-08-25
+
+### Fixed
+
+- Instagram **Direct** on Android TUN — Meta DNS (and bootstrap) resolve via **`detour: proxy`**; expanded MQTT hosts (`edge-mqtt`, `mqtt-mini`, `z-m-gateway`, `b-graph`, `threads.net`); longer TUN UDP idle; outbound `connect_timeout` / `tcp_keep_alive`
+- Faster Connect gate — parallel SOCKS + HTTP probes; HTTP skips second warmup when SOCKS already warmed the path
+- Path health probes idle traffic earlier (45s)
+
+### Added
+
+- Opt-in **Split Instagram for Direct** (Settings / App Network) — last-resort clearnet for `com.instagram.android` (off by default)
+- Connect status tip to force-stop Instagram once for Direct
+
 ## [2.4.2] - 2026-08-25
 
 ### Fixed
