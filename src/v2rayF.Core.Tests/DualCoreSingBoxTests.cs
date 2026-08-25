@@ -349,9 +349,8 @@ public class DualCoreSingBoxTests
         Assert.Equal("proxy", udp["detour"]!.GetValue<string>());
 
         var bootstrap = root["dns"]!["servers"]!.AsArray()
-            .FirstOrDefault(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag);
-        if (bootstrap is not null)
-            Assert.Equal("proxy", bootstrap["detour"]!.GetValue<string>());
+            .First(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag)!;
+        Assert.Null(bootstrap["detour"]);
 
         Assert.Contains("edge-mqtt.facebook.com", SingBoxConfigBuilder.MetaDnsExactHosts);
         Assert.Contains("mqtt-mini.facebook.com", SingBoxConfigBuilder.MetaDnsExactHosts);
@@ -365,7 +364,7 @@ public class DualCoreSingBoxTests
         var proxy = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
             ["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
         Assert.Equal("10s", proxy["connect_timeout"]!.GetValue<string>());
-        Assert.Equal("30s", proxy["tcp_keep_alive"]!.GetValue<string>());
+        Assert.Null(proxy["tcp_keep_alive"]);
     }
 
     [Fact]

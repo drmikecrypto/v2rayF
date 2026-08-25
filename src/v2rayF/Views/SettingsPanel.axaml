@@ -56,12 +56,6 @@
             <TextBlock Text="Per-app VPN / Direct / Block. Direct splits out of the VPN; Block denies internet while connected."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowAppNetwork}"/>
-            <CheckBox Content="Split Instagram for Direct (clearnet)"
-                      IsChecked="{Binding InstagramDirectHelperEnabled}"
-                      IsVisible="{Binding ShowAndroidBypass}"/>
-            <TextBlock Text="Last resort: Instagram uses clearnet so Direct MQTT works. Off by default — keep Instagram on VPN when possible."
-                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
-                       IsVisible="{Binding ShowAndroidBypass}"/>
             <Button Content="Open App Network"
                     Command="{Binding OpenAppNetworkCommand}"
                     IsVisible="{Binding ShowAppNetwork}"

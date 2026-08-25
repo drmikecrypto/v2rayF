@@ -105,23 +105,6 @@ public static class AppNetworkPolicy
             ? string.Equals(id, AndroidSelfPackage, StringComparison.OrdinalIgnoreCase)
             : id.Contains("v2rayF", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Sync Instagram Direct helper: when enabled, put Instagram on Direct (clearnet);
-    /// when disabled, move it back to VPN if it was Direct.
-    /// </summary>
-    public static void SyncInstagramDirectHelper(AppSettings settings)
-    {
-        const string pkg = SingBoxConfigBuilder.InstagramAndroidPackage;
-        if (settings.InstagramDirectHelperEnabled)
-        {
-            SetMode(settings, pkg, AppNetworkMode.Direct, mobile: true);
-            return;
-        }
-
-        if (GetMode(settings, pkg, mobile: true) == AppNetworkMode.Direct)
-            SetMode(settings, pkg, AppNetworkMode.Vpn, mobile: true);
-    }
-
     private static IReadOnlyList<string> FilterSelf(IEnumerable<string> ids, bool mobile) =>
         ids.Where(id => !IsSelfId(id, mobile)).ToList();
 }

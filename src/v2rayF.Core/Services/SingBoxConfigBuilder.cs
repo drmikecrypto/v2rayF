@@ -49,8 +49,6 @@ public static class SingBoxConfigBuilder
         "b-graph.facebook.com"
     ];
 
-    public const string InstagramAndroidPackage = "com.instagram.android";
-
     /// <summary>Play Store / Translate TUN fallback — real IPs, not FakeIP.</summary>
     public static readonly string[] GoogleDnsSuffixes =
     [
@@ -233,15 +231,13 @@ public static class SingBoxConfigBuilder
 
         if (hasBootstrap)
         {
-            var bootstrap = new JsonObject
+            // Bootstrap must stay clearnet — detour:proxy deadlocks with outbound domain_resolver.
+            servers.Add(new JsonObject
             {
                 ["type"] = "udp",
                 ["tag"] = BootstrapDnsTag,
                 ["server"] = "1.1.1.1"
-            };
-            if (useTun)
-                bootstrap["detour"] = "proxy";
-            servers.Add(bootstrap);
+            });
             rules.Add(new JsonObject
             {
                 ["domain"] = new JsonArray { server.Address },
@@ -351,11 +347,10 @@ public static class SingBoxConfigBuilder
         outbound["domain_resolver"] = BootstrapDnsTag;
     }
 
-    /// <summary>Dial defaults for long-lived MQTT / stable tunnels (sing-box 1.12+).</summary>
+    /// <summary>Dial defaults (sing-box 1.12+). tcp_keep_alive is 1.13-only — omit on bundled 1.12.</summary>
     private static void ApplyOutboundDialDefaults(JsonObject outbound)
     {
         outbound["connect_timeout"] = "10s";
-        outbound["tcp_keep_alive"] = "30s";
     }
 
     private static JsonObject BuildOutbound(ProxyServer server)

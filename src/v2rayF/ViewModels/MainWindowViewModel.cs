@@ -99,9 +99,6 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _adaptiveSurviveEnabled;
 
     [ObservableProperty]
-    private bool _instagramDirectHelperEnabled;
-
-    [ObservableProperty]
     private bool _autoReconnectEnabled = true;
 
     [ObservableProperty]
@@ -561,7 +558,6 @@ public partial class MainWindowViewModel : ViewModelBase
         SecureShareEnabled = settings.SecureShareEnabled;
         EnablePacketFragment = settings.EnablePacketFragment;
         AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled;
-        InstagramDirectHelperEnabled = settings.InstagramDirectHelperEnabled;
         AutoReconnectEnabled = settings.AutoReconnectEnabled;
         ShareListenAllInterfaces = settings.ShareListenAllInterfaces;
         SubscriptionViaProxy = settings.SubscriptionViaProxy;
@@ -593,15 +589,12 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.ShareListenAllInterfaces = ShareListenAllInterfaces;
         _settings.EnablePacketFragment = EnablePacketFragment;
         _settings.AdaptiveSurviveEnabled = AdaptiveSurviveEnabled;
-        _settings.InstagramDirectHelperEnabled = InstagramDirectHelperEnabled;
         _settings.AutoReconnectEnabled = AutoReconnectEnabled;
         _settings.SubscriptionViaProxy = SubscriptionViaProxy;
         _settings.AndroidBypassPackages = AndroidBypassPackages;
         _settings.AndroidBlockPackages = AndroidBlockPackages;
         _settings.DesktopDirectProcesses = DesktopDirectProcesses;
         _settings.DesktopBlockProcesses = DesktopBlockProcesses;
-        AppNetworkPolicy.SyncInstagramDirectHelper(_settings);
-        AndroidBypassPackages = _settings.AndroidBypassPackages;
         return _settings;
     }
 
@@ -913,7 +906,6 @@ public partial class MainWindowViewModel : ViewModelBase
                 _settings.DnsThroughProxy = payload.Settings.DnsThroughProxy;
                 _settings.EnablePacketFragment = payload.Settings.EnablePacketFragment;
                 _settings.AdaptiveSurviveEnabled = payload.Settings.AdaptiveSurviveEnabled;
-                _settings.InstagramDirectHelperEnabled = payload.Settings.InstagramDirectHelperEnabled;
                 if (!string.IsNullOrWhiteSpace(payload.Settings.SubscriptionUrl))
                     _settings.SubscriptionUrl = payload.Settings.SubscriptionUrl;
                 ApplySettingsToView(_settings);

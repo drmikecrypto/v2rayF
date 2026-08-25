@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0.1] - 2026-08-25
+
+### Fixed
+
+- **Connect hang** — “sing-box did not become ready in time” from bootstrap DNS `detour: proxy` deadlocking with outbound `domain_resolver`; bootstrap stays clearnet; app UDP DNS still uses proxy detour
+- Dropped outbound `tcp_keep_alive` (sing-box 1.13-only; bundled core is 1.12)
+
+### Removed
+
+- Settings **Split Instagram for Direct** toggle — use **App Network** if you intentionally want clearnet for Instagram; Instagram stays on VPN by default
+
 ## [2.5.0] - 2026-08-25
 
 ### Fixed

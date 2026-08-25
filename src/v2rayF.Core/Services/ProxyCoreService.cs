@@ -263,7 +263,6 @@ public sealed class ProxyCoreService : IAsyncDisposable
             AndroidBlockPackages = settings.AndroidBlockPackages,
             DesktopDirectProcesses = settings.DesktopDirectProcesses,
             DesktopBlockProcesses = settings.DesktopBlockProcesses,
-            InstagramDirectHelperEnabled = settings.InstagramDirectHelperEnabled,
             AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled,
             AutoReconnectEnabled = settings.AutoReconnectEnabled
         };

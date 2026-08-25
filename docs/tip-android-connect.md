@@ -5,9 +5,13 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.5.0.1 — Connect fix (use this)
+
+**2.5.0.1** fixes Connect hang on 2.5.0 (bootstrap DNS no longer detours through proxy). Removed the Instagram clearnet Settings toggle — Instagram stays on VPN; use **App Network** only if you want Direct/clearnet for a package. Private DNS Off → Connect → force-stop Instagram once for Direct.
+
 ## v2.5.0 — Instagram Direct + faster Connect
 
-**2.5.0** keeps **gVisor** (do not use 2.4.1). Meta DNS goes through the proxy; MQTT hosts expanded; Connect probes run in parallel. Flow: Private DNS Off → Connect → **force-stop Instagram** once → open Direct. If Direct is still dark, enable **Split Instagram for Direct** in Settings (Instagram then uses clearnet). Keep that toggle off unless needed.
+**2.5.0** keeps **gVisor** (do not use 2.4.1). Meta DNS via proxy detour + MQTT hosts + parallel Connect probes. **If Connect fails with “did not become ready”, update to 2.5.0.1.**
 
 ## v2.4.2 — restore internet after 2.4.1
 

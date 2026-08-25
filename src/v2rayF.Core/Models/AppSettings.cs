@@ -64,12 +64,6 @@ public sealed class AppSettings
     /// <summary>Process names (Desktop TUN) routed to blackhole (App Network Block).</summary>
     public string DesktopBlockProcesses { get; set; } = "";
 
-    /// <summary>
-    /// When true, excludes com.instagram.android from the VPN (clearnet) so Direct MQTT can work
-    /// without gVisor MQTT issues. Off by default — Instagram then leaves the tunnel.
-    /// </summary>
-    public bool InstagramDirectHelperEnabled { get; set; }
-
     public string LastGoodServerId { get; set; } = "";
 
     /// <summary>Escalate fragment / Sentinel DNS tactics when Smart Connect failover exhausts (opt-in; fragment is slow).</summary>
