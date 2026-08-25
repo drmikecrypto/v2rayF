@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.5.0.2 — WhatsApp + Instagram online
+
+**2.5.0.2** restores WhatsApp FakeIP dial override and lets Instagram use VPN HTTP proxy `10809` (like Google). Update → App Network VPN for both → Private DNS Off → Connect → force-stop Instagram and WhatsApp once. If only Direct stays dark, use App Network Direct for Instagram as a last resort.
+
 ## v2.5.0.1 — Connect fix (use this)
 
 **2.5.0.1** fixes Connect hang on 2.5.0 (bootstrap DNS no longer detours through proxy). Removed the Instagram clearnet Settings toggle — Instagram stays on VPN; use **App Network** only if you want Direct/clearnet for a package. Private DNS Off → Connect → force-stop Instagram once for Direct.

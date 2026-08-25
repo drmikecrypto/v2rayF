@@ -62,26 +62,12 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
-    /// Android VpnService HTTP proxy exclusion list (wildcards + apex).
-    /// Meta MQTT must bypass CONNECT and use TUN; Play Store keeps the proxy.
+    /// Android VpnService HTTP proxy exclusion list.
+    /// Empty since 2.5.0.2: Meta exclusions forced Instagram onto gVisor TUN (offline) while
+    /// Google stayed on 10809. Instagram HTTPS uses the VPN HTTP proxy like Play Store;
+    /// Meta real-DNS carve-out remains for any TUN paths.
     /// </summary>
-    public static List<string> GetMetaHttpProxyExclusions()
-    {
-        var list = new List<string>(MetaDnsSuffixes.Length * 2);
-        foreach (var suffix in MetaDnsSuffixes)
-        {
-            list.Add("*." + suffix);
-            list.Add(suffix);
-        }
-
-        foreach (var host in MetaDnsExactHosts)
-        {
-            list.Add(host);
-            list.Add("*." + host);
-        }
-
-        return list;
-    }
+    public static List<string> GetMetaHttpProxyExclusions() => [];
 
     public static string Build(
         ProxyServer server,
@@ -129,7 +115,8 @@ public static class SingBoxConfigBuilder
                 // Full gVisor: VpnService inherited fd — system/mixed drops TUN traffic (v2.4.1 regression).
                 ["stack"] = "gvisor",
                 ["sniff"] = true,
-                ["sniff_override_destination"] = false,
+                // FakeIP (WhatsApp/Telegram): rewrite dial target to sniffed domain, not 198.18.x
+                ["sniff_override_destination"] = true,
                 // Long-lived FBNS / MQTT UDP paths — avoid aggressive idle cull.
                 ["udp_timeout"] = "5m"
             });

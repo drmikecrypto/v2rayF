@@ -217,7 +217,7 @@ public class DualCoreSingBoxTests
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
         Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
-        Assert.False(tun["sniff_override_destination"]!.GetValue<bool>());
+        Assert.True(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -320,23 +320,10 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void MetaHttpProxyExclusions_MirrorDnsSuffixes()
+    public void MetaHttpProxyExclusions_AreEmptyForVpnHttpProxy()
     {
         var excl = SingBoxConfigBuilder.GetMetaHttpProxyExclusions();
-        Assert.Contains("*.instagram.com", excl);
-        Assert.Contains("instagram.com", excl);
-        Assert.Contains("*.facebook.com", excl);
-        Assert.Contains("facebook.com", excl);
-        foreach (var suffix in SingBoxConfigBuilder.MetaDnsSuffixes)
-        {
-            Assert.Contains("*." + suffix, excl);
-            Assert.Contains(suffix, excl);
-        }
-
-        Assert.Equal(
-            SingBoxConfigBuilder.MetaDnsSuffixes.Length * 2 +
-            SingBoxConfigBuilder.MetaDnsExactHosts.Length * 2,
-            excl.Count);
+        Assert.Empty(excl);
     }
 
     [Fact]

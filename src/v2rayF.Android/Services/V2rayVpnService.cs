@@ -89,8 +89,8 @@ public class V2rayVpnService : VpnService
             // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
             builder.AddDnsServer("172.19.0.1");
 
-            // Chromium (Play Store / Translate) needs VPN HTTP proxy. Meta hosts must bypass it —
-            // Instagram Direct MQTT fails over HTTP CONNECT; TUN + real DNS (2.3.2) handles them.
+            // Chromium (Play Store / Translate / Instagram HTTPS) needs VPN HTTP proxy.
+            // Meta host exclusions removed in 2.5.0.2 (forced IG onto broken gVisor TUN).
             if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {
                 try
