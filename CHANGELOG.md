@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.5.0.3] - 2026-08-25
+
+### Fixed
+
+- Instagram **Direct** offline while feed worked on 2.5.0.2 — exclude only MQTT/realtime hosts (`edge-mqtt`, `mqtt-mini`, `gateway.instagram.com`, …) from VPN HTTP proxy so MQTToT uses TUN + real DNS; feed/CDN stay on `10809`
+
 ## [2.5.0.2] - 2026-08-25
 
 ### Fixed

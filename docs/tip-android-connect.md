@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.5.0.3 — Instagram Direct (MQTT bypass)
+
+**2.5.0.3** keeps feed on VPN HTTP `10809` but routes Meta MQTT hosts over TUN (like V2Box). Update → Private DNS Off → Connect → force-stop Instagram once → open Direct. Feed/WhatsApp/Telegram/Google should stay OK.
+
 ## v2.5.0.2 — WhatsApp + Instagram online
 
 **2.5.0.2** restores WhatsApp FakeIP dial override and lets Instagram use VPN HTTP proxy `10809` (like Google). Update → App Network VPN for both → Private DNS Off → Connect → force-stop Instagram and WhatsApp once. If only Direct stays dark, use App Network Direct for Instagram as a last resort.

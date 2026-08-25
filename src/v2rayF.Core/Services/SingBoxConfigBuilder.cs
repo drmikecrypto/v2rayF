@@ -49,6 +49,12 @@ public static class SingBoxConfigBuilder
         "b-graph.facebook.com"
     ];
 
+    /// <summary>
+    /// Hosts that must bypass VPN HTTP CONNECT (Instagram Direct MQTToT).
+    /// Feed/CDN stay on 10809 — do not exclude apex instagram.com / facebook.com.
+    /// </summary>
+    public static readonly string[] MetaMqttHttpProxyExclusionHosts = MetaDnsExactHosts;
+
     /// <summary>Play Store / Translate TUN fallback — real IPs, not FakeIP.</summary>
     public static readonly string[] GoogleDnsSuffixes =
     [
@@ -62,13 +68,20 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
-    /// Android VpnService HTTP proxy exclusion list.
-    /// Empty since 2.5.0.2: Meta exclusions forced Instagram onto gVisor TUN (offline) while
-    /// Google stayed on 10809. Instagram HTTPS uses the VPN HTTP proxy like Play Store;
-    /// Meta real-DNS carve-out remains for any TUN paths.
+    /// Android VpnService HTTP proxy exclusion list — MQTT/realtime hosts only.
+    /// Full Meta suffixes blackholed Instagram on gVisor (pre-2.5.0.2); empty list trapped Direct in CONNECT.
     /// </summary>
-    public static List<string> GetMetaHttpProxyExclusions() => [];
+    public static List<string> GetMetaHttpProxyExclusions()
+    {
+        var list = new List<string>(MetaMqttHttpProxyExclusionHosts.Length * 2);
+        foreach (var host in MetaMqttHttpProxyExclusionHosts)
+        {
+            list.Add(host);
+            list.Add("*." + host);
+        }
 
+        return list;
+    }
     public static string Build(
         ProxyServer server,
         AppSettings settings,

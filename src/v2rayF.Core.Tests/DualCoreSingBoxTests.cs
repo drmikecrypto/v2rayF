@@ -320,10 +320,19 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void MetaHttpProxyExclusions_AreEmptyForVpnHttpProxy()
+    public void MetaHttpProxyExclusions_AreMqttHostsOnly()
     {
         var excl = SingBoxConfigBuilder.GetMetaHttpProxyExclusions();
-        Assert.Empty(excl);
+        Assert.Contains("edge-mqtt.facebook.com", excl);
+        Assert.Contains("*.edge-mqtt.facebook.com", excl);
+        Assert.Contains("mqtt-mini.facebook.com", excl);
+        Assert.Contains("gateway.instagram.com", excl);
+        Assert.Contains("graph.instagram.com", excl);
+        Assert.DoesNotContain("instagram.com", excl);
+        Assert.DoesNotContain("*.instagram.com", excl);
+        Assert.DoesNotContain("cdninstagram.com", excl);
+        Assert.DoesNotContain("facebook.com", excl);
+        Assert.Equal(SingBoxConfigBuilder.MetaMqttHttpProxyExclusionHosts.Length * 2, excl.Count);
     }
 
     [Fact]
