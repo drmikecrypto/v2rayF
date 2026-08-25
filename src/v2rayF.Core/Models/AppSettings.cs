@@ -21,6 +21,15 @@ public sealed class AppSettings
     /// <summary>When true, Connect ranks servers and prefers the fastest proxy-path peer.</summary>
     public bool SmartConnectEnabled { get; set; } = true;
 
+    /// <summary>On app open, rank all servers and select the fastest (throttled).</summary>
+    public bool StartupRankServersEnabled { get; set; } = true;
+
+    /// <summary>UTC timestamp of last background startup rank (ISO 8601).</summary>
+    public string LastStartupRankUtc { get; set; } = "";
+
+    /// <summary>Desktop TUN: route WNS/push domains through proxy (toast notifications).</summary>
+    public bool AllowDesktopNotificationRouting { get; set; } = true;
+
     public bool SmartMultipathEnabled { get; set; }
 
     /// <summary>Persisted list selection (server Id GUID string).</summary>

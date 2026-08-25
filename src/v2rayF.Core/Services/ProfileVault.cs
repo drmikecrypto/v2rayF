@@ -122,6 +122,8 @@ public sealed class ProfileVault
         CustomProxyRules = s.CustomProxyRules,
         CustomBlockRules = s.CustomBlockRules,
         SmartConnectEnabled = s.SmartConnectEnabled,
+        StartupRankServersEnabled = s.StartupRankServersEnabled,
+        AllowDesktopNotificationRouting = s.AllowDesktopNotificationRouting,
         SmartMultipathEnabled = s.SmartMultipathEnabled,
         SelectedServerId = s.SelectedServerId,
         KillSwitchEnabled = s.KillSwitchEnabled,

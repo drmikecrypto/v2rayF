@@ -18,10 +18,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int HealthPortTimeoutMs = 500;
     public const int HealthSocksFailThreshold = 3;
     public const int HealthSocksFailGapMs = 400;
-    public const int PathHealthIntervalMs = 45000;
-    public const int PathHealthFailThreshold = 2;
+    public const int PathHealthIntervalMs = 60000;
+    public const int PathHealthFailThreshold = 3;
     public const int PathHealthProbeMs = 8000;
     public const int PathHealthProbeVisionMs = 12000;
+    public const int NatKeepaliveIntervalMs = 25000;
+    public const int NatKeepaliveProbeMs = 2000;
 
     private readonly ICoreEnvironment _environment;
     private readonly LatencyService _latency;
@@ -248,6 +250,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
             EnableTunMode = settings.EnableTunMode,
             EnableSystemProxy = settings.EnableSystemProxy,
             SmartConnectEnabled = settings.SmartConnectEnabled,
+            StartupRankServersEnabled = settings.StartupRankServersEnabled,
+            LastStartupRankUtc = settings.LastStartupRankUtc,
+            AllowDesktopNotificationRouting = settings.AllowDesktopNotificationRouting,
             SmartMultipathEnabled = settings.SmartMultipathEnabled,
             KillSwitchEnabled = settings.KillSwitchEnabled,
             BlockIpv6 = settings.BlockIpv6,
@@ -313,6 +318,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         var consecutiveSocksFails = 0;
         var consecutivePathFails = 0;
         var lastPathProbeUtc = DateTimeOffset.UtcNow;
+        var lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -329,38 +335,66 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 {
                     consecutiveSocksFails = 0;
                     var now = DateTimeOffset.UtcNow;
-                    if ((now - lastPathProbeUtc).TotalMilliseconds >= PathHealthIntervalMs &&
-                        IsTrafficFlat(TrafficStatsHub.Shared.Latest))
+                    if (IsTrafficFlat(TrafficStatsHub.Shared.Latest))
                     {
-                        lastPathProbeUtc = now;
-                        var budget = GetPathHealthProbeMs(ActiveServer);
-                        int? pathMs;
-                        try
+                        if ((now - lastNatKeepaliveUtc).TotalMilliseconds >= NatKeepaliveIntervalMs)
                         {
-                            using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                            probeCts.CancelAfter(budget);
-                            pathMs = await _latency
-                                .MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
-                                .ConfigureAwait(false);
-                        }
-                        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-                        {
-                            pathMs = -1;
-                        }
-
-                        if (pathMs is null or < 0)
-                        {
-                            consecutivePathFails++;
-                            if (ShouldRaiseOnPathFails(consecutivePathFails))
+                            lastNatKeepaliveUtc = now;
+                            try
                             {
-                                RaiseUnexpectedStop();
-                                return;
+                                using var keepaliveCts =
+                                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                                keepaliveCts.CancelAfter(NatKeepaliveProbeMs);
+                                _ = await _latency
+                                    .MeasureViaSocksAsync(
+                                        XrayConfigBuilder.SocksPort,
+                                        keepaliveCts.Token,
+                                        NatKeepaliveProbeMs)
+                                    .ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                                // NAT keepalive is best-effort; path health decides drop.
+                            }
+                            catch
+                            {
+                                // ignore
                             }
                         }
-                        else
+
+                        if ((now - lastPathProbeUtc).TotalMilliseconds >= PathHealthIntervalMs)
                         {
-                            consecutivePathFails = 0;
-                            PathHealthOk?.Invoke(this, EventArgs.Empty);
+                            lastPathProbeUtc = now;
+                            var budget = GetPathHealthProbeMs(ActiveServer);
+                            int? pathMs;
+                            try
+                            {
+                                using var probeCts =
+                                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                                probeCts.CancelAfter(budget);
+                                pathMs = await _latency
+                                    .MeasureViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                                    .ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                                pathMs = -1;
+                            }
+
+                            if (pathMs is null or < 0)
+                            {
+                                consecutivePathFails++;
+                                if (ShouldRaiseOnPathFails(consecutivePathFails))
+                                {
+                                    RaiseUnexpectedStop();
+                                    return;
+                                }
+                            }
+                            else
+                            {
+                                consecutivePathFails = 0;
+                                PathHealthOk?.Invoke(this, EventArgs.Empty);
+                            }
                         }
                     }
 

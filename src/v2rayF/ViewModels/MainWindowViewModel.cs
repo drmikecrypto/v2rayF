@@ -25,6 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ProxyCoreService _proxyCore = new(AppServices.CoreEnvironment);
     private readonly LatencyService _latencyService = new(AppServices.CoreEnvironment);
     private readonly SmartConnectService _smartConnect;
+    private readonly ServerRankingCoordinator _startupRank;
     private readonly AdaptiveSurviveService _adaptiveSurvive = new();
     private readonly ProfileVault _vault = new();
     private readonly UpdateCheckService _updateCheck = new();
@@ -76,6 +77,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _smartConnectEnabled = true;
+
+    [ObservableProperty]
+    private bool _startupRankServersEnabled = true;
+
+    [ObservableProperty]
+    private bool _allowDesktopNotificationRouting = true;
 
     [ObservableProperty]
     private bool _smartMultipathEnabled;
@@ -289,6 +296,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel()
     {
         _smartConnect = new SmartConnectService(_latencyService);
+        _startupRank = new ServerRankingCoordinator(_latencyService);
         AppNetwork = new AppNetworkViewModel(
             getSettings: () =>
             {
@@ -401,6 +409,61 @@ public partial class MainWindowViewModel : ViewModelBase
 
         UpdateCoreStatus();
         _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
+        _ = RunStartupRankingIfNeededAsync();
+    }
+
+    private async Task RunStartupRankingIfNeededAsync()
+    {
+        if (Servers.Count == 0 ||
+            IsConnected ||
+            ConnectionState is ConnectionState.Connecting or ConnectionState.Connected or ConnectionState.Disconnecting)
+            return;
+
+        if (!ServerRankingCoordinator.ShouldRunStartupRank(_settings, DateTimeOffset.UtcNow))
+            return;
+
+        try
+        {
+            await SetOnUiAsync(() => StatusText = "Ranking servers…").ConfigureAwait(true);
+
+            var snapshot = Servers.ToList();
+            await _startupRank
+                .RankAllAsync(snapshot, _settings.EnablePacketFragment)
+                .ConfigureAwait(true);
+
+            var fastest = ServerRankingCoordinator.PickFastest(snapshot);
+            await SetOnUiAsync(() =>
+            {
+                ReorderServersByLatency();
+                if (fastest is not null)
+                {
+                    _suppressSelectionPersist = true;
+                    try
+                    {
+                        SelectedServer = Servers.FirstOrDefault(s => s.Id == fastest.Id) ?? fastest;
+                        _settings.SelectedServerId = fastest.Id.ToString();
+                    }
+                    finally
+                    {
+                        _suppressSelectionPersist = false;
+                    }
+
+                    StatusText = $"Fastest: {StatusSanitizer.Scrub(fastest.Name)}";
+                }
+                else
+                {
+                    StatusText = "Ranking complete — no reachable servers.";
+                }
+            }).ConfigureAwait(true);
+
+            _settings.LastStartupRankUtc = DateTimeOffset.UtcNow.ToString("O");
+            await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
+            await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Startup rank is best-effort; app stays usable.
+        }
     }
 
     private void RestoreSelectedServer()
@@ -551,6 +614,8 @@ public partial class MainWindowViewModel : ViewModelBase
         EnableSystemProxy = IsMobile ? false : settings.EnableSystemProxy;
         SubscriptionUrl = settings.SubscriptionUrl;
         SmartConnectEnabled = settings.SmartConnectEnabled;
+        StartupRankServersEnabled = settings.StartupRankServersEnabled;
+        AllowDesktopNotificationRouting = settings.AllowDesktopNotificationRouting;
         SmartMultipathEnabled = settings.SmartMultipathEnabled;
         KillSwitchEnabled = settings.KillSwitchEnabled;
         BlockIpv6 = settings.BlockIpv6;
@@ -580,6 +645,8 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.EnableSystemProxy = EnableSystemProxy;
         _settings.SubscriptionUrl = SubscriptionUrl.Trim();
         _settings.SmartConnectEnabled = SmartConnectEnabled;
+        _settings.StartupRankServersEnabled = StartupRankServersEnabled;
+        _settings.AllowDesktopNotificationRouting = AllowDesktopNotificationRouting;
         _settings.SmartMultipathEnabled = SmartMultipathEnabled;
         _settings.SelectedServerId = SelectedServer?.Id.ToString() ?? _settings.SelectedServerId;
         _settings.KillSwitchEnabled = KillSwitchEnabled;
@@ -968,31 +1035,21 @@ public partial class MainWindowViewModel : ViewModelBase
                     server.SetLatency(null);
             }).ConfigureAwait(true);
 
-            var tcpMs = new int?[snapshot.Count];
-            await Task.WhenAll(snapshot.Select(async (server, i) =>
-            {
-                tcpMs[i] = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
-            })).ConfigureAwait(true);
-
             await SetOnUiAsync(() => StatusText = "Verifying proxy path…").ConfigureAwait(true);
 
-            var fragment = _settings.EnablePacketFragment;
-            await Task.WhenAll(snapshot.Select(async (server, i) =>
-            {
-                if (LatencyService.ShouldSkipProxyPath(server, tcpMs[i]))
-                {
-                    RunOnUiThread(() => server.SetLatency(-1));
-                    return;
-                }
+            await _startupRank
+                .RankAllAsync(snapshot, _settings.EnablePacketFragment)
+                .ConfigureAwait(true);
 
-                var proxyMs = await _latencyService
-                    .MeasureProxyPathAsync(server, enableFragment: fragment)
-                    .ConfigureAwait(false);
-                var display = proxyMs is >= 0
-                    ? (tcpMs[i] is > 0 ? tcpMs[i] : proxyMs)
-                    : -1;
-                RunOnUiThread(() => server.SetLatency(display));
-            })).ConfigureAwait(true);
+            foreach (var server in snapshot)
+            {
+                var ranked = server;
+                RunOnUiThread(() =>
+                {
+                    var target = Servers.FirstOrDefault(s => s.Id == ranked.Id);
+                    target?.SetLatency(ranked.LatencyMs);
+                });
+            }
 
             await SetOnUiAsync(ReorderServersByLatency).ConfigureAwait(true);
             await _serverStore.SaveAsync(Servers).ConfigureAwait(true);

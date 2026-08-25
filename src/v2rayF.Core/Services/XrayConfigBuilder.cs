@@ -20,6 +20,15 @@ public static class XrayConfigBuilder
     /// <summary>Android VpnService MTU — inner 1500 + Xray overhead fragments on LTE.</summary>
     public const int AndroidTunMtu = 1280;
 
+    /// <summary>WNS / desktop push host suffixes — route via proxy under TUN.</summary>
+    public static readonly string[] WindowsNotificationDomainSuffixes =
+    [
+        "wns.windows.com",
+        "notify.windows.com",
+        "push.services.microsoft.com",
+        "mp.microsoft.com"
+    ];
+
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
     /// <summary>Options for minimal single-server Xray runtime (speedtest / probe).</summary>
@@ -453,6 +462,9 @@ public static class XrayConfigBuilder
             });
         }
 
+        if (settings.EnableTunMode && settings.AllowDesktopNotificationRouting)
+            AppendWindowsNotificationRules(rules);
+
         if (settings.BlockIpv6)
         {
             rules.Add(new JsonObject
@@ -625,6 +637,19 @@ public static class XrayConfigBuilder
             ["destOverride"] = destOverride,
             ["routeOnly"] = true
         };
+    }
+
+    private static void AppendWindowsNotificationRules(JsonArray rules)
+    {
+        foreach (var suffix in WindowsNotificationDomainSuffixes)
+        {
+            rules.Add(new JsonObject
+            {
+                ["type"] = "field",
+                ["domain"] = new JsonArray { $"domain:{suffix}" },
+                ["outboundTag"] = "proxy"
+            });
+        }
     }
 
     private static void AppendCustomRules(

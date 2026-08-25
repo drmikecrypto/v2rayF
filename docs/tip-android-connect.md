@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.0 — Instagram Direct (MQTT bypass + route rules)
+
+**2.6.0** adds `mqtt.facebook.com` / `gateway.facebook.com` and explicit sing-box TUN proxy routes for MQTT hosts. Update → Private DNS Off → Connect → force-stop Instagram once → open Direct. Feed/WhatsApp/Telegram/Google should stay OK.
+
 ## v2.5.0.3 — Instagram Direct (MQTT bypass)
 
 **2.5.0.3** keeps feed on VPN HTTP `10809` but routes Meta MQTT hosts over TUN (like V2Box). Update → Private DNS Off → Connect → force-stop Instagram once → open Direct. Feed/WhatsApp/Telegram/Google should stay OK.

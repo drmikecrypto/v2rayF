@@ -326,6 +326,8 @@ public class DualCoreSingBoxTests
         Assert.Contains("edge-mqtt.facebook.com", excl);
         Assert.Contains("*.edge-mqtt.facebook.com", excl);
         Assert.Contains("mqtt-mini.facebook.com", excl);
+        Assert.Contains("mqtt.facebook.com", excl);
+        Assert.Contains("gateway.facebook.com", excl);
         Assert.Contains("gateway.instagram.com", excl);
         Assert.Contains("graph.instagram.com", excl);
         Assert.DoesNotContain("instagram.com", excl);
@@ -333,6 +335,19 @@ public class DualCoreSingBoxTests
         Assert.DoesNotContain("cdninstagram.com", excl);
         Assert.DoesNotContain("facebook.com", excl);
         Assert.Equal(SingBoxConfigBuilder.MetaMqttHttpProxyExclusionHosts.Length * 2, excl.Count);
+    }
+
+    [Fact]
+    public void AndroidTunFd_MqttHostsRouteViaProxy()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))![
+            "route"]!["rules"]!.AsArray();
+        var mqttRule = rules.FirstOrDefault(r =>
+            r?["domain"] is JsonArray domains &&
+            domains.Any(d => d!.GetValue<string>() == "mqtt.facebook.com"));
+        Assert.NotNull(mqttRule);
+        Assert.Equal("proxy", mqttRule!["outbound"]!.GetValue<string>());
     }
 
     [Fact]

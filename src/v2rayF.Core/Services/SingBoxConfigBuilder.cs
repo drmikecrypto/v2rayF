@@ -45,6 +45,8 @@ public static class SingBoxConfigBuilder
         "gateway.instagram.com",
         "edge-mqtt.facebook.com",
         "mqtt-mini.facebook.com",
+        "mqtt.facebook.com",
+        "gateway.facebook.com",
         "z-m-gateway.facebook.com",
         "b-graph.facebook.com"
     ];
@@ -179,6 +181,15 @@ public static class SingBoxConfigBuilder
             {
                 ["ip_cidr"] = new JsonArray { "172.19.0.0/30" },
                 ["action"] = "hijack-dns"
+            });
+
+            var mqttDomains = new JsonArray();
+            foreach (var host in MetaMqttHttpProxyExclusionHosts)
+                mqttDomains.Add(host);
+            rules.Add(new JsonObject
+            {
+                ["domain"] = mqttDomains,
+                ["outbound"] = "proxy"
             });
         }
 

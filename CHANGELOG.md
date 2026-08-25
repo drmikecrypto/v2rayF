@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-08-26
+
+### Added
+
+- **Startup server ranking** — background rank on app open (throttled 10 min), fastest server auto-selected; manual pick preserved; Settings → *Rank servers on startup*
+- **NAT keepalive** — lightweight SOCKS ping every 25s when idle to keep NAT mappings warm
+- **Windows notification routing** — WNS/push domains route via proxy under desktop TUN; Settings → *Route Windows notifications via proxy*
+- **Instagram Direct** — `mqtt.facebook.com`, `gateway.facebook.com` + explicit sing-box TUN route rules for MQTT hosts
+
+### Changed
+
+- Path health interval **45s → 60s**, fail threshold **2 → 3** — fewer false disconnects on long idle sessions
+
 ## [2.5.0.3] - 2026-08-25
 
 ### Fixed

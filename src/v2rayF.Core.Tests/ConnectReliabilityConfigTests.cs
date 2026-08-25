@@ -334,6 +334,32 @@ public class SmartConnectShortlistTests
                 new Dictionary<string, AppTrafficSnapshot>());
     }
 
+    [Fact]
+    public void TunMode_WindowsNotificationDomains_RouteViaProxy()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var settings = new AppSettings { EnableTunMode = true, AllowDesktopNotificationRouting = true };
+        var rules = JsonNode.Parse(XrayConfigBuilder.Build(server, settings))!["routing"]!["rules"]!.AsArray();
+        foreach (var suffix in XrayConfigBuilder.WindowsNotificationDomainSuffixes)
+        {
+            Assert.Contains(rules, r =>
+                r?["domain"] is JsonArray domains &&
+                domains.Any(d => d!.GetValue<string>() == $"domain:{suffix}") &&
+                r["outboundTag"]?.GetValue<string>() == "proxy");
+        }
+    }
+
+    [Fact]
+    public void TunMode_NotificationRoutingOff_OmitsWnsRules()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var settings = new AppSettings { EnableTunMode = true, AllowDesktopNotificationRouting = false };
+        var rules = JsonNode.Parse(XrayConfigBuilder.Build(server, settings))!["routing"]!["rules"]!.AsArray();
+        Assert.DoesNotContain(rules, r =>
+            r?["domain"] is JsonArray domains &&
+            domains.Any(d => d!.GetValue<string>() == "domain:wns.windows.com"));
+    }
+
     private sealed class FakeEnv : ICoreEnvironment
     {
         public string GetDataDirectory() => Path.GetTempPath();
