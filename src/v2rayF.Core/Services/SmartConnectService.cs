@@ -68,50 +68,80 @@ public sealed class SmartConnectService
 
         var shortlist = BuildShortlist(tcpResults, reachable, preferred);
         var maxProbes = servers.Count >= 10 ? MaxProxyPathProbesLargeList : MaxProxyPathProbes;
+        var toProbe = shortlist.Take(maxProbes).ToList();
 
-        var ranked = new List<RankedServer>(shortlist.Count);
+        // Preferred / last-good is already index 0 — first parallel wave includes it.
+        var rankedBag = new System.Collections.Concurrent.ConcurrentDictionary<Guid, RankedServer>();
         var goodCount = 0;
-        var probed = 0;
-        foreach (var server in shortlist)
+        using var earlyCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var workers = Math.Max(1, _latency.WorkerCount);
+        using var gate = new SemaphoreSlim(workers, workers);
+
+        await Task.WhenAll(toProbe.Select(async server =>
         {
-            if (probed >= maxProbes || goodCount >= EarlyExitGoodPeers)
-                break;
+            if (Volatile.Read(ref goodCount) >= EarlyExitGoodPeers)
+                return;
 
-            cancellationToken.ThrowIfCancellationRequested();
-            probed++;
-
-            LatencyService.LatencyResult result;
             try
             {
-                using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                probeCts.CancelAfter(LatencyService.RankProbeTimeoutMs);
-                result = await _latency.MeasureDetailedAsync(server, probeCts.Token, enableFragment)
-                    .ConfigureAwait(false);
+                await gate.WaitAsync(earlyCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                result = new LatencyService.LatencyResult(null, -1, false);
+                return;
             }
 
-            var proxyMs = result.ProxyPathMs is > 0 ? result.ProxyPathMs.Value : int.MaxValue;
-            var tcpMs = result.TcpMs is > 0 ? result.TcpMs.Value : -1;
-            var realityBonus = string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) ? 5 : 0;
-            var score = result.ProxyPathOk ? Math.Max(0, proxyMs - realityBonus) : int.MaxValue - 1;
-            ranked.Add(new RankedServer(
-                server,
-                score,
-                proxyMs == int.MaxValue ? -1 : proxyMs,
-                result.ProxyPathOk,
-                tcpMs));
+            try
+            {
+                if (Volatile.Read(ref goodCount) >= EarlyExitGoodPeers)
+                    return;
 
-            if (result.ProxyPathOk)
-                goodCount++;
-        }
+                LatencyService.LatencyResult result;
+                try
+                {
+                    using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(earlyCts.Token);
+                    probeCts.CancelAfter(LatencyService.GetRankProbeTimeoutMs(server));
+                    result = await _latency.MeasureDetailedAsync(server, probeCts.Token, enableFragment)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    result = new LatencyService.LatencyResult(null, -1, false);
+                }
 
+                var proxyMs = result.ProxyPathMs is > 0 ? result.ProxyPathMs.Value : int.MaxValue;
+                var tcpMs = result.TcpMs is > 0 ? result.TcpMs.Value : -1;
+                var realityBonus = string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) ? 5 : 0;
+                var score = result.ProxyPathOk ? Math.Max(0, proxyMs - realityBonus) : int.MaxValue - 1;
+                rankedBag[server.Id] = new RankedServer(
+                    server,
+                    score,
+                    proxyMs == int.MaxValue ? -1 : proxyMs,
+                    result.ProxyPathOk,
+                    tcpMs);
+
+                if (result.ProxyPathOk && Interlocked.Increment(ref goodCount) >= EarlyExitGoodPeers)
+                {
+                    try { earlyCts.Cancel(); }
+                    catch (ObjectDisposedException) { /* race with dispose */ }
+                }
+            }
+            finally
+            {
+                try { gate.Release(); }
+                catch (ObjectDisposedException) { /* ignore */ }
+            }
+        })).ConfigureAwait(false);
+
+        var ranked = new List<RankedServer>(shortlist.Count);
         foreach (var server in shortlist)
         {
-            if (ranked.Any(r => r.Server.Id == server.Id))
+            if (rankedBag.TryGetValue(server.Id, out var entry))
+            {
+                ranked.Add(entry);
                 continue;
+            }
+
             var tcpMs = tcpResults.First(t => t.Server.Id == server.Id).TcpMs;
             ranked.Add(new RankedServer(server, int.MaxValue - 1, tcpMs == int.MaxValue ? -1 : tcpMs, false));
         }

@@ -15,7 +15,7 @@ namespace v2rayF.Services;
 
 public sealed class LatencyService
 {
-    /// <summary>Sequential fallbacks — never raced on a cold SOCKS.</summary>
+    /// <summary>Raced Connect/rank HTTPS probes — first success wins.</summary>
     public static readonly string[] PingUrls =
     [
         "https://cp.cloudflare.com/generate_204",
@@ -27,11 +27,13 @@ public sealed class LatencyService
 
     public const int TimeoutMs = 4000;
     public const int RankProbeTimeoutMs = 4000;
+    /// <summary>Cold Vision/REALITY core boot often needs more than 4s for rank proxy-path.</summary>
+    public const int RankProbeTimeoutVisionMs = 6000;
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
-    public const int ConnectHealthProbeMs = 12000;
+    public const int ConnectHealthProbeMs = 8000;
     /// <summary>Connect gate budget for Vision / REALITY.</summary>
-    public const int ConnectHealthProbeVisionMs = 16000;
+    public const int ConnectHealthProbeVisionMs = 12000;
     public const int TcpConnectTimeoutMs = 1500;
     public const int SocksPollTimeoutMs = 50;
     public const int HttpConnectTimeoutMs = 2000;
@@ -68,6 +70,14 @@ public sealed class LatencyService
             string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase))
             return ConnectHealthProbeVisionMs;
         return ConnectHealthProbeMs;
+    }
+
+    public static int GetRankProbeTimeoutMs(ProxyServer server)
+    {
+        if (ShareLinkParser.IsVisionFlow(server) ||
+            string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase))
+            return RankProbeTimeoutVisionMs;
+        return RankProbeTimeoutMs;
     }
 
     public readonly record struct LatencyResult(int? TcpMs, int? ProxyPathMs, bool ProxyPathOk)
@@ -369,51 +379,15 @@ public sealed class LatencyService
 
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
 
-        Exception? firstError = null;
         try
         {
-            foreach (var url in PingUrls)
-            {
-                timeout.Token.ThrowIfCancellationRequested();
-
-                if (warmThenMeasure)
-                {
-                    // Discard cold TLS handshake; timed sample is what we store as LastConnectProbeMs.
-                    _ = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                    timeout.Token.ThrowIfCancellationRequested();
-
-                    int? best = null;
-                    for (var i = 0; i < ConnectHealthTimedProbeCount; i++)
-                    {
-                        timeout.Token.ThrowIfCancellationRequested();
-                        var timed = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                        if (timed.Ok && timed.Ms >= 0)
-                            best = best is null ? timed.Ms : Math.Min(best.Value, timed.Ms);
-                        else
-                            firstError ??= timed.Error;
-                    }
-
-                    if (best is >= 0)
-                        return best;
-                    continue;
-                }
-
-                var one = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                if (one.Ok && one.Ms >= 0)
-                    return one.Ms;
-                firstError ??= one.Error;
-            }
+            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             LastProbeError ??= "Proxy-path HTTPS probe timed out.";
             return -1;
         }
-
-        if (firstError is not null)
-            LastProbeError = StatusSanitizer.Scrub(firstError.Message);
-
-        return -1;
     }
 
     private async Task<int?> ProbeThroughHttpProxyAsync(
@@ -435,48 +409,87 @@ public sealed class LatencyService
 
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
 
-        Exception? firstError = null;
         try
         {
-            foreach (var url in PingUrls)
-            {
-                timeout.Token.ThrowIfCancellationRequested();
-
-                if (warmThenMeasure)
-                {
-                    _ = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                    timeout.Token.ThrowIfCancellationRequested();
-
-                    int? best = null;
-                    for (var i = 0; i < ConnectHealthTimedProbeCount; i++)
-                    {
-                        timeout.Token.ThrowIfCancellationRequested();
-                        var timed = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                        if (timed.Ok && timed.Ms >= 0)
-                            best = best is null ? timed.Ms : Math.Min(best.Value, timed.Ms);
-                        else
-                            firstError ??= timed.Error;
-                    }
-
-                    if (best is >= 0)
-                        return best;
-                    continue;
-                }
-
-                var one = await ProbeOneAsync(client, url, timeout.Token).ConfigureAwait(false);
-                if (one.Ok && one.Ms >= 0)
-                    return one.Ms;
-                firstError ??= one.Error;
-            }
+            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             LastProbeError ??= "HTTP proxy-path HTTPS probe timed out.";
             return -1;
         }
+    }
 
-        if (firstError is not null)
-            LastProbeError = StatusSanitizer.Scrub(firstError.Message);
+    /// <summary>Race PingUrls; first successful GET wins (warmup+timed when Connect gate).</summary>
+    private async Task<int?> RacePingUrlsAsync(
+        HttpClient client,
+        CancellationToken cancellationToken,
+        bool warmThenMeasure)
+    {
+        using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var errorBox = new Exception?[1];
+        var tasks = PingUrls.Select(async url =>
+        {
+            try
+            {
+                if (warmThenMeasure)
+                {
+                    _ = await ProbeOneAsync(client, url, raceCts.Token).ConfigureAwait(false);
+                    raceCts.Token.ThrowIfCancellationRequested();
+
+                    int? best = null;
+                    for (var i = 0; i < ConnectHealthTimedProbeCount; i++)
+                    {
+                        raceCts.Token.ThrowIfCancellationRequested();
+                        var timed = await ProbeOneAsync(client, url, raceCts.Token).ConfigureAwait(false);
+                        if (timed.Ok && timed.Ms >= 0)
+                            best = best is null ? timed.Ms : Math.Min(best.Value, timed.Ms);
+                        else if (timed.Error is not null)
+                            Interlocked.CompareExchange(ref errorBox[0], timed.Error, null);
+                    }
+
+                    if (best is >= 0)
+                        return best;
+                    return (int?)-1;
+                }
+
+                var one = await ProbeOneAsync(client, url, raceCts.Token).ConfigureAwait(false);
+                if (one.Ok && one.Ms >= 0)
+                    return (int?)one.Ms;
+                if (one.Error is not null)
+                    Interlocked.CompareExchange(ref errorBox[0], one.Error, null);
+                return (int?)-1;
+            }
+            catch (OperationCanceledException)
+            {
+                return (int?)-1;
+            }
+        }).ToList();
+
+        while (tasks.Count > 0)
+        {
+            var finished = await Task.WhenAny(tasks).ConfigureAwait(false);
+            tasks.Remove(finished);
+            int? ms;
+            try
+            {
+                ms = await finished.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                continue;
+            }
+
+            if (ms is >= 0)
+            {
+                try { raceCts.Cancel(); }
+                catch (ObjectDisposedException) { /* ignore */ }
+                return ms;
+            }
+        }
+
+        if (errorBox[0] is not null)
+            LastProbeError = StatusSanitizer.Scrub(errorBox[0]!.Message);
 
         return -1;
     }

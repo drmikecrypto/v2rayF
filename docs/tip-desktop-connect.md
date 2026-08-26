@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.1 — faster Connect + Update
+
+**2.6.1** parallelizes Smart Connect ranking and races health probes so Connect feels snappy on Reality Vision, WS, gRPC, and the rest of the Sentinel set. In-app **Update** retries downloads and no longer hides the button when GitHub is briefly unreachable.
+
 ## v2.6.0 — Windows toast notifications
 
 **2.6.0** adds high-priority routing for WNS/push domains (`wns.windows.com`, `notify.windows.com`, `push.services.microsoft.com`, `mp.microsoft.com`) through the proxy when TUN is on. Settings → **Route Windows notifications via proxy** (on by default).

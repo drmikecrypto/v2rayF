@@ -514,32 +514,64 @@ public partial class MainWindowViewModel : ViewModelBase
                 await SetOnUiAsync(() => StatusText = "Checking for updates…").ConfigureAwait(true);
             }
 
-            var offer = await _updateCheck.CheckAsync(AppServices.Updater.ReleaseAssetFileName).ConfigureAwait(true);
+            var result = await _updateCheck
+                .CheckDetailedAsync(AppServices.Updater.ReleaseAssetFileName)
+                .ConfigureAwait(true);
             _lastUpdateCheckUtc = DateTimeOffset.UtcNow;
 
-            if (offer is null)
+            switch (result.Status)
             {
-                await SetOnUiAsync(() =>
-                {
-                    _pendingUpdate = null;
-                    UpdateAvailable = false;
-                    UpdateLabel = "";
-                    OnPropertyChanged(nameof(ShowUpdateChrome));
-                    if (userInitiated)
-                        StatusText = $"You are on v{AppVersion.Current} (latest).";
-                }).ConfigureAwait(true);
-                return;
-            }
+                case UpdateCheckStatus.Offer when result.Offer is not null:
+                    await SetOnUiAsync(() =>
+                    {
+                        _pendingUpdate = result.Offer;
+                        UpdateAvailable = true;
+                        UpdateLabel = result.Offer.Version;
+                        OnPropertyChanged(nameof(ShowUpdateChrome));
+                        if (!IsBusy && !IsUpdating && ConnectionState != ConnectionState.Connected)
+                            StatusText = $"v{result.Offer.Version} is available — tap Update.";
+                    }).ConfigureAwait(true);
+                    break;
 
-            await SetOnUiAsync(() =>
-            {
-                _pendingUpdate = offer;
-                UpdateAvailable = true;
-                UpdateLabel = offer.Version;
-                OnPropertyChanged(nameof(ShowUpdateChrome));
-                if (!IsBusy && !IsUpdating && ConnectionState != ConnectionState.Connected)
-                    StatusText = $"v{offer.Version} is available — tap Update.";
-            }).ConfigureAwait(true);
+                case UpdateCheckStatus.UpToDate:
+                    await SetOnUiAsync(() =>
+                    {
+                        _pendingUpdate = null;
+                        UpdateAvailable = false;
+                        UpdateLabel = "";
+                        OnPropertyChanged(nameof(ShowUpdateChrome));
+                        if (userInitiated)
+                            StatusText = $"You are on v{AppVersion.Current} (latest).";
+                    }).ConfigureAwait(true);
+                    break;
+
+                case UpdateCheckStatus.TransientError:
+                    // Keep prior offer visible — do not clear chrome on flaky GitHub.
+                    await SetOnUiAsync(() =>
+                    {
+                        OnPropertyChanged(nameof(ShowUpdateChrome));
+                        if (userInitiated)
+                            StatusText =
+                                $"Update check failed: {StatusSanitizer.Scrub(result.ErrorMessage ?? "network error")}";
+                    }).ConfigureAwait(true);
+                    break;
+
+                case UpdateCheckStatus.NoAsset:
+                    await SetOnUiAsync(() =>
+                    {
+                        if (_pendingUpdate is null)
+                        {
+                            UpdateAvailable = false;
+                            UpdateLabel = "";
+                        }
+
+                        OnPropertyChanged(nameof(ShowUpdateChrome));
+                        if (userInitiated)
+                            StatusText =
+                                $"Update package unavailable: {StatusSanitizer.Scrub(result.ErrorMessage ?? "no asset")}";
+                    }).ConfigureAwait(true);
+                    break;
+            }
         }
         catch (Exception ex)
         {
@@ -1225,12 +1257,76 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 await SetOnUiAsync(() => StatusText = "Connecting to fastest…").ConfigureAwait(true);
                 var serversSnapshot = Servers.ToList();
-                // No preferred / LastGood boost — true fastest by working path first.
-                _lastRanking = await _smartConnect.RankAsync(
+                ProxyServer? lastGood = null;
+                if (!string.IsNullOrWhiteSpace(settings.LastGoodServerId) &&
+                    Guid.TryParse(settings.LastGoodServerId, out var lastGoodId))
+                {
+                    lastGood = serversSnapshot.FirstOrDefault(s => s.Id == lastGoodId);
+                }
+
+                using var rankCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var rankTask = _smartConnect.RankAsync(
                     serversSnapshot,
-                    token,
+                    rankCts.Token,
                     settings.EnablePacketFragment,
-                    preferred: null).ConfigureAwait(false);
+                    preferred: lastGood);
+
+                // Race last-good Connect against ranking — cancel rank if last-good wins.
+                if (lastGood is not null)
+                {
+                    try
+                    {
+                        await SetOnUiAsync(() =>
+                        {
+                            _suppressSelectionSwitch = true;
+                            try { SelectedServer = lastGood; }
+                            finally { _suppressSelectionSwitch = false; }
+                            StatusText = $"Connecting to {StatusSanitizer.Scrub(lastGood.Name)}…";
+                        }).ConfigureAwait(true);
+
+                        if (IsMobile)
+                            await ConnectAndroidAsync(lastGood, settings, null, token).ConfigureAwait(false);
+                        else
+                            await ConnectDesktopAsync(lastGood, settings, null, token).ConfigureAwait(false);
+
+                        try { rankCts.Cancel(); }
+                        catch (ObjectDisposedException) { /* ignore */ }
+
+                        await ResumeOnUiAsync().ConfigureAwait(true);
+                        settings.LastGoodServerId = lastGood.Id.ToString();
+                        await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
+                        await _serverStore.SaveAsync(Servers).ConfigureAwait(false);
+                        await SetOnUiAsync(() =>
+                        {
+                            ConnectionState = ConnectionState.Connected;
+                            _autoReconnectAttempts = 0;
+                            UpdateSecureShareEndpoint();
+                        }).ConfigureAwait(true);
+                        return;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        try { rankCts.Cancel(); }
+                        catch (ObjectDisposedException) { /* ignore */ }
+                        throw;
+                    }
+                    catch
+                    {
+                        await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(false);
+                        await ResumeOnUiAsync().ConfigureAwait(true);
+                        await SetOnUiAsync(() => StatusText = "Connecting to fastest…").ConfigureAwait(true);
+                    }
+                }
+
+                try
+                {
+                    _lastRanking = await rankTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                {
+                    _lastRanking = [];
+                }
+
                 await ResumeOnUiAsync().ConfigureAwait(true);
                 await SetOnUiAsync(() =>
                 {
@@ -1242,7 +1338,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 candidates = _smartConnect.SelectConnectOrder(
                     _lastRanking,
                     preferred: null,
-                    lastGoodServerId: null);
+                    lastGoodServerId: settings.LastGoodServerId);
+
+                // Skip last-good if we already failed it above.
+                if (lastGood is not null)
+                    candidates = candidates.Where(s => s.Id != lastGood.Id).ToList();
 
                 if (candidates.Count == 0)
                 {
@@ -1257,11 +1357,13 @@ public partial class MainWindowViewModel : ViewModelBase
                         return;
                     }
 
-                    // Opt-in Survive only — never silently enable fragment for speed.
                     candidates = _smartConnect.SelectSurviveConnectOrder(
                         _lastRanking,
                         preferred: null,
-                        lastGoodServerId: null);
+                        lastGoodServerId: settings.LastGoodServerId);
+
+                    if (lastGood is not null)
+                        candidates = candidates.Where(s => s.Id != lastGood.Id).ToList();
 
                     if (candidates.Count == 0)
                     {

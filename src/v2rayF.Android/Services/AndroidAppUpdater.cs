@@ -24,13 +24,10 @@ public sealed class AndroidAppUpdater : IAppUpdater
 {
     public string ReleaseAssetFileName => "v2rayF-android-arm64.zip";
 
-    public Task ApplyUpdateAsync(UpdateOffer offer, IProgress<string>? progress, CancellationToken cancellationToken = default) =>
-        AndroidUiThread.InvokeAsync(() => ApplyOnUiThreadAsync(offer, progress, cancellationToken));
-
-    private static async Task ApplyOnUiThreadAsync(
+    public async Task ApplyUpdateAsync(
         UpdateOffer offer,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
         var ctx = Application.Context ?? throw new InvalidOperationException("Application context missing.");
         var cacheRoot = Path.Combine(ctx.CacheDir!.AbsolutePath, "updates");
@@ -38,54 +35,65 @@ public sealed class AndroidAppUpdater : IAppUpdater
         Directory.CreateDirectory(workDir);
 
         var zipPath = Path.Combine(workDir, offer.AssetFileName);
-        await UpdateDownloadHelper.DownloadAsync(offer.DownloadUrl, zipPath, progress, cancellationToken)
-            .ConfigureAwait(true);
-
-        if (!string.IsNullOrWhiteSpace(offer.Sha256))
-        {
-            progress?.Report("Verifying SHA256…");
-            UpdateDownloadHelper.VerifySha256(zipPath, offer.Sha256);
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                "Update package has no SHA256 checksum (digest or SHA256SUMS). Refusing to install.");
-        }
-
         var extractDir = Path.Combine(workDir, "files");
-        UpdateDownloadHelper.ExtractZip(zipPath, extractDir, progress);
+
+        // Heavy I/O off the UI thread — only hop back for PackageInstaller / StartActivity.
+        await Task.Run(async () =>
+        {
+            await UpdateDownloadHelper.DownloadAsync(offer.DownloadUrl, zipPath, progress, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!string.IsNullOrWhiteSpace(offer.Sha256))
+            {
+                progress?.Report("Verifying SHA256…");
+                UpdateDownloadHelper.VerifySha256(zipPath, offer.Sha256);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Update package has no SHA256 checksum (digest or SHA256SUMS). Refusing to install.");
+            }
+
+            UpdateDownloadHelper.ExtractZip(zipPath, extractDir, progress);
+        }, cancellationToken).ConfigureAwait(false);
 
         var apk = Directory.EnumerateFiles(extractDir, "*.apk", SearchOption.AllDirectories).FirstOrDefault()
             ?? throw new InvalidOperationException("Update package did not contain an APK.");
 
-        if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
+        await AndroidUiThread.InvokeAsync(() =>
         {
-            var pm = ctx.PackageManager!;
-            if (!pm.CanRequestPackageInstalls())
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.O)
             {
-                progress?.Report("Allow installs, then tap Update again.");
-                var settings = new Intent(global::Android.Provider.Settings.ActionManageUnknownAppSources,
-                    global::Android.Net.Uri.Parse("package:" + ctx.PackageName));
-                settings.AddFlags(ActivityFlags.NewTask);
-                ctx.StartActivity(settings);
-                throw new InvalidOperationException("Install permission required.");
+                var pm = ctx.PackageManager!;
+                if (!pm.CanRequestPackageInstalls())
+                {
+                    progress?.Report("Enable install from this source, then tap Update again.");
+                    var settings = new Intent(global::Android.Provider.Settings.ActionManageUnknownAppSources,
+                        global::Android.Net.Uri.Parse("package:" + ctx.PackageName));
+                    settings.AddFlags(ActivityFlags.NewTask);
+                    ctx.StartActivity(settings);
+                    throw new InvalidOperationException(
+                        "Enable install from this source, then tap Update again.");
+                }
             }
-        }
 
-        EnsureCompatibleSignature(ctx, apk);
+            EnsureCompatibleSignature(ctx, apk);
 
-        progress?.Report("Installing update…");
-        try
-        {
-            CommitViaPackageInstaller(ctx, apk);
-            progress?.Report("Confirm the system Install prompt…");
-        }
-        catch
-        {
-            progress?.Report("Opening system installer…");
-            OpenSystemInstaller(ctx, apk);
-            progress?.Report("Confirm the system Install prompt…");
-        }
+            progress?.Report("Installing update…");
+            try
+            {
+                CommitViaPackageInstaller(ctx, apk);
+                progress?.Report("Confirm the system Install prompt…");
+            }
+            catch
+            {
+                progress?.Report("Opening system installer…");
+                OpenSystemInstaller(ctx, apk);
+                progress?.Report("Confirm the system Install prompt…");
+            }
+
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
     }
 
     private static void EnsureCompatibleSignature(Context ctx, string apkPath)

@@ -53,8 +53,8 @@ public class VisionSpeedSettingsTests
     {
         var vision = new ProxyServer { Flow = "xtls-rprx-vision", Security = "reality", Network = "tcp" };
         var plain = new ProxyServer { Network = "tcp", Security = "tls" };
-        Assert.Equal(16000, LatencyService.GetConnectHealthProbeMs(vision));
-        Assert.Equal(12000, LatencyService.GetConnectHealthProbeMs(plain));
+        Assert.Equal(12000, LatencyService.GetConnectHealthProbeMs(vision));
+        Assert.Equal(8000, LatencyService.GetConnectHealthProbeMs(plain));
     }
 
     [Fact]

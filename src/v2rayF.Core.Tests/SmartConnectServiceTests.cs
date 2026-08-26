@@ -6,6 +6,34 @@ namespace v2rayF.Core.Tests;
 public class SmartConnectServiceTests
 {
     [Fact]
+    public void BuildShortlist_PreferredIsFirst()
+    {
+        var preferred = new ProxyServer { Name = "pref", Address = "9.9.9.9", Port = 443 };
+        var a = new ProxyServer { Name = "a", Address = "1.1.1.1", Port = 443 };
+        var b = new ProxyServer { Name = "b", Address = "2.2.2.2", Port = 443 };
+        var tcp = new[] { (a, 10), (b, 20), (preferred, 50) };
+        var reachable = tcp.Where(t => t.Item2 < int.MaxValue).Select(t => (t.Item1, t.Item2)).ToList();
+        var shortlist = SmartConnectService.BuildShortlist(tcp, reachable, preferred);
+        Assert.Equal(preferred.Id, shortlist[0].Id);
+    }
+
+    [Fact]
+    public void GetRankProbeTimeout_VisionGetsLongerBudget()
+    {
+        var vision = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            Address = "1.1.1.1",
+            Port = 443
+        };
+        var plain = new ProxyServer { Address = "1.1.1.1", Port = 443, Protocol = ProxyProtocol.VLESS };
+        Assert.Equal(6000, LatencyService.GetRankProbeTimeoutMs(vision));
+        Assert.Equal(4000, LatencyService.GetRankProbeTimeoutMs(plain));
+    }
+
+    [Fact]
     public void SelectConnectOrder_OnlyProxyPathOk()
     {
         var latency = new LatencyService(new FakeEnv());

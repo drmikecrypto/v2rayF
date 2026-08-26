@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +12,8 @@ namespace v2rayF.Services;
 
 public static class UpdateDownloadHelper
 {
+    public const int MaxDownloadAttempts = 3;
+
     private static readonly HttpClient Http = new()
     {
         Timeout = TimeSpan.FromMinutes(20)
@@ -50,15 +53,129 @@ public static class UpdateDownloadHelper
         EnsureAllowedDownloadUrl(url);
         Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
 
-        progress?.Report("Downloading update…");
-        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+        var partialPath = destPath + ".partial";
+        Exception? lastError = null;
 
-        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var output = File.Create(destPath);
-        await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
-        return destPath;
+        for (var attempt = 1; attempt <= MaxDownloadAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                progress?.Report(attempt == 1
+                    ? "Downloading update…"
+                    : $"Retrying download ({attempt}/{MaxDownloadAttempts})…");
+
+                await DownloadAttemptAsync(url, destPath, partialPath, progress, cancellationToken)
+                    .ConfigureAwait(false);
+                return destPath;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (IsTransientDownloadError(ex) && attempt < MaxDownloadAttempts)
+            {
+                lastError = ex;
+                var delayMs = 500 * (1 << (attempt - 1));
+                await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        throw lastError ?? new InvalidOperationException("Update download failed.");
+    }
+
+    private static bool IsTransientDownloadError(Exception ex)
+    {
+        if (ex is IOException or TimeoutException)
+            return true;
+        if (ex is InvalidOperationException ioe &&
+            ioe.Message.Contains("Content-Length", StringComparison.Ordinal))
+            return true;
+        if (ex is HttpRequestException http)
+        {
+            var code = http.StatusCode;
+            return code is null or
+                System.Net.HttpStatusCode.RequestTimeout or
+                System.Net.HttpStatusCode.TooManyRequests or
+                >= System.Net.HttpStatusCode.InternalServerError;
+        }
+
+        return false;
+    }
+
+    private static async Task DownloadAttemptAsync(
+        string url,
+        string destPath,
+        string partialPath,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        long existing = 0;
+        if (File.Exists(partialPath))
+            existing = new FileInfo(partialPath).Length;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (existing > 0)
+            request.Headers.Range = new RangeHeaderValue(existing, null);
+
+        using var response = await Http.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var resume = existing > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent;
+        if (!resume && existing > 0 && response.IsSuccessStatusCode)
+        {
+            // Server ignored Range — restart.
+            existing = 0;
+            try { File.Delete(partialPath); }
+            catch { /* ignore */ }
+        }
+
+        if (!resume)
+            response.EnsureSuccessStatusCode();
+        else if (response.StatusCode != System.Net.HttpStatusCode.PartialContent &&
+                 !response.IsSuccessStatusCode)
+            response.EnsureSuccessStatusCode();
+
+        var expectedTotal = response.Content.Headers.ContentLength;
+        if (resume && expectedTotal is long remaining)
+            expectedTotal = existing + remaining;
+        else if (!resume)
+            expectedTotal = response.Content.Headers.ContentLength;
+
+        await using var input = await response.Content.ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await using (var output = new FileStream(
+                         partialPath,
+                         resume ? FileMode.Append : FileMode.Create,
+                         FileAccess.Write,
+                         FileShare.None))
+        {
+            var buffer = new byte[81920];
+            long written = existing;
+            int read;
+            while ((read = await input.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
+                       .ConfigureAwait(false)) > 0)
+            {
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                written += read;
+                if (expectedTotal is > 0 && written % (512 * 1024) < read)
+                {
+                    var pct = (int)(written * 100 / expectedTotal.Value);
+                    progress?.Report($"Downloading update… {pct}%");
+                }
+            }
+
+            if (expectedTotal is long len && written != len)
+                throw new InvalidOperationException(
+                    $"Content-Length mismatch: expected {len} bytes, got {written}.");
+        }
+
+        if (File.Exists(destPath))
+            File.Delete(destPath);
+        File.Move(partialPath, destPath);
     }
 
     /// <summary>Verifies SHA256 hex digest of a file. Throws on mismatch.</summary>
@@ -71,10 +188,18 @@ public static class UpdateDownloadHelper
         if (expected.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
             expected = expected["sha256:".Length..].Trim();
 
-        using var stream = File.OpenRead(filePath);
-        var hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+        string hash;
+        using (var stream = File.OpenRead(filePath))
+            hash = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+
         if (!hash.Equals(expected, StringComparison.OrdinalIgnoreCase))
+        {
+            try { File.Delete(filePath); }
+            catch { /* ignore */ }
+            try { File.Delete(filePath + ".partial"); }
+            catch { /* ignore */ }
             throw new InvalidOperationException("Update SHA256 mismatch — refusing to install.");
+        }
     }
 
     public static string ExtractZip(string zipPath, string extractDir, IProgress<string>? progress)

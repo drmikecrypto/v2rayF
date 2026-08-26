@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.1] - 2026-08-26
+
+### Changed
+
+- **Faster Smart Connect** — parallel proxy-path ranking (worker pool) with early-exit; Vision/REALITY rank budget 6s; race CF/gstatic/Google health probes
+- **Faster Connect gate** — health budgets **8s** / Vision-Reality **12s** (was 12s/16s)
+- **Last-good race** — try previous successful server while ranking runs in the background
+
+### Fixed
+
+- **Update button** — GitHub/network errors no longer clear a known offer or pretend “you’re latest”
+- **Update download** — 3× retry with Range resume + Content-Length check
+- **Desktop Update** — wait on parent PID, locked-file copy retries, refuse Exit if updater script fails to start
+- **Android Update** — download/hash/extract off UI thread; clearer unknown-sources message
+
 ## [2.6.0] - 2026-08-26
 
 ### Added

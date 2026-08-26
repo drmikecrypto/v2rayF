@@ -15,7 +15,7 @@ public class LatencySocksProxyTests
     }
 
     [Fact]
-    public void ProbeUrls_AreSequentialCloudflareFirst_NotRacedHomepage()
+    public void ProbeUrls_CloudflareFirst_RacedFallbacks_NotHomepage()
     {
         Assert.Equal("https://cp.cloudflare.com/generate_204", LatencyService.PingUrls[0]);
         Assert.Equal(LatencyService.GoogleProbeUrl, LatencyService.PingUrls[0]);
@@ -23,8 +23,8 @@ public class LatencySocksProxyTests
         Assert.Equal(1, LatencyService.TimedProbeCount);
         Assert.Equal(1, LatencyService.ConnectHealthTimedProbeCount);
         Assert.Equal(2000, LatencyService.HttpConnectTimeoutMs);
-        Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);
-        Assert.Equal(16000, LatencyService.ConnectHealthProbeVisionMs);
+        Assert.Equal(8000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(12000, LatencyService.ConnectHealthProbeVisionMs);
         Assert.Equal(50, LatencyService.SocksPollTimeoutMs);
         Assert.Equal(3, LatencyService.ResolveWorkerCount(mobile: false));
         Assert.Equal(2, LatencyService.ResolveWorkerCount(mobile: true));

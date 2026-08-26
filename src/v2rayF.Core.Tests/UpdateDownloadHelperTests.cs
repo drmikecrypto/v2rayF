@@ -69,7 +69,7 @@ public class UpdateDownloadHelperTests
     }
 
     [Fact]
-    public void VerifySha256_RejectsMismatch()
+    public void VerifySha256_RejectsMismatchAndDeletesFile()
     {
         var path = Path.Combine(Path.GetTempPath(), $"v2rayf-hash-{Guid.NewGuid():N}.bin");
         try
@@ -77,6 +77,7 @@ public class UpdateDownloadHelperTests
             File.WriteAllBytes(path, Encoding.UTF8.GetBytes("abc"));
             Assert.Throws<InvalidOperationException>(() =>
                 UpdateDownloadHelper.VerifySha256(path, new string('0', 64)));
+            Assert.False(File.Exists(path));
         }
         finally
         {

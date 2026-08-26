@@ -18,6 +18,7 @@ public sealed class DesktopAppUpdater : IAppUpdater
         var workDir = Path.Combine(dataDir, "updates", offer.Version);
         var zipPath = Path.Combine(workDir, offer.AssetFileName);
         var extractDir = Path.Combine(workDir, "files");
+        var logPath = Path.Combine(dataDir, "update-last.log");
 
         await UpdateDownloadHelper.DownloadAsync(offer.DownloadUrl, zipPath, progress, cancellationToken)
             .ConfigureAwait(false);
@@ -40,7 +41,8 @@ public sealed class DesktopAppUpdater : IAppUpdater
         EnsureAppDirectoryWritable(appDir);
 
         var exePath = ResolveExecutablePath(appDir);
-        var scriptPath = WriteUpdaterScript(appDir, extractDir, exePath);
+        var pid = Environment.ProcessId;
+        var scriptPath = WriteUpdaterScript(appDir, extractDir, exePath, pid, logPath);
 
         progress?.Report("Restarting with new version…");
         LaunchDetached(scriptPath);
@@ -101,25 +103,51 @@ public sealed class DesktopAppUpdater : IAppUpdater
     private static string PsLiteral(string path) =>
         "'" + path.Replace("'", "''", StringComparison.Ordinal) + "'";
 
-    private static string WriteUpdaterScript(string appDir, string stageDir, string exePath)
+    private static string WriteUpdaterScript(string appDir, string stageDir, string exePath, int pid, string logPath)
     {
         var scriptDir = Path.Combine(Path.GetTempPath(), "v2rayF-updater");
         Directory.CreateDirectory(scriptDir);
         var stamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-        var processName = Path.GetFileNameWithoutExtension(exePath);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
             var ps1 = Path.Combine(scriptDir, $"apply-{stamp}.ps1");
             var content = $@"
 $ErrorActionPreference = 'Stop'
-Start-Sleep -Seconds 2
-while (Get-Process -Name '{processName}' -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 400 }}
-$src = {PsLiteral(stageDir)}
-$dst = {PsLiteral(appDir)}
-Copy-Item -Path (Join-Path $src '*') -Destination $dst -Recurse -Force
-Start-Process -FilePath {PsLiteral(exePath)}
-Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+$log = {PsLiteral(logPath)}
+function Write-Log([string]$m) {{ Add-Content -LiteralPath $log -Value ((Get-Date).ToString('o') + ' ' + $m) -ErrorAction SilentlyContinue }}
+try {{
+  Write-Log 'updater started'
+  Start-Sleep -Seconds 2
+  $deadline = (Get-Date).AddMinutes(2)
+  while ((Get-Date) -lt $deadline) {{
+    $p = Get-Process -Id {pid} -ErrorAction SilentlyContinue
+    if (-not $p) {{ break }}
+    Start-Sleep -Milliseconds 400
+  }}
+  $src = {PsLiteral(stageDir)}
+  $dst = {PsLiteral(appDir)}
+  $ok = $false
+  for ($i = 0; $i -lt 30; $i++) {{
+    try {{
+      Copy-Item -Path (Join-Path $src '*') -Destination $dst -Recurse -Force
+      $ok = $true
+      break
+    }} catch {{
+      Write-Log (""copy retry $($i+1): $($_.Exception.Message)"")
+      Start-Sleep -Milliseconds 500
+    }}
+  }}
+  if (-not $ok) {{ throw 'Copy failed after retries (files may be locked).' }}
+  Write-Log 'copy ok'
+  Start-Process -FilePath {PsLiteral(exePath)}
+  Write-Log 'restarted'
+}} catch {{
+  Write-Log (""FAILED: $($_.Exception.Message)"")
+  throw
+}} finally {{
+  Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
+}}
 ";
             File.WriteAllText(ps1, content);
             return ps1;
@@ -128,11 +156,28 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
         var sh = Path.Combine(scriptDir, $"apply-{stamp}.sh");
         var shell = $@"#!/usr/bin/env bash
 set -euo pipefail
+LOG={BashQuote(logPath)}
+log() {{ echo ""$(date -Iseconds) $*"" >> ""$LOG"" 2>/dev/null || true; }}
+log 'updater started'
 sleep 2
-while pgrep -x '{processName}' >/dev/null 2>&1; do sleep 0.4; done
-cp -R ""{stageDir}/""* ""{appDir}/""
-chmod +x ""{exePath}"" ""{appDir}/cores/xray"" 2>/dev/null || true
-nohup ""{exePath}"" >/dev/null 2>&1 &
+deadline=$((SECONDS+120))
+while kill -0 {pid} 2>/dev/null; do
+  if (( SECONDS >= deadline )); then break; fi
+  sleep 0.4
+done
+src={BashQuote(stageDir)}
+dst={BashQuote(appDir)}
+ok=0
+for i in $(seq 1 30); do
+  if cp -R ""$src/""* ""$dst/"" 2>>""$LOG""; then ok=1; break; fi
+  log ""copy retry $i""
+  sleep 0.5
+done
+if [[ ""$ok"" -ne 1 ]]; then log 'copy failed'; exit 1; fi
+log 'copy ok'
+chmod +x {BashQuote(exePath)} ""$dst/cores/xray"" 2>/dev/null || true
+nohup {BashQuote(exePath)} >/dev/null 2>&1 &
+log 'restarted'
 rm -f ""$0""
 ";
         File.WriteAllText(sh, shell);
@@ -144,26 +189,39 @@ rm -f ""$0""
         return sh;
     }
 
+    private static string BashQuote(string path) =>
+        "'" + path.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
+
     private static void LaunchDetached(string scriptPath)
     {
+        Process? proc;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Process.Start(new ProcessStartInfo
+            proc = Process.Start(new ProcessStartInfo
             {
                 FileName = "powershell.exe",
                 Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\"",
                 CreateNoWindow = true,
                 UseShellExecute = false
             });
-            return;
+        }
+        else
+        {
+            proc = Process.Start(new ProcessStartInfo
+            {
+                FileName = "/bin/bash",
+                Arguments = scriptPath,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
         }
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "/bin/bash",
-            Arguments = scriptPath,
-            CreateNoWindow = true,
-            UseShellExecute = false
-        });
+        if (proc is null)
+            throw new InvalidOperationException("Failed to start updater script — update aborted.");
+
+        // Brief settle so Start failures surface before we exit the app.
+        Thread.Sleep(200);
+        if (proc.HasExited && proc.ExitCode != 0)
+            throw new InvalidOperationException($"Updater script exited early (code {proc.ExitCode}).");
     }
 }
