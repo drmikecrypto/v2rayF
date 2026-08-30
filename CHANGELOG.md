@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2] - 2026-08-30
+
+### Added
+
+- **Wake/resume recovery** — verify live path on Android `OnResume` and desktop window activate; silent reconnect when probe fails
+- **Always-on path health** — probe every 90s when traffic is active (not only when idle)
+
+### Changed
+
+- Idle path health interval **60s → 45s**; health probes use full Connect gate (SOCKS+HTTP on Android TUN)
+- Auto-reconnect attempts **2 → 3**; Settings label *Auto-reconnect after drop*
+- After reconnect exhaustion: **release kill switch** so clearnet works — status prompts Connect instead of total blackout
+
+### Fixed
+
+- **Connected but no internet** after lock/sleep/idle — resume verify + stronger zombie detection
+- Android captive-portal validation re-run via `NotifyVpnReady` after successful wake verify
+
 ## [2.6.1] - 2026-08-26
 
 ### Changed

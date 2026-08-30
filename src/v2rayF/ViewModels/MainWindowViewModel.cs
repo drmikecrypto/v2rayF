@@ -365,6 +365,7 @@ public partial class MainWindowViewModel : ViewModelBase
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
 
         AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
+        AppServices.OnSessionResumed = () => _ = OnSessionResumedAsync();
         AppServices.ReportStatus = msg => RunOnUiThread(() => StatusText = msg);
 
         UpdateCoreStatus();
@@ -485,15 +486,87 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Called when the main window is activated (desktop) — recheck for updates.</summary>
+    /// <summary>Called when the main window is activated (desktop) — recheck for updates and session path.</summary>
     public void OnMainWindowActivated()
     {
         if (IsMobile || IsUpdating)
             return;
+
+        if (ConnectionState == ConnectionState.Connected && _proxyCore.IsRunning)
+            _ = OnSessionResumedAsync();
+
         if (DateTimeOffset.UtcNow - _lastUpdateCheckUtc < TimeSpan.FromMinutes(30))
             return;
         _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
     }
+
+    /// <summary>Wake/resume path verify + silent reconnect when Connected.</summary>
+    public async Task OnSessionResumedAsync()
+    {
+        if (ConnectionState != ConnectionState.Connected || !_proxyCore.IsRunning || SelectedServer is null)
+            return;
+
+        if (DateTimeOffset.UtcNow - _lastSessionResumeUtc < TimeSpan.FromSeconds(SessionResumeThrottleSeconds))
+            return;
+
+        if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
+            return;
+
+        try
+        {
+            _lastSessionResumeUtc = DateTimeOffset.UtcNow;
+
+            if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+            {
+                try
+                {
+                    await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                }
+                catch
+                {
+                    // Best-effort captive-portal validation.
+                }
+
+                return;
+            }
+
+            var server = SelectedServer;
+            var connectSettings = CollectSettings();
+            connectSettings.EnablePacketFragment = EnablePacketFragment;
+            connectSettings.AdaptiveSurviveEnabled = false;
+
+            try
+            {
+                if (IsMobile)
+                    await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None)
+                        .ConfigureAwait(true);
+                else
+                    await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None)
+                        .ConfigureAwait(true);
+
+                await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                _autoReconnectAttempts = 0;
+                await SetOnUiAsync(() =>
+                {
+                    ConnectionState = ConnectionState.Connected;
+                    IsConnected = true;
+                    StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
+                    UpdateSecureShareEndpoint();
+                }).ConfigureAwait(true);
+            }
+            catch
+            {
+                // Health loop / UnexpectedStop will handle deeper recovery.
+            }
+        }
+        finally
+        {
+            _sessionResumeGate.Release();
+        }
+    }
+
+    private int _autoReconnectAttempts;
+    public const int MaxAutoReconnectAttempts = 3;
 
     private async Task CheckForUpdatesQuietlyAsync(bool userInitiated = false)
     {
@@ -1650,8 +1723,9 @@ public partial class MainWindowViewModel : ViewModelBase
         }).ConfigureAwait(true);
     }
 
-    private int _autoReconnectAttempts;
-    public const int MaxAutoReconnectAttempts = 2;
+    private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
+    private DateTimeOffset _lastSessionResumeUtc = DateTimeOffset.MinValue;
+    public const int SessionResumeThrottleSeconds = 30;
 
     private async Task HandleUnexpectedCoreStopAsync()
     {
@@ -1669,12 +1743,11 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             if (!shouldReconnect)
             {
+                await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
                 await SetOnUiAsync(() =>
                 {
                     ConnectionState = ConnectionState.Failed;
-                    StatusText = AppServices.KillSwitch.IsArmed
-                        ? "Connection dropped — kill switch still blocking clearnet. Disconnect to restore."
-                        : "Connection dropped — VPN torn down.";
+                    StatusText = "VPN offline — tap Connect to restore protection.";
                     OnPropertyChanged(nameof(ConnectButtonText));
                     OnPropertyChanged(nameof(TrayToolTip));
                     UpdateSecureShareEndpoint();

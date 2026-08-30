@@ -24,6 +24,9 @@ public static class AppServices
     /// <summary>Re-check GitHub releases (e.g. after returning from the browser update flow).</summary>
     public static Action? RefreshUpdateCheck { get; set; }
 
+    /// <summary>Verify session after wake/resume (desktop activate / Android OnResume).</summary>
+    public static Action? OnSessionResumed { get; set; }
+
     /// <summary>Surface updater status into the UI status line.</summary>
     public static Action<string>? ReportStatus { get; set; }
 

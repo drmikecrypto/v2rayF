@@ -20,10 +20,13 @@ public class StableLiveConnectionTests
     [Fact]
     public void PathHealth_ConstantsAndThreshold()
     {
-        Assert.Equal(60000, ProxyCoreService.PathHealthIntervalMs);
+        Assert.Equal(45000, ProxyCoreService.PathHealthIntervalMs);
+        Assert.Equal(90000, ProxyCoreService.ActivePathHealthIntervalMs);
         Assert.Equal(3, ProxyCoreService.PathHealthFailThreshold);
         Assert.Equal(25000, ProxyCoreService.NatKeepaliveIntervalMs);
         Assert.Equal(2000, ProxyCoreService.NatKeepaliveProbeMs);
+        Assert.Equal(4000, ProxyCoreService.ResumePathProbeMs);
+        Assert.Equal(6000, ProxyCoreService.ResumePathProbeVisionMs);
         Assert.Equal(8000, ProxyCoreService.PathHealthProbeMs);
         Assert.Equal(12000, ProxyCoreService.PathHealthProbeVisionMs);
         Assert.False(ProxyCoreService.ShouldRaiseOnPathFails(1));

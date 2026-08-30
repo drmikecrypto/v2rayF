@@ -49,6 +49,7 @@ public class MainActivity : AvaloniaMainActivity
     {
         base.OnResume();
         AppServices.RefreshUpdateCheck?.Invoke();
+        AppServices.OnSessionResumed?.Invoke();
     }
 
     private static void HandlePackageInstallResult(Intent? intent)

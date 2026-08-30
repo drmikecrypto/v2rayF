@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2 — wake recovery + steady sessions
+
+**2.6.2** checks the VPN path on resume and silently reconnects if needed. Play Store/Chrome use the same HTTP+SOCKS health as Connect. If auto-reconnect fails, clearnet works again — tap **Connect** to restore VPN.
+
 ## v2.6.1 — faster Connect + Update
 
 **2.6.1** speeds Smart Connect (parallel probes, last-good race) and hardens the Update button (retries, keeps offer on flaky GitHub). Tap Update when available.

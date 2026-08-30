@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2 — wake recovery + steady sessions
+
+**2.6.2** verifies the proxy path when you unlock or return to the app. If the tunnel died while idle, it reconnects silently. After failed auto-reconnect, clearnet is restored (kill switch released) — tap **Connect** instead of being fully offline.
+
 ## v2.6.1 — faster Connect + Update
 
 **2.6.1** parallelizes Smart Connect ranking and races health probes so Connect feels snappy on Reality Vision, WS, gRPC, and the rest of the Sentinel set. In-app **Update** retries downloads and no longer hides the button when GitHub is briefly unreachable.
