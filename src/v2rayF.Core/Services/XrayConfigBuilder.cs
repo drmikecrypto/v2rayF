@@ -22,12 +22,11 @@ public static class XrayConfigBuilder
 
     /// <summary>WNS / desktop push host suffixes — route via proxy under TUN.</summary>
     public static readonly string[] WindowsNotificationDomainSuffixes =
-    [
-        "wns.windows.com",
-        "notify.windows.com",
-        "push.services.microsoft.com",
-        "mp.microsoft.com"
-    ];
+        PushRoutingDomains.WindowsNotificationSuffixes;
+
+    /// <summary>Desktop TUN: WNS + FCM + messenger push suffixes.</summary>
+    public static readonly string[] DesktopPushDomainSuffixes =
+        PushRoutingDomains.DesktopPushDomainSuffixes;
 
     private static readonly JsonSerializerOptions CompactJson = new() { WriteIndented = false };
 
@@ -641,7 +640,7 @@ public static class XrayConfigBuilder
 
     private static void AppendWindowsNotificationRules(JsonArray rules)
     {
-        foreach (var suffix in WindowsNotificationDomainSuffixes)
+        foreach (var suffix in DesktopPushDomainSuffixes)
         {
             rules.Add(new JsonObject
             {

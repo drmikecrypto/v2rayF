@@ -27,6 +27,8 @@ public class V2rayVpnService : VpnService
     private static ParcelFileDescriptor? _interface;
     private static int _tunFd = -1;
     private static TaskCompletionSource<int?>? _establishTcs;
+    private static ConnectivityManager? _connectivityManager;
+    private static VpnNetworkCallback? _networkCallback;
 
     private bool _subscribedTraffic;
 
@@ -36,6 +38,9 @@ public class V2rayVpnService : VpnService
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default)
     {
+        if (_tunFd >= 0)
+            return Task.FromResult<int?>(_tunFd);
+
         // In-process teardown only — never StartService(DISCONNECT) before ESTABLISH
         // (that races FGS and can force-close with RemoteServiceException).
         _establishTcs?.TrySetResult(null);
@@ -173,6 +178,8 @@ public class V2rayVpnService : VpnService
             _tunFd = fd;
             _establishTcs?.TrySetResult(fd);
 
+            RegisterNetworkCallback(this);
+
             StartVpnForeground(BuildNotification(TrafficStatsService.FormatNotificationLine(0, 0, null)));
             StartTrafficNotificationUpdates();
         }
@@ -272,6 +279,8 @@ public class V2rayVpnService : VpnService
 
     private static void TearDownInterface()
     {
+        UnregisterNetworkCallback();
+
         if (_tunFd >= 0)
         {
             try
@@ -298,6 +307,60 @@ public class V2rayVpnService : VpnService
         finally
         {
             _interface = null;
+        }
+    }
+
+    private static void RegisterNetworkCallback(Context context)
+    {
+        UnregisterNetworkCallback();
+        if (context.GetSystemService(Context.ConnectivityService) is not ConnectivityManager cm)
+            return;
+
+        _connectivityManager = cm;
+        _networkCallback = new VpnNetworkCallback();
+        try
+        {
+            cm.RegisterDefaultNetworkCallback(_networkCallback);
+        }
+        catch
+        {
+            _connectivityManager = null;
+            _networkCallback = null;
+        }
+    }
+
+    private static void UnregisterNetworkCallback()
+    {
+        if (_connectivityManager is null || _networkCallback is null)
+            return;
+
+        try
+        {
+            _connectivityManager.UnregisterNetworkCallback(_networkCallback);
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        _connectivityManager = null;
+        _networkCallback = null;
+    }
+
+    private sealed class VpnNetworkCallback : ConnectivityManager.NetworkCallback
+    {
+        public override void OnAvailable(Network network) => NotifySessionRecovery();
+
+        public override void OnCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities)
+        {
+            if (networkCapabilities?.HasTransport(TransportType.Vpn) == true)
+                NotifySessionRecovery();
+        }
+
+        private static void NotifySessionRecovery()
+        {
+            ReportVpnReady();
+            AppServices.OnSessionResumed?.Invoke();
         }
     }
 

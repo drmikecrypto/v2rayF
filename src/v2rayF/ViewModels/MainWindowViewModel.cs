@@ -359,13 +359,17 @@ public partial class MainWindowViewModel : ViewModelBase
         _proxyCore.PathHealthOk += (_, _) =>
         {
             _autoReconnectAttempts = 0;
+            _ = OnVpnKeepaliveAsync(force: false);
         };
+
+        _proxyCore.TunPathFailed += (_, _) => _ = OnSessionResumedAsync();
 
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
 
         AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
         AppServices.OnSessionResumed = () => _ = OnSessionResumedAsync();
+        AppServices.OnVpnKeepalive = () => _ = OnVpnKeepaliveAsync(force: false);
         AppServices.ReportStatus = msg => RunOnUiThread(() => StatusText = msg);
 
         UpdateCoreStatus();
@@ -534,6 +538,47 @@ public partial class MainWindowViewModel : ViewModelBase
             var connectSettings = CollectSettings();
             connectSettings.EnablePacketFragment = EnablePacketFragment;
             connectSettings.AdaptiveSurviveEnabled = false;
+            var tunFd = _proxyCore.ActiveTunFd;
+
+            if (_proxyCore.ActiveEnableTunMode)
+            {
+                try
+                {
+                    await _proxyCore.RefreshRuntimeAsync(
+                            server,
+                            connectSettings,
+                            tunFd,
+                            null,
+                            CancellationToken.None)
+                        .ConfigureAwait(true);
+
+                    if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+                    {
+                        try
+                        {
+                            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                        }
+                        catch
+                        {
+                            // Best-effort.
+                        }
+
+                        _autoReconnectAttempts = 0;
+                        await SetOnUiAsync(() =>
+                        {
+                            ConnectionState = ConnectionState.Connected;
+                            IsConnected = true;
+                            StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
+                            UpdateSecureShareEndpoint();
+                        }).ConfigureAwait(true);
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Fall through to full reconnect.
+                }
+            }
 
             try
             {
@@ -1725,7 +1770,29 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
     private DateTimeOffset _lastSessionResumeUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastVpnKeepaliveUtc = DateTimeOffset.MinValue;
     public const int SessionResumeThrottleSeconds = 30;
+    public const int VpnKeepaliveThrottleSeconds = 90;
+
+    private async Task OnVpnKeepaliveAsync(bool force)
+    {
+        if (ConnectionState != ConnectionState.Connected || !_proxyCore.IsRunning)
+            return;
+
+        if (!force &&
+            DateTimeOffset.UtcNow - _lastVpnKeepaliveUtc < TimeSpan.FromSeconds(VpnKeepaliveThrottleSeconds))
+            return;
+
+        _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
+        try
+        {
+            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+        }
+        catch
+        {
+            // Best-effort captive-portal validation.
+        }
+    }
 
     private async Task HandleUnexpectedCoreStopAsync()
     {

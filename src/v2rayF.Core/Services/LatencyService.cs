@@ -41,6 +41,8 @@ public sealed class LatencyService
     public const int TimedProbeCount = 1;
     /// <summary>Connect gate: discard one warmup GET, then this many timed samples.</summary>
     public const int ConnectHealthTimedProbeCount = 1;
+    /// <summary>TUN default-route probe budget (app traffic path, not localhost SOCKS).</summary>
+    public const int TunAppPathProbeMs = 4000;
     public const int DesktopSpeedtestWorkers = 3;
     public const int MobileSpeedtestWorkers = 2;
 
@@ -180,6 +182,79 @@ public sealed class LatencyService
     {
         return await ProbeThroughHttpProxyAsync(httpPort, cancellationToken, timeoutMs, warmThenMeasure)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verify default-route app traffic through TUN (not localhost SOCKS/HTTP).
+    /// Used when VPN routes all apps — localhost can stay healthy while TUN/FakeIP is stale.
+    /// </summary>
+    public async Task<int?> MeasureTunAppPathAsync(
+        CancellationToken cancellationToken = default,
+        int timeoutMs = TunAppPathProbeMs)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(timeoutMs);
+
+        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
+        using var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs),
+            UseProxy = false
+        };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+
+        try
+        {
+            var gen204Task = RacePingUrlsAsync(client, timeout.Token, warmThenMeasure: false);
+            var pushTask = ProbePushHostAsync(timeout.Token, timeoutMs);
+            await Task.WhenAll(gen204Task, pushTask).ConfigureAwait(false);
+
+            var gen204 = await gen204Task.ConfigureAwait(false);
+            if (gen204 is null or < 0)
+                return gen204;
+
+            var pushMs = await pushTask.ConfigureAwait(false);
+            if (pushMs is null or < 0)
+                return pushMs;
+
+            return Math.Max(gen204.Value, pushMs.Value);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            LastProbeError ??= "TUN app-path HTTPS probe timed out.";
+            return -1;
+        }
+    }
+
+    private static async Task<int?> ProbePushHostAsync(CancellationToken cancellationToken, int timeoutMs)
+    {
+        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
+        using var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs),
+            UseProxy = false
+        };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            using var request = new HttpRequestMessage(HttpMethod.Head, "https://mtalk.google.com/");
+            using var response = await client
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+            sw.Stop();
+            _ = response;
+            return (int)sw.ElapsedMilliseconds;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return -1;
+        }
     }
 
     public async Task<int?> MeasureProxyPathAsync(

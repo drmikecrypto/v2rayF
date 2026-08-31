@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using v2rayF.Models;
@@ -84,6 +85,18 @@ public static class SingBoxConfigBuilder
 
         return list;
     }
+
+    /// <summary>Meta MQTT + messaging push exact hosts for explicit TUN proxy route.</summary>
+    public static string[] GetAndroidPushRouteHosts()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var host in MetaMqttHttpProxyExclusionHosts)
+            set.Add(host);
+        foreach (var host in PushRoutingDomains.MessagingPushRouteHosts)
+            set.Add(host);
+        return set.ToArray();
+    }
+
     public static string Build(
         ProxyServer server,
         AppSettings settings,
@@ -183,12 +196,12 @@ public static class SingBoxConfigBuilder
                 ["action"] = "hijack-dns"
             });
 
-            var mqttDomains = new JsonArray();
-            foreach (var host in MetaMqttHttpProxyExclusionHosts)
-                mqttDomains.Add(host);
+            var pushRouteHosts = new JsonArray();
+            foreach (var host in GetAndroidPushRouteHosts())
+                pushRouteHosts.Add(host);
             rules.Add(new JsonObject
             {
-                ["domain"] = mqttDomains,
+                ["domain"] = pushRouteHosts,
                 ["outbound"] = "proxy"
             });
         }
@@ -326,6 +339,30 @@ public static class SingBoxConfigBuilder
                 ["query_type"] = new JsonArray { "A", "AAAA" },
                 ["server"] = UdpDnsTag
             });
+
+            var messagingSuffixes = new JsonArray();
+            foreach (var suffix in PushRoutingDomains.MessagingDnsSuffixes)
+                messagingSuffixes.Add(suffix);
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = messagingSuffixes,
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = UdpDnsTag
+            });
+
+            if (PushRoutingDomains.FcmDnsExactHosts.Length > 0)
+            {
+                var fcmExact = new JsonArray();
+                foreach (var host in PushRoutingDomains.FcmDnsExactHosts)
+                    fcmExact.Add(host);
+                rules.Add(new JsonObject
+                {
+                    ["domain"] = fcmExact,
+                    ["query_type"] = new JsonArray { "A", "AAAA" },
+                    ["server"] = UdpDnsTag
+                });
+            }
+
             rules.Add(new JsonObject
             {
                 ["query_type"] = new JsonArray { "A", "AAAA" },

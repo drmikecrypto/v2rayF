@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.0] - 2026-08-31
+
+### Added
+
+- **Push notification routing** — FCM (`mtalk.google.com`), WhatsApp, Telegram, and Discord get real DNS + explicit proxy routes on Android TUN; desktop TUN adds messenger push suffixes alongside WNS
+- **TUN app-path health probe** — default-route `generate_204` + FCM host check (not localhost SOCKS alone)
+- **Android network callback** — `ReportVpnReady` + session recovery when other apps restart without opening v2rayF
+- **Soft runtime refresh** — restart sing-box/Xray without tearing down VPN fd (clears stale FakeIP)
+- **Periodic VPN keepalive** — throttled `NotifyVpnReady` after successful path health
+
+### Fixed
+
+- **No notifications while connected** — messaging push domains no longer depend on FakeIP + sniff alone
+- **Kill app → reopen → dead internet** — network callback + TUN probe detect stale paths and auto-recover
+
 ## [2.6.2] - 2026-08-30
 
 ### Added

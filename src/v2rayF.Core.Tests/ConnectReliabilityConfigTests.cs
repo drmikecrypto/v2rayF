@@ -340,7 +340,7 @@ public class SmartConnectShortlistTests
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var settings = new AppSettings { EnableTunMode = true, AllowDesktopNotificationRouting = true };
         var rules = JsonNode.Parse(XrayConfigBuilder.Build(server, settings))!["routing"]!["rules"]!.AsArray();
-        foreach (var suffix in XrayConfigBuilder.WindowsNotificationDomainSuffixes)
+        foreach (var suffix in XrayConfigBuilder.DesktopPushDomainSuffixes)
         {
             Assert.Contains(rules, r =>
                 r?["domain"] is JsonArray domains &&

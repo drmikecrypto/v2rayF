@@ -30,7 +30,7 @@
             </StackPanel>
             <CheckBox Content="TUN mode (full-device VPN)" IsChecked="{Binding EnableTunMode}"
                       IsVisible="{Binding ShowDesktopProxySettings}"/>
-            <CheckBox Content="Route Windows notifications via proxy"
+            <CheckBox Content="Route push notifications (WNS, Telegram, Discord) via proxy"
                       IsChecked="{Binding AllowDesktopNotificationRouting}"
                       IsVisible="{Binding ShowDesktopProxySettings}"/>
             <TextBlock Text="{Binding TunStatus}" TextWrapping="Wrap" FontSize="12" Opacity="0.75"/>

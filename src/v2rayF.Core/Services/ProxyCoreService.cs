@@ -37,11 +37,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private CancellationTokenSource? _healthCts;
     private int _unexpectedHandled;
     private bool _activeUseSingBox;
+    private bool _activeEnableTunMode;
     private int? _activeTunFd;
     private volatile int _consecutivePathFails;
     private volatile int _consecutiveSocksFails;
     private DateTimeOffset _lastPathProbeUtc = DateTimeOffset.UtcNow;
     private DateTimeOffset _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
+    private DateTimeOffset _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
 
     private static ICoreProcessHost ProcessHost => AppServices.CoreProcessHost;
 
@@ -58,6 +60,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public bool IsRunning => ProcessHost.IsRunning;
 
     public ProxyServer? ActiveServer { get; private set; }
+
+    public int? ActiveTunFd => _activeTunFd;
+
+    public bool ActiveEnableTunMode => _activeEnableTunMode;
 
     public event EventHandler<bool>? RunningStateChanged;
 
@@ -84,6 +90,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     /// <summary>Raised when a soft path probe succeeds (reset AutoReconnect budget).</summary>
     public event EventHandler? PathHealthOk;
+
+    /// <summary>Raised when TUN app-path probe fails (trigger soft recovery before hard stop).</summary>
+    public event EventHandler? TunPathFailed;
 
     /// <summary>True when consecutive SOCKS probe misses should declare the tunnel dead.</summary>
     public static bool ShouldRaiseOnSocksFails(int consecutiveFails) =>
@@ -246,11 +255,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
+        _activeEnableTunMode = settings.EnableTunMode;
         _activeTunFd = tunFd;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _lastPathProbeUtc = DateTimeOffset.UtcNow;
         _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
+        _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
     }
@@ -267,26 +278,60 @@ public sealed class ProxyCoreService : IAsyncDisposable
         probeCts.CancelAfter(budget);
         try
         {
+            var tunProbeBudget = Math.Min(budget, LatencyService.TunAppPathProbeMs);
+            Task<int?>? tunAppTask = RequiresTunAppPath()
+                ? _latency.MeasureTunAppPathAsync(probeCts.Token, tunProbeBudget)
+                : null;
+
             if (!RequiresAndroidTunHttpProbe(useSingBox, tunFd))
             {
-                return await _latency
+                var socksMs = await _latency
                     .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
                     .ConfigureAwait(false);
+                if (socksMs is null or < 0)
+                    return socksMs;
+
+                if (tunAppTask is null)
+                    return socksMs;
+
+                var tunMs = await tunAppTask.ConfigureAwait(false);
+                return tunMs is null or < 0 ? tunMs : Math.Max(socksMs.Value, tunMs.Value);
             }
 
-            // Parallel SOCKS + HTTP: SOCKS warms TLS; HTTP skips second warmup (faster Connect).
+            // Parallel SOCKS + HTTP + TUN app path: SOCKS warms TLS; HTTP skips second warmup.
             var socksTask = _latency.MeasureConnectHealthViaSocksAsync(
                 XrayConfigBuilder.SocksPort, probeCts.Token, budget);
             var httpTask = _latency.MeasureConnectHealthViaHttpAsync(
                 XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false);
-            await Task.WhenAll(socksTask, httpTask).ConfigureAwait(false);
+            tunAppTask ??= RequiresTunAppPath()
+                ? _latency.MeasureTunAppPathAsync(probeCts.Token, tunProbeBudget)
+                : null;
 
-            var socksMs = await socksTask.ConfigureAwait(false);
-            if (socksMs is null or < 0)
-                return socksMs;
+            if (tunAppTask is null)
+            {
+                await Task.WhenAll(socksTask, httpTask).ConfigureAwait(false);
+                var socksOnly = await socksTask.ConfigureAwait(false);
+                if (socksOnly is null or < 0)
+                    return socksOnly;
+                var httpOnly = await httpTask.ConfigureAwait(false);
+                return httpOnly is null or < 0 ? httpOnly : Math.Max(socksOnly.Value, httpOnly.Value);
+            }
+
+            await Task.WhenAll(socksTask, httpTask, tunAppTask).ConfigureAwait(false);
+
+            var socksMs2 = await socksTask.ConfigureAwait(false);
+            if (socksMs2 is null or < 0)
+                return socksMs2;
 
             var httpMs = await httpTask.ConfigureAwait(false);
-            return httpMs is null or < 0 ? httpMs : Math.Max(socksMs.Value, httpMs.Value);
+            if (httpMs is null or < 0)
+                return httpMs;
+
+            var tunAppMs = await tunAppTask.ConfigureAwait(false);
+            if (tunAppMs is null or < 0)
+                return tunAppMs;
+
+            return Math.Max(Math.Max(socksMs2.Value, httpMs.Value), tunAppMs.Value);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -294,8 +339,72 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
     }
 
+    private bool RequiresTunAppPath() => _activeEnableTunMode;
+
     private static bool RequiresAndroidTunHttpProbe(bool useSingBox, int? tunFd) =>
         useSingBox && tunFd is int fd && fd >= 0;
+
+    /// <summary>Restart sing-box/Xray without tearing down VPN interface (clears FakeIP).</summary>
+    public async Task RefreshRuntimeAsync(
+        ProxyServer server,
+        AppSettings settings,
+        int? tunFd,
+        IReadOnlyList<ProxyServer>? multipathServers = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(server);
+
+        Interlocked.Exchange(ref _unexpectedHandled, 1);
+        StopHealthMonitor();
+        await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
+
+        var useSingBox = CoreRuntime.UseSingBox(server);
+        if (useSingBox && multipathServers is { Count: > 0 })
+            multipathServers = null;
+
+        if (settings.SecureShareEnabled)
+            XrayConfigBuilder.EnsureShareCredentials(settings);
+
+        var configJson = useSingBox
+            ? SingBoxConfigBuilder.Build(server, settings, tunFd: tunFd)
+            : XrayConfigBuilder.Build(server, settings, tunFd, multipathServers);
+        var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
+        Directory.CreateDirectory(configDir);
+        _configPath ??= Path.Combine(configDir, useSingBox ? "singbox-config.json" : "config.json");
+        await File.WriteAllTextAsync(_configPath, configJson, cancellationToken).ConfigureAwait(false);
+
+        await ProcessHost.StartAsync(
+            ResolveCorePathFor(server),
+            _configPath,
+            ResolveCoresDirectory(),
+            tunFd,
+            cancellationToken).ConfigureAwait(false);
+
+        using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        readyTimeout.CancelAfter(ConnectTimeoutMs);
+        await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
+
+        var probeMs = await ProbeConnectPathAsync(server, useSingBox, tunFd, healthBudget: null, cancellationToken)
+            .ConfigureAwait(false);
+        if (probeMs is null or < 0)
+        {
+            await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("Proxy path failed after runtime refresh.");
+        }
+
+        Interlocked.Exchange(ref _unexpectedHandled, 0);
+        ActiveServer = server;
+        _activeUseSingBox = useSingBox;
+        _activeEnableTunMode = settings.EnableTunMode;
+        _activeTunFd = tunFd;
+        _consecutivePathFails = 0;
+        _consecutiveSocksFails = 0;
+        _lastPathProbeUtc = DateTimeOffset.UtcNow;
+        _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
+        _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
+        StartHealthMonitor();
+        RunningStateChanged?.Invoke(this, true);
+    }
 
     private static AppSettings CloneSettingsWithDoH(AppSettings settings)
     {
@@ -341,6 +450,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
         ActiveServer = null;
         _activeTunFd = null;
+        _activeEnableTunMode = false;
         RunningStateChanged?.Invoke(this, false);
     }
 
@@ -441,6 +551,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
                         if (pathMs is null or < 0)
                         {
+                            if (RequiresTunAppPath())
+                                TunPathFailed?.Invoke(this, EventArgs.Empty);
                             _consecutivePathFails++;
                             if (ShouldRaiseOnPathFails(_consecutivePathFails))
                             {
@@ -452,6 +564,18 @@ public sealed class ProxyCoreService : IAsyncDisposable
                         {
                             _consecutivePathFails = 0;
                             PathHealthOk?.Invoke(this, EventArgs.Empty);
+                            if ((now - _lastVpnKeepaliveUtc).TotalMilliseconds >= ActivePathHealthIntervalMs)
+                            {
+                                _lastVpnKeepaliveUtc = now;
+                                try
+                                {
+                                    AppServices.OnVpnKeepalive?.Invoke();
+                                }
+                                catch
+                                {
+                                    // Best-effort captive-portal / VPN validation.
+                                }
+                            }
                         }
                     }
 

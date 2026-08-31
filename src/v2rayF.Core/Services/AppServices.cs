@@ -27,6 +27,9 @@ public static class AppServices
     /// <summary>Verify session after wake/resume (desktop activate / Android OnResume).</summary>
     public static Action? OnSessionResumed { get; set; }
 
+    /// <summary>Periodic VPN validation after successful path health (ReportVpnReady on Android).</summary>
+    public static Action? OnVpnKeepalive { get; set; }
+
     /// <summary>Surface updater status into the UI status line.</summary>
     public static Action<string>? ReportStatus { get; set; }
 

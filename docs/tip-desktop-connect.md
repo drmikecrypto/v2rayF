@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2.0 — push notifications + messenger toasts
+
+**2.6.2.0** extends desktop TUN push routing to Telegram, Discord, WhatsApp, and FCM suffixes (not only WNS). Settings → **Route push notifications (WNS, Telegram, Discord) via proxy** (on by default). TUN health now probes the default route — not just localhost SOCKS — so stale tunnels recover after sleep without manual Disconnect.
+
 ## v2.6.2 — wake recovery + steady sessions
 
 **2.6.2** verifies the proxy path when you unlock or return to the app. If the tunnel died while idle, it reconnects silently. After failed auto-reconnect, clearnet is restored (kill switch released) — tap **Connect** instead of being fully offline.
@@ -15,7 +19,7 @@
 
 ## v2.6.0 — Windows toast notifications
 
-**2.6.0** adds high-priority routing for WNS/push domains (`wns.windows.com`, `notify.windows.com`, `push.services.microsoft.com`, `mp.microsoft.com`) through the proxy when TUN is on. Settings → **Route Windows notifications via proxy** (on by default).
+**2.6.0** adds high-priority routing for WNS/push domains through the proxy when TUN is on. **2.6.2.0** adds Telegram, Discord, WhatsApp, and FCM suffixes. Settings → **Route push notifications (WNS, Telegram, Discord) via proxy** (on by default).
 
 If Telegram/Discord/Phone Link toasts still fail:
 

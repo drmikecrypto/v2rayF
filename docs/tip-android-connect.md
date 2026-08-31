@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.0 — push notifications + app restart survival
+
+**2.6.2.0** routes FCM, WhatsApp, Telegram, and Discord push through real DNS + proxy (not FakeIP alone). If you force-stop WhatsApp/Telegram and reopen while v2rayF stays connected, the network callback + TUN probe recover without opening v2rayF or tapping Disconnect. Leave v2rayF in background and test notifications after update.
+
 ## v2.6.2 — wake recovery + steady sessions
 
 **2.6.2** checks the VPN path on resume and silently reconnects if needed. Play Store/Chrome use the same HTTP+SOCKS health as Connect. If auto-reconnect fails, clearnet works again — tap **Connect** to restore VPN.

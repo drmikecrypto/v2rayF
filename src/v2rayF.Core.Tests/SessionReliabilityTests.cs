@@ -48,6 +48,13 @@ public class SessionReliabilityTests
     private static bool ProxyCoreServiceRequiresAndroidTunHttpProbe(bool useSingBox, int? tunFd) =>
         useSingBox && tunFd is int fd && fd >= 0;
 
+    [Fact]
+    public void TunAppPathProbe_ConstantDefined()
+    {
+        Assert.Equal(4000, LatencyService.TunAppPathProbeMs);
+        Assert.Equal(90, ProxyCoreService.ActivePathHealthIntervalMs / 1000);
+    }
+
     private sealed class FakeEnv : ICoreEnvironment
     {
         public string GetDataDirectory() => Path.GetTempPath();
