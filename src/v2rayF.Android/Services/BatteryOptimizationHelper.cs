@@ -43,7 +43,7 @@ internal static class BatteryOptimizationHelper
         try
         {
             var intent = new Intent(Settings.ActionRequestIgnoreBatteryOptimizations);
-            intent.SetData(Android.Net.Uri.Parse("package:" + activity.PackageName));
+            intent.SetData(global::Android.Net.Uri.Parse("package:" + activity.PackageName));
             activity.StartActivity(intent);
             return true;
         }
