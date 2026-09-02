@@ -81,6 +81,9 @@ public sealed class AppSettings
     /// <summary>After unexpected core drop, try one reconnect with user settings (no Survive fragment).</summary>
     public bool AutoReconnectEnabled { get; set; } = true;
 
+    /// <summary>Android: one-time battery optimization exemption prompt was shown.</summary>
+    public bool BatteryOptimizationPromptShown { get; set; }
+
     /// <summary>Hint from last successful Adaptive Survive session (fragment / sentinel).</summary>
     public string LastSurviveTactic { get; set; } = "";
 

@@ -204,6 +204,15 @@ public static class SingBoxConfigBuilder
                 ["domain"] = pushRouteHosts,
                 ["outbound"] = "proxy"
             });
+
+            var messagingSuffixes = new JsonArray();
+            foreach (var suffix in PushRoutingDomains.MessagingDnsSuffixes)
+                messagingSuffixes.Add(suffix);
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = messagingSuffixes,
+                ["outbound"] = "proxy"
+            });
         }
 
         if (settings.BlockIpv6)

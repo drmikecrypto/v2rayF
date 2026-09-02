@@ -71,6 +71,25 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             return Task.CompletedTask;
         });
 
+    public Task<int?> ProbeTunAppPathAsync(
+        CancellationToken cancellationToken = default,
+        int timeoutMs = LatencyService.TunAppPathProbeMs) =>
+        VpnTunPathProbe.ProbeAsync(cancellationToken, timeoutMs);
+
+    public Task PromptBatteryOptimizationIfNeededAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default) =>
+        AndroidUiThread.InvokeAsync(() =>
+        {
+            if (MainActivity.Instance is not null &&
+                BatteryOptimizationHelper.TryPromptIfNeeded(MainActivity.Instance, settings))
+            {
+                // Caller persists settings when true.
+            }
+
+            return Task.CompletedTask;
+        });
+
     public Task EnableProxyAsync(CancellationToken cancellationToken = default)
     {
         LastProxyMethod = "Android VPN";

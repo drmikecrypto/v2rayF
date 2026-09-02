@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.1 — VPN-bound probe + push parity
+
+**2.6.2.1** fixes the Android health probe: it now tests traffic through the VPN Network (not clearnet). Push routing adds Signal/Slack/WhatsApp edge/Telegram API hosts. App Network bypass changes re-establish the VPN interface. Optional battery optimization prompt after first Connect.
+
 ## v2.6.2.0 — push notifications + app restart survival
 
 **2.6.2.0** routes FCM, WhatsApp, Telegram, and Discord push through real DNS + proxy (not FakeIP alone). If you force-stop WhatsApp/Telegram and reopen while v2rayF stays connected, the network callback + TUN probe recover without opening v2rayF or tapping Disconnect. Leave v2rayF in background and test notifications after update.

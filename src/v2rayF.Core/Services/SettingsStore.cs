@@ -111,6 +111,7 @@ public sealed class SettingsStore
         LastGoodServerId = s.LastGoodServerId,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
         AutoReconnectEnabled = s.AutoReconnectEnabled,
+        BatteryOptimizationPromptShown = s.BatteryOptimizationPromptShown,
         LastSurviveTactic = s.LastSurviveTactic,
         StorageVersion = s.StorageVersion
     };

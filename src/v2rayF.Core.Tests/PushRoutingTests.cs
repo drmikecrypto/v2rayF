@@ -59,5 +59,30 @@ public class PushRoutingTests
             r?["domain"] is JsonArray domains &&
             domains.Any(d => d!.GetValue<string>() == "mtalk.google.com") &&
             r["outbound"]?.GetValue<string>() == "proxy");
+
+        Assert.Contains(rules, r =>
+            r?["domain"] is JsonArray domains &&
+            domains.Any(d => d!.GetValue<string>() == "g.whatsapp.net") &&
+            r["outbound"]?.GetValue<string>() == "proxy");
+    }
+
+    [Fact]
+    public void AndroidTun_MessagingSuffixRoute_ProxyOutbound()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))![
+            "route"]!["rules"]!.AsArray();
+
+        Assert.Contains(rules, r =>
+            r?["domain_suffix"] is JsonArray suffixes &&
+            suffixes.Any(s => s!.GetValue<string>() == "telegram.org") &&
+            r["outbound"]?.GetValue<string>() == "proxy");
+    }
+
+    [Fact]
+    public void DesktopPush_IncludesSignalAndApple()
+    {
+        Assert.Contains("signal.org", XrayConfigBuilder.DesktopPushDomainSuffixes);
+        Assert.Contains("push.apple.com", XrayConfigBuilder.DesktopPushDomainSuffixes);
     }
 }

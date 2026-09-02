@@ -53,6 +53,7 @@ public class SessionReliabilityTests
     {
         Assert.Equal(4000, LatencyService.TunAppPathProbeMs);
         Assert.Equal(90, ProxyCoreService.ActivePathHealthIntervalMs / 1000);
+        Assert.Equal(2, ProxyCoreService.TunOnlyFailThreshold);
     }
 
     private sealed class FakeEnv : ICoreEnvironment

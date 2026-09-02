@@ -29,8 +29,27 @@ public class V2rayVpnService : VpnService
     private static TaskCompletionSource<int?>? _establishTcs;
     private static ConnectivityManager? _connectivityManager;
     private static VpnNetworkCallback? _networkCallback;
+    private static string? _establishConfigHash;
+    private static DateTimeOffset _lastNetworkRecoveryUtc = DateTimeOffset.MinValue;
+    private const int NetworkRecoveryThrottleMs = 5000;
 
     private bool _subscribedTraffic;
+
+    public static int? GetActiveTunFd() => _tunFd >= 0 ? _tunFd : null;
+
+    public static bool NeedsReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) =>
+        _tunFd >= 0 &&
+        !string.Equals(_establishConfigHash, ComputeEstablishHash(bypassPackages, blockIpv6), StringComparison.Ordinal);
+
+    private static string ComputeEstablishHash(IReadOnlyList<string>? bypassPackages, bool blockIpv6)
+    {
+        var parts = bypassPackages?
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Trim())
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+        return $"{blockIpv6}|{string.Join("\0", parts)}";
+    }
 
     public static Task<int?> EstablishAsync(
         Context context,
@@ -38,7 +57,8 @@ public class V2rayVpnService : VpnService
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default)
     {
-        if (_tunFd >= 0)
+        var hash = ComputeEstablishHash(bypassPackages, blockIpv6);
+        if (_tunFd >= 0 && string.Equals(_establishConfigHash, hash, StringComparison.Ordinal))
             return Task.FromResult<int?>(_tunFd);
 
         // In-process teardown only — never StartService(DISCONNECT) before ESTABLISH
@@ -176,6 +196,7 @@ public class V2rayVpnService : VpnService
             }
 
             _tunFd = fd;
+            _establishConfigHash = ComputeEstablishHash(bypass, blockIpv6);
             _establishTcs?.TrySetResult(fd);
 
             RegisterNetworkCallback(this);
@@ -295,6 +316,8 @@ public class V2rayVpnService : VpnService
             _tunFd = -1;
         }
 
+        _establishConfigHash = null;
+
         try
         {
             _interface?.Close();
@@ -349,8 +372,6 @@ public class V2rayVpnService : VpnService
 
     private sealed class VpnNetworkCallback : ConnectivityManager.NetworkCallback
     {
-        public override void OnAvailable(Network network) => NotifySessionRecovery();
-
         public override void OnCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities)
         {
             if (networkCapabilities?.HasTransport(TransportType.Vpn) == true)
@@ -359,6 +380,11 @@ public class V2rayVpnService : VpnService
 
         private static void NotifySessionRecovery()
         {
+            var now = DateTimeOffset.UtcNow;
+            if ((now - _lastNetworkRecoveryUtc).TotalMilliseconds < NetworkRecoveryThrottleMs)
+                return;
+
+            _lastNetworkRecoveryUtc = now;
             ReportVpnReady();
             AppServices.OnSessionResumed?.Invoke();
         }

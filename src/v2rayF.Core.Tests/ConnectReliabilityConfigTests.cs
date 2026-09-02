@@ -322,6 +322,14 @@ public class SmartConnectShortlistTests
         public Task EnableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DisableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<int?> ProbeTunAppPathAsync(
+            CancellationToken cancellationToken = default,
+            int timeoutMs = LatencyService.TunAppPathProbeMs) =>
+            Task.FromResult<int?>(0);
+        public Task PromptBatteryOptimizationIfNeededAsync(
+            AppSettings settings,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
         public string? GetLanIPv4Address() => null;
         public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
             bool forceRefresh = false,

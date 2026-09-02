@@ -132,6 +132,7 @@ public sealed class ProfileVault
         EnablePacketFragment = s.EnablePacketFragment,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
         AutoReconnectEnabled = s.AutoReconnectEnabled,
+        BatteryOptimizationPromptShown = s.BatteryOptimizationPromptShown,
         SubscriptionUrl = s.SubscriptionUrl,
         StorageVersion = 2
     };

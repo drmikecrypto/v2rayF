@@ -35,6 +35,19 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
     public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    public Task<int?> ProbeTunAppPathAsync(
+        CancellationToken cancellationToken = default,
+        int timeoutMs = LatencyService.TunAppPathProbeMs)
+    {
+        var latency = new LatencyService(AppServices.CoreEnvironment);
+        return latency.MeasureTunAppPathAsync(cancellationToken, timeoutMs);
+    }
+
+    public Task PromptBatteryOptimizationIfNeededAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
     public Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,

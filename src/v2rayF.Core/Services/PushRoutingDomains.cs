@@ -27,7 +27,7 @@ public static class PushRoutingDomains
         "firebaseinstallations.googleapis.com"
     ];
 
-    /// <summary>WhatsApp / Telegram / Discord — suffixes resolved via real UDP DNS, not FakeIP.</summary>
+    /// <summary>WhatsApp / Telegram / Discord / Signal / Slack — real UDP DNS, not FakeIP.</summary>
     public static readonly string[] MessagingDnsSuffixes =
     [
         "whatsapp.net",
@@ -36,7 +36,16 @@ public static class PushRoutingDomains
         "t.me",
         "discord.com",
         "discordapp.com",
-        "discord.gg"
+        "discord.gg",
+        "signal.org",
+        "slack.com",
+        "slack-msgs.com"
+    ];
+
+    /// <summary>Apple push (desktop bridges / iOS sync apps).</summary>
+    public static readonly string[] DesktopOnlyPushSuffixes =
+    [
+        "push.apple.com"
     ];
 
     /// <summary>Push/realtime endpoints that must route to proxy explicitly on Android TUN.</summary>
@@ -45,14 +54,21 @@ public static class PushRoutingDomains
         "mtalk.google.com",
         "fcm.googleapis.com",
         "firebaseinstallations.googleapis.com",
+        "g.whatsapp.net",
+        "e1.whatsapp.net",
+        "e2.whatsapp.net",
         "web.telegram.org",
+        "api.telegram.org",
+        "pluto.web.telegram.org",
+        "venus.web.telegram.org",
         "gateway.discord.gg"
     ];
 
-    /// <summary>Desktop TUN: WNS + messenger push suffixes when notification routing is enabled.</summary>
+    /// <summary>Desktop TUN: WNS + messenger + Signal/Slack + Apple push suffixes.</summary>
     public static readonly string[] DesktopPushDomainSuffixes = CombineUnique(
         WindowsNotificationSuffixes,
-        MessagingDnsSuffixes);
+        MessagingDnsSuffixes,
+        DesktopOnlyPushSuffixes);
 
     private static string[] CombineUnique(params IEnumerable<string>[] groups)
     {

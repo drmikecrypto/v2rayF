@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.1] - 2026-09-02
+
+### Added
+
+- **VPN-bound TUN health probe (Android)** — probes through active VPN `Network`, not clearnet (v2rayF is VPN-disallowed)
+- **Push routing parity** — Signal, Slack, Apple push, WhatsApp edge hosts, Telegram API endpoints; messaging `domain_suffix` proxy routes on Android TUN
+- **VPN re-establish on App Network change** — bypass package / IPv6 flag changes tear down and rebuild the interface
+- **Battery optimization prompt** — one-time Android exemption request after first Connect
+
+### Changed
+
+- **Tun-only recovery** — soft reconnect fires after 2 consecutive tun-only probe failures (localhost can still pass)
+- **Network callback throttle** — VPN capability changes only, 5s service-side throttle
+- **RefreshRuntime** — DoH retry parity with Connect when DNS-through-proxy is off
+
+### Fixed
+
+- **False-green health** — TUN probe no longer tests clearnet while routed apps use VPN
+- **Recovery storms** — reduced spurious `OnSessionResumed` from non-VPN network events
+
 ## [2.6.2.0] - 2026-08-31
 
 ### Added

@@ -35,6 +35,19 @@ public interface IPlatformIntegration
     /// </summary>
     Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Probe app traffic through TUN/VPN (not localhost SOCKS). Android binds to VPN Network;
+    /// desktop uses default route when system TUN is active.
+    /// </summary>
+    Task<int?> ProbeTunAppPathAsync(
+        CancellationToken cancellationToken = default,
+        int timeoutMs = LatencyService.TunAppPathProbeMs);
+
+    /// <summary>Android: one-time battery optimization exemption prompt after Connect.</summary>
+    Task PromptBatteryOptimizationIfNeededAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
     string? GetLanIPv4Address();
 

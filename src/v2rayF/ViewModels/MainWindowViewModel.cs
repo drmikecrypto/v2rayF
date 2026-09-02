@@ -1759,6 +1759,11 @@ public partial class MainWindowViewModel : ViewModelBase
         await AppServices.Platform.EnableProxyAsync(cancellationToken).ConfigureAwait(false);
         await ResumeOnUiAsync().ConfigureAwait(true);
 
+        await AppServices.Platform.PromptBatteryOptimizationIfNeededAsync(settings, cancellationToken)
+            .ConfigureAwait(false);
+        if (settings.BatteryOptimizationPromptShown)
+            await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
+
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
         await SetOnUiAsync(() =>
         {

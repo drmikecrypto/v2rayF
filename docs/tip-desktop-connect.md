@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2.1 — VPN-bound probe + messenger push parity
+
+**2.6.2.1** probes health through the system TUN route (not clearnet on desktop). Desktop push routing adds Signal, Slack, and Apple push suffixes. Tun-only failures need two consecutive misses before auto-recovery (fewer false reconnects).
+
 ## v2.6.2.0 — push notifications + messenger toasts
 
 **2.6.2.0** extends desktop TUN push routing to Telegram, Discord, WhatsApp, and FCM suffixes (not only WNS). Settings → **Route push notifications (WNS, Telegram, Discord) via proxy** (on by default). TUN health now probes the default route — not just localhost SOCKS — so stale tunnels recover after sleep without manual Disconnect.
