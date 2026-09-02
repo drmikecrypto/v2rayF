@@ -48,6 +48,12 @@ public interface IPlatformIntegration
         AppSettings settings,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// True when the live VPN interface was built with different bypass/IPv6 settings
+    /// than the ones about to apply (Android). Desktop always false.
+    /// </summary>
+    bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6);
+
     /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
     string? GetLanIPv4Address();
 

@@ -133,6 +133,7 @@ public sealed class ProfileVault
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
         AutoReconnectEnabled = s.AutoReconnectEnabled,
         BatteryOptimizationPromptShown = s.BatteryOptimizationPromptShown,
+        LastBatteryPromptUtc = s.LastBatteryPromptUtc,
         SubscriptionUrl = s.SubscriptionUrl,
         StorageVersion = 2
     };

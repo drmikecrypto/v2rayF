@@ -39,7 +39,9 @@ public static class PushRoutingDomains
         "discord.gg",
         "signal.org",
         "slack.com",
-        "slack-msgs.com"
+        "slack-msgs.com",
+        "slackb.com",
+        "slack-edge.com"
     ];
 
     /// <summary>Apple push (desktop bridges / iOS sync apps).</summary>
@@ -61,7 +63,9 @@ public static class PushRoutingDomains
         "api.telegram.org",
         "pluto.web.telegram.org",
         "venus.web.telegram.org",
-        "gateway.discord.gg"
+        "gateway.discord.gg",
+        "chat.signal.org",
+        "uds.signal.org"
     ];
 
     /// <summary>Desktop TUN: WNS + messenger + Signal/Slack + Apple push suffixes.</summary>

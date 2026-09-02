@@ -81,14 +81,12 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         CancellationToken cancellationToken = default) =>
         AndroidUiThread.InvokeAsync(() =>
         {
-            if (MainActivity.Instance is not null &&
-                BatteryOptimizationHelper.TryPromptIfNeeded(MainActivity.Instance, settings))
-            {
-                // Caller persists settings when true.
-            }
-
+            BatteryOptimizationHelper.TryPromptIfNeeded(MainActivity.Instance, settings);
             return Task.CompletedTask;
         });
+
+    public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) =>
+        V2rayVpnService.NeedsReestablish(bypassPackages, blockIpv6);
 
     public Task EnableProxyAsync(CancellationToken cancellationToken = default)
     {

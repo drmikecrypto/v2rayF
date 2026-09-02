@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.2 — revoke, soft recovery, network switch
+
+**2.6.2.2** requires FCM + gen204 for TUN health, handles system VPN revoke, pauses hard reconnect during soft refresh, recovers on Wi‑Fi↔LTE, and applies App Network via VPN re-establish when bypass changes.
+
 ## v2.6.2.1 — VPN-bound probe + push parity
 
 **2.6.2.1** fixes the Android health probe: it now tests traffic through the VPN Network (not clearnet). Push routing adds Signal/Slack/WhatsApp edge/Telegram API hosts. App Network bypass changes re-establish the VPN interface. Optional battery optimization prompt after first Connect.

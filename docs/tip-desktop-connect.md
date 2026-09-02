@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2.2 — soft recovery + Signal/Slack push
+
+**2.6.2.2** gates soft runtime refresh against hard reconnect storms. Desktop push routing includes Signal and Slack edge hosts. Settings → **Route push notifications (WNS, Telegram, Discord, Signal, Slack) via proxy**.
+
 ## v2.6.2.1 — VPN-bound probe + messenger push parity
 
 **2.6.2.1** probes health through the system TUN route (not clearnet on desktop). Desktop push routing adds Signal, Slack, and Apple push suffixes. Tun-only failures need two consecutive misses before auto-recovery (fewer false reconnects).

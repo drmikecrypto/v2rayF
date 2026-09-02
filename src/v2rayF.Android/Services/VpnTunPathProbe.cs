@@ -11,9 +11,16 @@ namespace v2rayF.Android.Services;
 
 /// <summary>
 /// Health probe through the active VPN Network (v2rayF is VPN-disallowed — default HttpClient uses clearnet).
+/// Both gen204 and a push host must succeed (matches desktop MeasureTunAppPathAsync).
 /// </summary>
 internal static class VpnTunPathProbe
 {
+    private static readonly string[] PushProbeUrls =
+    [
+        "https://mtalk.google.com/",
+        "https://fcm.googleapis.com/"
+    ];
+
     public static Task<int?> ProbeAsync(CancellationToken cancellationToken, int timeoutMs) =>
         Task.Run(() => ProbeOnBackground(cancellationToken, timeoutMs), cancellationToken);
 
@@ -43,20 +50,37 @@ internal static class VpnTunPathProbe
         if (vpnNetwork is null)
             return -1;
 
+        int? gen204Ms = null;
         foreach (var url in LatencyService.PingUrls)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var ms = ProbeUrl(vpnNetwork, url, timeoutMs, headOnly: false);
             if (ms is >= 0)
             {
-                var pushMs = ProbeUrl(vpnNetwork, "https://mtalk.google.com/", timeoutMs, headOnly: true);
-                if (pushMs is >= 0)
-                    return Math.Max(ms.Value, pushMs.Value);
-                return ms;
+                gen204Ms = ms;
+                break;
             }
         }
 
-        return -1;
+        if (gen204Ms is null or < 0)
+            return -1;
+
+        int? pushMs = null;
+        foreach (var url in PushProbeUrls)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ms = ProbeUrl(vpnNetwork, url, timeoutMs, headOnly: true);
+            if (ms is >= 0)
+            {
+                pushMs = ms;
+                break;
+            }
+        }
+
+        if (pushMs is null or < 0)
+            return -1;
+
+        return Math.Max(gen204Ms.Value, pushMs.Value);
     }
 
     private static int? ProbeUrl(Network network, string url, int timeoutMs, bool headOnly)

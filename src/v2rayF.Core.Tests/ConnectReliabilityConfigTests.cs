@@ -330,6 +330,7 @@ public class SmartConnectShortlistTests
             AppSettings settings,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+        public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
         public string? GetLanIPv4Address() => null;
         public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
             bool forceRefresh = false,

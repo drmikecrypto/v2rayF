@@ -362,7 +362,7 @@ public partial class MainWindowViewModel : ViewModelBase
             _ = OnVpnKeepaliveAsync(force: false);
         };
 
-        _proxyCore.TunPathFailed += (_, _) => _ = OnSessionResumedAsync();
+        _proxyCore.TunPathFailed += (_, _) => _ = OnTunPathFailedRecoveryAsync();
 
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
@@ -370,6 +370,7 @@ public partial class MainWindowViewModel : ViewModelBase
         AppServices.RefreshUpdateCheck = () => _ = CheckForUpdatesQuietlyAsync(userInitiated: false);
         AppServices.OnSessionResumed = () => _ = OnSessionResumedAsync();
         AppServices.OnVpnKeepalive = () => _ = OnVpnKeepaliveAsync(force: false);
+        AppServices.OnVpnRevoked = () => _ = OnVpnRevokedAsync();
         AppServices.ReportStatus = msg => RunOnUiThread(() => StatusText = msg);
 
         UpdateCoreStatus();
@@ -519,94 +520,155 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             _lastSessionResumeUtc = DateTimeOffset.UtcNow;
-
-            if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
-            {
-                try
-                {
-                    await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
-                }
-                catch
-                {
-                    // Best-effort captive-portal validation.
-                }
-
-                return;
-            }
-
-            var server = SelectedServer;
-            var connectSettings = CollectSettings();
-            connectSettings.EnablePacketFragment = EnablePacketFragment;
-            connectSettings.AdaptiveSurviveEnabled = false;
-            var tunFd = _proxyCore.ActiveTunFd;
-
-            if (_proxyCore.ActiveEnableTunMode)
-            {
-                try
-                {
-                    await _proxyCore.RefreshRuntimeAsync(
-                            server,
-                            connectSettings,
-                            tunFd,
-                            null,
-                            CancellationToken.None)
-                        .ConfigureAwait(true);
-
-                    if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
-                    {
-                        try
-                        {
-                            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
-                        }
-                        catch
-                        {
-                            // Best-effort.
-                        }
-
-                        _autoReconnectAttempts = 0;
-                        await SetOnUiAsync(() =>
-                        {
-                            ConnectionState = ConnectionState.Connected;
-                            IsConnected = true;
-                            StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
-                            UpdateSecureShareEndpoint();
-                        }).ConfigureAwait(true);
-                        return;
-                    }
-                }
-                catch
-                {
-                    // Fall through to full reconnect.
-                }
-            }
-
-            try
-            {
-                if (IsMobile)
-                    await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None)
-                        .ConfigureAwait(true);
-                else
-                    await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None)
-                        .ConfigureAwait(true);
-
-                await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
-                _autoReconnectAttempts = 0;
-                await SetOnUiAsync(() =>
-                {
-                    ConnectionState = ConnectionState.Connected;
-                    IsConnected = true;
-                    StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
-                    UpdateSecureShareEndpoint();
-                }).ConfigureAwait(true);
-            }
-            catch
-            {
-                // Health loop / UnexpectedStop will handle deeper recovery.
-            }
+            await RecoverSessionCoreAsync().ConfigureAwait(true);
         }
         finally
         {
             _sessionResumeGate.Release();
+        }
+    }
+
+    /// <summary>Tun-only failure soft recovery (gated against hard UnexpectedStop).</summary>
+    private async Task OnTunPathFailedRecoveryAsync()
+    {
+        if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
+        {
+            _proxyCore.EndSoftRecovery(success: false);
+            return;
+        }
+
+        if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
+        {
+            // Another recovery owns the gate — release soft-recovery pause so health can escalate.
+            _proxyCore.EndSoftRecovery(success: false);
+            return;
+        }
+
+        try
+        {
+            _lastSessionResumeUtc = DateTimeOffset.UtcNow;
+            var ok = await RecoverSessionCoreAsync().ConfigureAwait(true);
+            _proxyCore.EndSoftRecovery(success: ok);
+        }
+        catch
+        {
+            _proxyCore.EndSoftRecovery(success: false);
+        }
+        finally
+        {
+            _sessionResumeGate.Release();
+        }
+    }
+
+    /// <returns>True when path is healthy or session was restored.</returns>
+    private async Task<bool> RecoverSessionCoreAsync()
+    {
+        if (SelectedServer is null)
+            return false;
+
+        if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+        {
+            try
+            {
+                await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // Best-effort captive-portal validation.
+            }
+
+            return true;
+        }
+
+        var server = SelectedServer;
+        var connectSettings = CollectSettings();
+        connectSettings.EnablePacketFragment = EnablePacketFragment;
+        connectSettings.AdaptiveSurviveEnabled = false;
+        var tunFd = _proxyCore.ActiveTunFd;
+
+        if (_proxyCore.ActiveEnableTunMode)
+        {
+            try
+            {
+                await _proxyCore.RefreshRuntimeAsync(
+                        server,
+                        connectSettings,
+                        tunFd,
+                        null,
+                        CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+                {
+                    try
+                    {
+                        await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                    }
+                    catch
+                    {
+                        // Best-effort.
+                    }
+
+                    _autoReconnectAttempts = 0;
+                    await SetOnUiAsync(() =>
+                    {
+                        ConnectionState = ConnectionState.Connected;
+                        IsConnected = true;
+                        StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
+                        UpdateSecureShareEndpoint();
+                    }).ConfigureAwait(true);
+                    return true;
+                }
+            }
+            catch
+            {
+                // Fall through to full reconnect.
+            }
+        }
+
+        try
+        {
+            if (IsMobile)
+                await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            else
+                await ConnectDesktopAsync(server, connectSettings, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+            _autoReconnectAttempts = 0;
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Connected;
+                IsConnected = true;
+                StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
+                UpdateSecureShareEndpoint();
+            }).ConfigureAwait(true);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task OnVpnRevokedAsync()
+    {
+        try
+        {
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(true);
+        }
+        finally
+        {
+            await SetOnUiAsync(() =>
+            {
+                ConnectionState = ConnectionState.Failed;
+                IsConnected = false;
+                StatusText = "VPN revoked — tap Connect to restore protection.";
+                OnPropertyChanged(nameof(ConnectButtonText));
+                OnPropertyChanged(nameof(TrayToolTip));
+                UpdateSecureShareEndpoint();
+            }).ConfigureAwait(true);
         }
     }
 
@@ -946,13 +1008,45 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var server = SelectedServer ?? _proxyCore.ActiveServer;
-        await DisconnectAsync().ConfigureAwait(true);
         if (server is null)
         {
             StatusText = "App Network saved.";
             return;
         }
 
+        var settings = CollectSettings();
+        var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: IsMobile);
+
+        // Android: rebuild VPN interface when bypass/IPv6 hash differs, then soft-refresh core.
+        if (IsMobile &&
+            AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6) &&
+            _proxyCore.IsRunning)
+        {
+            StatusText = "Applying App Network…";
+            try
+            {
+                var tunFd = await AppServices.Platform.EstablishVpnAsync(
+                        bypass, settings.BlockIpv6, CancellationToken.None)
+                    .ConfigureAwait(true);
+                if (tunFd is not null)
+                {
+                    settings.EnablePacketFragment = EnablePacketFragment;
+                    settings.AdaptiveSurviveEnabled = false;
+                    await _proxyCore.RefreshRuntimeAsync(
+                            server, settings, tunFd, null, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                    StatusText = $"App Network applied — {StatusSanitizer.Scrub(server.Name)}";
+                    return;
+                }
+            }
+            catch
+            {
+                // Fall through to full reconnect.
+            }
+        }
+
+        await DisconnectAsync().ConfigureAwait(true);
         StatusText = "Reconnecting to apply App Network…";
         await ConnectWithOrchestrationAsync(server).ConfigureAwait(true);
     }
@@ -1761,8 +1855,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await AppServices.Platform.PromptBatteryOptimizationIfNeededAsync(settings, cancellationToken)
             .ConfigureAwait(false);
-        if (settings.BatteryOptimizationPromptShown)
-            await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
+        await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
         await SetOnUiAsync(() =>

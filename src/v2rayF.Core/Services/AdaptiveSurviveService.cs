@@ -106,6 +106,7 @@ public sealed class AdaptiveSurviveService
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,
         AutoReconnectEnabled = s.AutoReconnectEnabled,
         BatteryOptimizationPromptShown = s.BatteryOptimizationPromptShown,
+        LastBatteryPromptUtc = s.LastBatteryPromptUtc,
         LastSurviveTactic = s.LastSurviveTactic,
         StorageVersion = s.StorageVersion
     };

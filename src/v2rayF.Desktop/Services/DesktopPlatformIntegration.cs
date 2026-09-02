@@ -48,6 +48,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
+    public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
+
     public Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,

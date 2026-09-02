@@ -29,6 +29,7 @@ public class V2rayVpnService : VpnService
     private static TaskCompletionSource<int?>? _establishTcs;
     private static ConnectivityManager? _connectivityManager;
     private static VpnNetworkCallback? _networkCallback;
+    private static UnderlyingNetworkCallback? _underlyingCallback;
     private static string? _establishConfigHash;
     private static DateTimeOffset _lastNetworkRecoveryUtc = DateTimeOffset.MinValue;
     private const int NetworkRecoveryThrottleMs = 5000;
@@ -216,6 +217,40 @@ public class V2rayVpnService : VpnService
         return StartCommandResult.Sticky;
     }
 
+    public override void OnRevoke()
+    {
+        try
+        {
+            StopTrafficNotificationUpdates();
+            TearDownInterface();
+            ClearNotification();
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        try
+        {
+            AppServices.OnVpnRevoked?.Invoke();
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        try
+        {
+            StopSelf();
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        base.OnRevoke();
+    }
+
     public override void OnDestroy()
     {
         StopTrafficNotificationUpdates();
@@ -341,33 +376,68 @@ public class V2rayVpnService : VpnService
 
         _connectivityManager = cm;
         _networkCallback = new VpnNetworkCallback();
+        _underlyingCallback = new UnderlyingNetworkCallback();
         try
         {
             cm.RegisterDefaultNetworkCallback(_networkCallback);
+
+            var internetRequest = new NetworkRequest.Builder()
+                .AddCapability(NetCapability.Internet)
+                .AddTransportType(TransportType.Wifi)
+                .AddTransportType(TransportType.Cellular)
+                .AddTransportType(TransportType.Ethernet)
+                .Build();
+            cm.RegisterNetworkCallback(internetRequest, _underlyingCallback);
         }
         catch
         {
-            _connectivityManager = null;
-            _networkCallback = null;
+            UnregisterNetworkCallback();
         }
     }
 
     private static void UnregisterNetworkCallback()
     {
-        if (_connectivityManager is null || _networkCallback is null)
+        if (_connectivityManager is null)
             return;
 
-        try
+        if (_networkCallback is not null)
         {
-            _connectivityManager.UnregisterNetworkCallback(_networkCallback);
+            try
+            {
+                _connectivityManager.UnregisterNetworkCallback(_networkCallback);
+            }
+            catch
+            {
+                // Best effort.
+            }
         }
-        catch
+
+        if (_underlyingCallback is not null)
         {
-            // Best effort.
+            try
+            {
+                _connectivityManager.UnregisterNetworkCallback(_underlyingCallback);
+            }
+            catch
+            {
+                // Best effort.
+            }
         }
 
         _connectivityManager = null;
         _networkCallback = null;
+        _underlyingCallback = null;
+    }
+
+    private static void NotifySessionRecovery()
+    {
+        var now = DateTimeOffset.UtcNow;
+        if ((now - _lastNetworkRecoveryUtc).TotalMilliseconds < NetworkRecoveryThrottleMs)
+            return;
+
+        _lastNetworkRecoveryUtc = now;
+        ReportVpnReady();
+        AppServices.OnSessionResumed?.Invoke();
     }
 
     private sealed class VpnNetworkCallback : ConnectivityManager.NetworkCallback
@@ -377,17 +447,13 @@ public class V2rayVpnService : VpnService
             if (networkCapabilities?.HasTransport(TransportType.Vpn) == true)
                 NotifySessionRecovery();
         }
+    }
 
-        private static void NotifySessionRecovery()
-        {
-            var now = DateTimeOffset.UtcNow;
-            if ((now - _lastNetworkRecoveryUtc).TotalMilliseconds < NetworkRecoveryThrottleMs)
-                return;
+    private sealed class UnderlyingNetworkCallback : ConnectivityManager.NetworkCallback
+    {
+        public override void OnAvailable(Network network) => NotifySessionRecovery();
 
-            _lastNetworkRecoveryUtc = now;
-            ReportVpnReady();
-            AppServices.OnSessionResumed?.Invoke();
-        }
+        public override void OnLost(Network network) => NotifySessionRecovery();
     }
 
     private static async Task<int?> WaitEstablishAsync(CancellationToken cancellationToken)

@@ -30,6 +30,9 @@ public static class AppServices
     /// <summary>Periodic VPN validation after successful path health (ReportVpnReady on Android).</summary>
     public static Action? OnVpnKeepalive { get; set; }
 
+    /// <summary>Android VpnService.OnRevoke — system tore down the VPN interface.</summary>
+    public static Action? OnVpnRevoked { get; set; }
+
     /// <summary>Surface updater status into the UI status line.</summary>
     public static Action<string>? ReportStatus { get; set; }
 

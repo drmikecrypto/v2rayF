@@ -56,6 +56,17 @@ public class SessionReliabilityTests
         Assert.Equal(2, ProxyCoreService.TunOnlyFailThreshold);
     }
 
+    [Fact]
+    public void SoftRecoveryGate_BeginAndEnd()
+    {
+        var core = new ProxyCoreService(new FakeEnv());
+        Assert.False(core.IsSoftRecoveryInFlight);
+        core.BeginSoftRecovery();
+        Assert.True(core.IsSoftRecoveryInFlight);
+        core.EndSoftRecovery(success: true);
+        Assert.False(core.IsSoftRecoveryInFlight);
+    }
+
     private sealed class FakeEnv : ICoreEnvironment
     {
         public string GetDataDirectory() => Path.GetTempPath();

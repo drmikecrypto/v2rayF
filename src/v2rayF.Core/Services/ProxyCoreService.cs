@@ -38,6 +38,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private string? _configPath;
     private CancellationTokenSource? _healthCts;
     private int _unexpectedHandled;
+    private int _softRecoveryInFlight;
     private bool _activeUseSingBox;
     private bool _activeEnableTunMode;
     private int? _activeTunFd;
@@ -96,6 +97,20 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     /// <summary>Raised when TUN app-path probe fails (trigger soft recovery before hard stop).</summary>
     public event EventHandler? TunPathFailed;
+
+    /// <summary>True while soft recovery is in flight (pause path-fail escalation).</summary>
+    public bool IsSoftRecoveryInFlight => Volatile.Read(ref _softRecoveryInFlight) != 0;
+
+    /// <summary>Begin soft recovery — path health will not escalate to UnexpectedStop until EndSoftRecovery.</summary>
+    public void BeginSoftRecovery() => Interlocked.Exchange(ref _softRecoveryInFlight, 1);
+
+    /// <summary>End soft recovery; on success reset fail counters.</summary>
+    public void EndSoftRecovery(bool success)
+    {
+        Interlocked.Exchange(ref _softRecoveryInFlight, 0);
+        if (success)
+            ResetPathHealthState();
+    }
 
     /// <summary>True when consecutive SOCKS probe misses should declare the tunnel dead.</summary>
     public static bool ShouldRaiseOnSocksFails(int consecutiveFails) =>
@@ -489,7 +504,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
             DesktopBlockProcesses = settings.DesktopBlockProcesses,
             AdaptiveSurviveEnabled = settings.AdaptiveSurviveEnabled,
             AutoReconnectEnabled = settings.AutoReconnectEnabled,
-            BatteryOptimizationPromptShown = settings.BatteryOptimizationPromptShown
+            BatteryOptimizationPromptShown = settings.BatteryOptimizationPromptShown,
+            LastBatteryPromptUtc = settings.LastBatteryPromptUtc
         };
     }
 
@@ -499,6 +515,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         Interlocked.Exchange(ref _unexpectedHandled, 1);
         StopHealthMonitor();
         LastConnectProbeMs = null;
+        Interlocked.Exchange(ref _softRecoveryInFlight, 0);
         await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
         ActiveServer = null;
         _activeTunFd = null;
@@ -604,11 +621,17 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
                         if (probeResult.CombinedMs is null or < 0)
                         {
+                            if (IsSoftRecoveryInFlight)
+                                continue;
+
                             if (probeResult.LocalhostOk && !probeResult.TunOk)
                             {
                                 _consecutiveTunOnlyFails++;
                                 if (_consecutiveTunOnlyFails >= TunOnlyFailThreshold)
+                                {
+                                    BeginSoftRecovery();
                                     TunPathFailed?.Invoke(this, EventArgs.Empty);
+                                }
                             }
                             else
                                 _consecutiveTunOnlyFails = 0;

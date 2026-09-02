@@ -84,5 +84,14 @@ public class PushRoutingTests
     {
         Assert.Contains("signal.org", XrayConfigBuilder.DesktopPushDomainSuffixes);
         Assert.Contains("push.apple.com", XrayConfigBuilder.DesktopPushDomainSuffixes);
+        Assert.Contains("slack-edge.com", XrayConfigBuilder.DesktopPushDomainSuffixes);
+    }
+
+    [Fact]
+    public void AndroidPushRoute_IncludesSignalExactHosts()
+    {
+        var routes = SingBoxConfigBuilder.GetAndroidPushRouteHosts();
+        Assert.Contains("chat.signal.org", routes);
+        Assert.Contains("uds.signal.org", routes);
     }
 }

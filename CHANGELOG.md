@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.2] - 2026-09-02
+
+### Fixed
+
+- **Android TUN probe false-green** — gen204 and FCM push host must both succeed (matches desktop)
+- **VPN revoke** — `OnRevoke` tears down, releases kill switch, UI shows Failed
+- **Soft vs hard recovery race** — soft refresh pauses path-fail escalation until it finishes
+- **App Network apply** — uses `NeedsVpnReestablish` + soft runtime refresh instead of always full Disconnect
+
+### Added
+
+- **Underlying network callback** — Wi‑Fi/cellular Available/Lost triggers throttled session recovery
+- **Battery exemption re-prompt** — every 7 days while still optimizing; marks shown only after grant
+- Signal (`chat.signal.org`, `uds.signal.org`) and Slack edge suffixes in push routing
+
+### Changed
+
+- Settings label mentions Signal/Slack for desktop push routing
+
 ## [2.6.2.1] - 2026-09-02
 
 ### Added
