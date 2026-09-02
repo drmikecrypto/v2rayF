@@ -197,7 +197,8 @@ public class V2rayVpnService : VpnService
             }
 
             _tunFd = fd;
-            _establishConfigHash = ComputeEstablishHash(bypass, blockIpv6);
+            IReadOnlyList<string>? bypassList = bypass is null ? null : bypass.ToList();
+            _establishConfigHash = ComputeEstablishHash(bypassList, blockIpv6);
             _establishTcs?.TrySetResult(fd);
 
             RegisterNetworkCallback(this);

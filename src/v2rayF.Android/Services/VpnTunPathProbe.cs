@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
+using Android.Content;
 using Android.Net;
 using Java.Net;
 using v2rayF.Services;
@@ -94,7 +95,7 @@ internal static class VpnTunPathProbe
             conn.ReadTimeout = timeoutMs;
             conn.InstanceFollowRedirects = false;
             conn.RequestMethod = headOnly ? "HEAD" : "GET";
-            var code = conn.ResponseCode;
+            var code = (int)conn.ResponseCode;
             sw.Stop();
             if (code is >= 200 and < 400 or 204)
                 return (int)sw.ElapsedMilliseconds;
