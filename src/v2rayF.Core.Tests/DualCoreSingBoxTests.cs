@@ -506,6 +506,33 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void DesktopTun_EmitsProcessNameAppNetworkRules()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var settings = new AppSettings
+        {
+            EnableTunMode = true,
+            DesktopDirectProcesses = "chrome.exe",
+            DesktopBlockProcesses = "malware.exe\nchrome.exe"
+        };
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, settings, tunFd: null))!
+            ["route"]!["rules"]!.AsArray();
+
+        Assert.Contains(rules, r =>
+            r?["process_name"] is JsonArray names &&
+            names.Any(n => n!.GetValue<string>() == "malware.exe") &&
+            r["outbound"]?.GetValue<string>() == "block");
+        Assert.Contains(rules, r =>
+            r?["process_name"] is JsonArray names &&
+            names.Any(n => n!.GetValue<string>() == "chrome.exe") &&
+            r["outbound"]?.GetValue<string>() == "direct");
+        Assert.DoesNotContain(rules, r =>
+            r?["process_name"] is JsonArray names &&
+            names.Any(n => n!.GetValue<string>() == "chrome.exe") &&
+            r["outbound"]?.GetValue<string>() == "block");
+    }
+
+    [Fact]
     public void ConnectHealthBudgets_AreSoftened()
     {
         Assert.Equal(8000, LatencyService.ConnectHealthProbeMs);

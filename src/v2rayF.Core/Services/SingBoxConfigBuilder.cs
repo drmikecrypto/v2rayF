@@ -269,6 +269,10 @@ public static class SingBoxConfigBuilder
             });
         }
 
+        // Desktop App Network: process_name → direct / block (Hy2/TUIC auto_route TUN).
+        if (!androidTun && settings.EnableTunMode)
+            AppendSingBoxProcessAppNetworkRules(rules, settings);
+
         // Custom routing (Android sing-box + desktop Hy2/TUIC). BypassChina → BypassLan (no geosite).
         var mode = settings.RoutingMode;
         if (mode == RoutingMode.BypassChina)
@@ -294,6 +298,35 @@ public static class SingBoxConfigBuilder
             ["final"] = "proxy",
             ["auto_detect_interface"] = !androidTun
         };
+    }
+
+    private static void AppendSingBoxProcessAppNetworkRules(JsonArray rules, AppSettings settings)
+    {
+        var block = AppNetworkPolicy.GetBlockIds(settings, mobile: false);
+        if (block.Count > 0)
+        {
+            var names = new JsonArray();
+            foreach (var name in block)
+                names.Add(name);
+            rules.Add(new JsonObject
+            {
+                ["process_name"] = names,
+                ["outbound"] = "block"
+            });
+        }
+
+        var direct = AppNetworkPolicy.GetDirectIds(settings, mobile: false);
+        if (direct.Count > 0)
+        {
+            var names = new JsonArray();
+            foreach (var name in direct)
+                names.Add(name);
+            rules.Add(new JsonObject
+            {
+                ["process_name"] = names,
+                ["outbound"] = "direct"
+            });
+        }
     }
 
     private static void AppendSingBoxCustomRules(JsonArray rules, string raw, string outbound)

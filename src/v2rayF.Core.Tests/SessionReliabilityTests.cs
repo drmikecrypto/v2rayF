@@ -1,3 +1,7 @@
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using v2rayF.Models;
 using v2rayF.Services;
 
@@ -67,12 +71,58 @@ public class SessionReliabilityTests
         Assert.False(core.IsSoftRecoveryInFlight);
     }
 
+    [Fact]
+    public void ResolveCorePathFor_MatchesUseSingBox()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "v2rayf-ks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var xray = Path.Combine(dir, "xray.exe");
+            var sing = Path.Combine(dir, "sing-box.exe");
+            File.WriteAllText(xray, "");
+            File.WriteAllText(sing, "");
+            var core = new ProxyCoreService(new FakeEnv(dir, xray, sing));
+            var hy2 = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+            var vless = ShareLinkParser.Parse(
+                "vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+
+            Assert.True(CoreRuntime.UseSingBox(hy2));
+            Assert.Equal(sing, core.ResolveCorePathFor(hy2));
+            Assert.False(CoreRuntime.RequiresSingBox(vless));
+            Assert.Equal(xray, core.ResolveCorePathFor(vless));
+            Assert.Equal(xray, core.ResolveCorePath());
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
+        }
+    }
+
     private sealed class FakeEnv : ICoreEnvironment
     {
-        public string GetDataDirectory() => Path.GetTempPath();
-        public string GetCoresDirectory() => Path.GetTempPath();
-        public string GetCorePath() => Path.Combine(Path.GetTempPath(), "missing-xray");
-        public string GetSingBoxPath() => Path.Combine(Path.GetTempPath(), "missing-sing-box");
+        private readonly string _data;
+        private readonly string _xray;
+        private readonly string _sing;
+
+        public FakeEnv()
+        {
+            _data = Path.GetTempPath();
+            _xray = Path.Combine(_data, "missing-xray");
+            _sing = Path.Combine(_data, "missing-sing-box");
+        }
+
+        public FakeEnv(string data, string xray, string sing)
+        {
+            _data = data;
+            _xray = xray;
+            _sing = sing;
+        }
+
+        public string GetDataDirectory() => _data;
+        public string GetCoresDirectory() => _data;
+        public string GetCorePath() => _xray;
+        public string GetSingBoxPath() => _sing;
         public Task EnsureCoreAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public ICoreProcessHost CreateProcessHost() => new ManagedCoreProcessHost();
     }

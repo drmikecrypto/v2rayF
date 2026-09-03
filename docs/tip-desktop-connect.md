@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2.4 — kill switch + App Network on sing-box TUN
+
+**2.6.2.4** allowlists the live core binary for kill switch (sing-box for Hy2/TUIC), re-arms KS after soft recovery, and applies desktop App Network process Direct/Block on auto_route TUN.
+
 ## v2.6.2.3 — desktop TUN + live Settings
 
 **2.6.2.3** creates a real auto_route TUN for desktop Hy2/TUIC/WG when TUN is enabled. Saving Settings while Connected refreshes the live core (or reconnects when TUN/kill-switch changes). Soft recovery tears down before a full reconnect.

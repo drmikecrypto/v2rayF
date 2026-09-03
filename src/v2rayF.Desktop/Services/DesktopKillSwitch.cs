@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 namespace v2rayF.Services;
 
 /// <summary>
-/// Windows Firewall clearnet block while connected (allow Xray + loopback + optional TUN).
+/// Windows Firewall clearnet block while connected (allow core binary + loopback + optional TUN).
 /// Linux/macOS: rely on TUN <c>strict_route</c> / VpnService — iptables/pf path matching is too fragile.
 /// </summary>
 public sealed class DesktopKillSwitch : IKillSwitch
@@ -42,7 +42,7 @@ public sealed class DesktopKillSwitch : IKillSwitch
 
         if (string.IsNullOrWhiteSpace(coreExecutablePath) || !File.Exists(coreExecutablePath))
         {
-            LastError = "Kill switch needs a valid Xray path.";
+            LastError = "Kill switch needs a valid core executable path.";
             return;
         }
 

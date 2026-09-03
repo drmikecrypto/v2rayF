@@ -38,6 +38,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _suppressSelectionPersist;
     private bool _suppressSelectionSwitch;
     private bool _selectionSwitchInFlight;
+    private int _pendingSoftRecovery;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -226,6 +227,16 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool ShowCustomRules => SelectedRoutingMode?.Mode == RoutingMode.CustomDirect;
 
+    /// <summary>Bypass China has no geosite on sing-box (Android classic + Hy2/TUIC).</summary>
+    public bool ShowBypassChinaSingBoxHint =>
+        SelectedRoutingMode?.Mode == RoutingMode.BypassChina &&
+        SelectedServer is not null &&
+        CoreRuntime.UseSingBox(SelectedServer);
+
+    /// <summary>Secure Share and Smart Multipath are Xray-config only.</summary>
+    public bool ShowXrayOnlyFeatures =>
+        SelectedServer is null || !CoreRuntime.UseSingBox(SelectedServer);
+
     public bool ShowAndroidBypass => IsMobile;
 
     /// <summary>App Network on Android always; on Desktop when TUN is available/used.</summary>
@@ -245,11 +256,17 @@ public partial class MainWindowViewModel : ViewModelBase
         ConnectionState == ConnectionState.Connected ||
         AppServices.KillSwitch.IsArmed;
 
-    partial void OnSelectedRoutingModeChanged(RoutingModeOption? value) => OnPropertyChanged(nameof(ShowCustomRules));
+    partial void OnSelectedRoutingModeChanged(RoutingModeOption? value)
+    {
+        OnPropertyChanged(nameof(ShowCustomRules));
+        OnPropertyChanged(nameof(ShowBypassChinaSingBoxHint));
+    }
 
     partial void OnSelectedServerChanged(ProxyServer? value)
     {
         OnPropertyChanged(nameof(HasSelectedServer));
+        OnPropertyChanged(nameof(ShowBypassChinaSingBoxHint));
+        OnPropertyChanged(nameof(ShowXrayOnlyFeatures));
         if (_suppressSelectionPersist)
             return;
 
@@ -515,7 +532,10 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
+        {
+            Volatile.Write(ref _pendingSoftRecovery, 1);
             return;
+        }
 
         try
         {
@@ -525,6 +545,7 @@ public partial class MainWindowViewModel : ViewModelBase
         finally
         {
             _sessionResumeGate.Release();
+            await DrainPendingSoftRecoveryAsync().ConfigureAwait(true);
         }
     }
 
@@ -539,8 +560,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
         {
-            // Another recovery owns the gate — release soft-recovery pause so health can escalate.
-            _proxyCore.EndSoftRecovery(success: false);
+            // Another recovery owns the gate — queue a retry; keep soft-recovery pause armed.
+            Volatile.Write(ref _pendingSoftRecovery, 1);
             return;
         }
 
@@ -557,6 +578,44 @@ public partial class MainWindowViewModel : ViewModelBase
         finally
         {
             _sessionResumeGate.Release();
+            await DrainPendingSoftRecoveryAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task DrainPendingSoftRecoveryAsync()
+    {
+        if (Interlocked.Exchange(ref _pendingSoftRecovery, 0) != 1)
+            return;
+
+        if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
+        {
+            _proxyCore.EndSoftRecovery(success: false);
+            return;
+        }
+
+        if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
+        {
+            Volatile.Write(ref _pendingSoftRecovery, 1);
+            return;
+        }
+
+        try
+        {
+            if (!_proxyCore.IsSoftRecoveryInFlight)
+                _proxyCore.BeginSoftRecovery();
+
+            _lastSessionResumeUtc = DateTimeOffset.UtcNow;
+            var ok = await RecoverSessionCoreAsync().ConfigureAwait(true);
+            _proxyCore.EndSoftRecovery(success: ok);
+        }
+        catch
+        {
+            _proxyCore.EndSoftRecovery(success: false);
+        }
+        finally
+        {
+            _sessionResumeGate.Release();
+            await DrainPendingSoftRecoveryAsync().ConfigureAwait(true);
         }
     }
 
@@ -609,6 +668,9 @@ public partial class MainWindowViewModel : ViewModelBase
                         tunFd,
                         null,
                         CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                await RearmKillSwitchIfNeededAsync(server, connectSettings, CancellationToken.None)
                     .ConfigureAwait(true);
 
                 if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
@@ -664,6 +726,13 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch
         {
+            var ksArmed = AppServices.KillSwitch.IsArmed;
+            await SetOnUiAsync(() =>
+            {
+                StatusText = ksArmed
+                    ? "Kill switch blocked reconnect — Disconnect to restore clearnet"
+                    : "Session recovery failed — tap Connect";
+            }).ConfigureAwait(true);
             return false;
         }
     }
@@ -1102,7 +1171,10 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var next = CaptureRuntimeSettings(settings);
-        if (!RuntimeSettingsChanged(previous, next))
+        var softChanged = SoftRuntimeSettingsChanged(previous, next);
+        var needsReconnect = ReconnectRequiredSettingsChanged(previous, next);
+
+        if (!softChanged && !needsReconnect)
         {
             StatusText = "Settings saved.";
             return;
@@ -1122,6 +1194,13 @@ public partial class MainWindowViewModel : ViewModelBase
             StatusText = "Reconnecting to apply settings…";
             await DisconnectAsync().ConfigureAwait(true);
             await ConnectWithOrchestrationAsync(server).ConfigureAwait(true);
+            return;
+        }
+
+        if (!softChanged && needsReconnect)
+        {
+            StatusText =
+                "Settings saved — reconnect to apply Secure Share / fragment / multipath.";
             return;
         }
 
@@ -1157,17 +1236,21 @@ public partial class MainWindowViewModel : ViewModelBase
                 await _proxyCore.RefreshRuntimeAsync(
                         server, settings, _proxyCore.ActiveTunFd, null, CancellationToken.None)
                     .ConfigureAwait(true);
+                await RearmKillSwitchIfNeededAsync(server, settings, CancellationToken.None)
+                    .ConfigureAwait(true);
             }
 
             await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
 
-            if (next.RoutingMode == RoutingMode.BypassChina &&
-                CoreRuntime.UseSingBox(server) &&
-                !_bypassChinaSingBoxTipShown)
+            if (needsReconnect)
             {
-                _bypassChinaSingBoxTipShown = true;
                 StatusText =
-                    "Settings applied — Bypass China uses Bypass LAN on sing-box (no CN geosite); use Xray on desktop for CN.";
+                    "Settings applied — reconnect to apply Secure Share / fragment / multipath.";
+            }
+            else if (next.RoutingMode == RoutingMode.BypassChina && CoreRuntime.UseSingBox(server))
+            {
+                StatusText =
+                    "Settings applied — Bypass China uses Bypass LAN on sing-box (no CN geosite).";
             }
             else
             {
@@ -1182,8 +1265,6 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private bool _bypassChinaSingBoxTipShown;
-
     private readonly record struct RuntimeSettingsSnapshot(
         bool DnsThroughProxy,
         bool BlockIpv6,
@@ -1193,7 +1274,11 @@ public partial class MainWindowViewModel : ViewModelBase
         string CustomProxyRules,
         string CustomBlockRules,
         bool EnableTunMode,
-        bool KillSwitchEnabled);
+        bool KillSwitchEnabled,
+        bool SecureShareEnabled,
+        bool ShareListenAllInterfaces,
+        bool EnablePacketFragment,
+        bool SmartMultipathEnabled);
 
     private static RuntimeSettingsSnapshot CaptureRuntimeSettings(AppSettings s) =>
         new(
@@ -1205,9 +1290,13 @@ public partial class MainWindowViewModel : ViewModelBase
             s.CustomProxyRules ?? "",
             s.CustomBlockRules ?? "",
             s.EnableTunMode,
-            s.KillSwitchEnabled);
+            s.KillSwitchEnabled,
+            s.SecureShareEnabled,
+            s.ShareListenAllInterfaces,
+            s.EnablePacketFragment,
+            s.SmartMultipathEnabled);
 
-    private static bool RuntimeSettingsChanged(RuntimeSettingsSnapshot a, RuntimeSettingsSnapshot b) =>
+    private static bool SoftRuntimeSettingsChanged(RuntimeSettingsSnapshot a, RuntimeSettingsSnapshot b) =>
         a.DnsThroughProxy != b.DnsThroughProxy ||
         a.BlockIpv6 != b.BlockIpv6 ||
         a.AllowDesktopNotificationRouting != b.AllowDesktopNotificationRouting ||
@@ -1217,6 +1306,12 @@ public partial class MainWindowViewModel : ViewModelBase
         !string.Equals(a.CustomBlockRules, b.CustomBlockRules, StringComparison.Ordinal) ||
         a.EnableTunMode != b.EnableTunMode ||
         a.KillSwitchEnabled != b.KillSwitchEnabled;
+
+    private static bool ReconnectRequiredSettingsChanged(RuntimeSettingsSnapshot a, RuntimeSettingsSnapshot b) =>
+        a.SecureShareEnabled != b.SecureShareEnabled ||
+        a.ShareListenAllInterfaces != b.ShareListenAllInterfaces ||
+        a.EnablePacketFragment != b.EnablePacketFragment ||
+        a.SmartMultipathEnabled != b.SmartMultipathEnabled;
 
     [RelayCommand]
     private async Task CopySecureShareAsync()
@@ -1942,7 +2037,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (settings.KillSwitchEnabled && settings.EnableTunMode)
         {
             await AppServices.KillSwitch.EnableAsync(
-                    _proxyCore.ResolveCorePath(),
+                    _proxyCore.ResolveCorePathFor(server),
                     allowTunInterface: true,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -2006,7 +2101,7 @@ public partial class MainWindowViewModel : ViewModelBase
         await AppServices.Platform.NotifyVpnReadyAsync(cancellationToken).ConfigureAwait(false);
 
         await AppServices.KillSwitch.EnableAsync(
-                _proxyCore.ResolveCorePath(),
+                _proxyCore.ResolveCorePathFor(server),
                 allowTunInterface: true,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -2141,6 +2236,24 @@ public partial class MainWindowViewModel : ViewModelBase
             OnPropertyChanged(nameof(TrayToolTip));
             UpdateSecureShareEndpoint();
         }).ConfigureAwait(true);
+    }
+
+    private async Task RearmKillSwitchIfNeededAsync(
+        ProxyServer server,
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (IsMobile || !settings.KillSwitchEnabled || !settings.EnableTunMode)
+            return;
+        if (!AppServices.KillSwitch.IsSupported)
+            return;
+
+        // Re-allow the live core binary and refresh TUN interface rule after soft recreate.
+        await AppServices.KillSwitch.EnableAsync(
+                _proxyCore.ResolveCorePathFor(server),
+                allowTunInterface: true,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task SafeTeardownAsync(bool releaseKillSwitch)

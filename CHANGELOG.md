@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.4] - 2026-09-03
+
+### Fixed
+
+- **Kill switch allowlists the live core** — Hy2/TUIC/WG arm `sing-box.exe`, not `xray.exe` (false safety after 2.6.2.3 desktop TUN)
+- **Soft recovery under KS** — re-arms allow rule after soft TUN recreate; queues retry when resume gate is busy; clear status when KS blocks reconnect
+- **Desktop sing-box App Network** — `process_name` Direct/Block on auto_route TUN (parity with Xray)
+
+### Changed
+
+- Persistent Bypass China → Bypass LAN hint on sing-box Settings
+- Secure Share / Smart Multipath hidden for sing-box servers; reconnect tip for fragment/share/multipath while Connected
+
 ## [2.6.2.3] - 2026-09-03
 
 ### Fixed

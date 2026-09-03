@@ -12,7 +12,8 @@ public interface IKillSwitch
     string? LastError { get; }
 
     /// <summary>
-    /// Block clearnet until <see cref="DisableAsync"/>. Pass the Xray executable path to allow.
+    /// Block clearnet until <see cref="DisableAsync"/>. Pass the live core executable
+    /// (Xray or sing-box) to allow through the firewall.
     /// When <paramref name="allowTunInterface"/> is true (desktop TUN mode), also allow outbound
     /// on the TUN adapter so apps are not blackholed by the block-all rule.
     /// </summary>
