@@ -201,7 +201,15 @@ public class V2rayVpnService : VpnService
             _establishConfigHash = ComputeEstablishHash(bypassList, blockIpv6);
             _establishTcs?.TrySetResult(fd);
 
-            RegisterNetworkCallback(this);
+            // Session-survival callbacks are best-effort — never tear down a good TUN.
+            try
+            {
+                RegisterNetworkCallback(this);
+            }
+            catch
+            {
+                // Missing ACCESS_NETWORK_STATE (or OEM quirks) must not fail Connect.
+            }
 
             StartVpnForeground(BuildNotification(TrafficStatsService.FormatNotificationLine(0, 0, null)));
             StartTrafficNotificationUpdates();
@@ -371,15 +379,16 @@ public class V2rayVpnService : VpnService
 
     private static void RegisterNetworkCallback(Context context)
     {
-        UnregisterNetworkCallback();
-        if (context.GetSystemService(Context.ConnectivityService) is not ConnectivityManager cm)
-            return;
-
-        _connectivityManager = cm;
-        _networkCallback = new VpnNetworkCallback();
-        _underlyingCallback = new UnderlyingNetworkCallback();
         try
         {
+            UnregisterNetworkCallback();
+            if (context.GetSystemService(Context.ConnectivityService) is not ConnectivityManager cm)
+                return;
+
+            _connectivityManager = cm;
+            _networkCallback = new VpnNetworkCallback();
+            _underlyingCallback = new UnderlyingNetworkCallback();
+
             cm.RegisterDefaultNetworkCallback(_networkCallback);
 
             var internetRequest = new NetworkRequest.Builder()
@@ -392,7 +401,14 @@ public class V2rayVpnService : VpnService
         }
         catch
         {
-            UnregisterNetworkCallback();
+            try
+            {
+                UnregisterNetworkCallback();
+            }
+            catch
+            {
+                // Best effort cleanup.
+            }
         }
     }
 

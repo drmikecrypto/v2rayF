@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.5] - 2026-09-03
+
+### Fixed
+
+- **Android Connect** — declare `ACCESS_NETWORK_STATE` / `ACCESS_WIFI_STATE` so ConnectivityManager network callbacks no longer throw SecurityException on every Connect
+- **VPN establish harden** — session network-callback registration is best-effort and cannot tear down a successful TUN
+
 ## [2.6.2.4] - 2026-09-03
 
 ### Fixed
