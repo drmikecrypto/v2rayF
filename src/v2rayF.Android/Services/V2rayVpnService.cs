@@ -126,9 +126,11 @@ public class V2rayVpnService : VpnService
                         XrayConfigBuilder.HttpPort,
                         SingBoxConfigBuilder.GetMetaHttpProxyExclusions()));
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Some OEMs reject VPN HTTP proxy; TUN still applies.
+                    // OEM reject — Chromium apps may fail until user disconnects.
+                    AndroidPlatformIntegration.ReportHttpProxyWarning(
+                        $"VPN HTTP proxy unavailable — Chromium apps may fail ({ex.Message})");
                 }
             }
 

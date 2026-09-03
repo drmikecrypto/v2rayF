@@ -549,7 +549,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Tun-only failure soft recovery (gated against hard UnexpectedStop).</summary>
+    /// <summary>Tun-only failure: soft RefreshRuntime only (localhost already OK — never full reconnect).</summary>
     private async Task OnTunPathFailedRecoveryAsync()
     {
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
@@ -560,7 +560,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
         {
-            // Another recovery owns the gate — queue a retry; keep soft-recovery pause armed.
             Volatile.Write(ref _pendingSoftRecovery, 1);
             return;
         }
@@ -568,8 +567,52 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             _lastSessionResumeUtc = DateTimeOffset.UtcNow;
-            var ok = await RecoverSessionCoreAsync().ConfigureAwait(true);
-            _proxyCore.EndSoftRecovery(success: ok);
+            var server = SelectedServer;
+            var settings = CollectSettings();
+            settings.EnablePacketFragment = EnablePacketFragment;
+            settings.AdaptiveSurviveEnabled = false;
+            var tunFd = _proxyCore.ActiveTunFd;
+
+            try
+            {
+                if (IsMobile)
+                {
+                    var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
+                    if (AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6))
+                    {
+                        var rebuilt = await AppServices.Platform
+                            .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        if (rebuilt is not null)
+                            tunFd = rebuilt;
+                    }
+                }
+
+                await _proxyCore.RefreshRuntimeAsync(
+                        server, settings, tunFd, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+                await RearmKillSwitchIfNeededAsync(server, settings, CancellationToken.None)
+                    .ConfigureAwait(true);
+
+                var ok = await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true);
+                _proxyCore.EndSoftRecovery(success: ok);
+                if (ok)
+                {
+                    try
+                    {
+                        await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                    }
+                    catch
+                    {
+                        // Best-effort.
+                    }
+                }
+            }
+            catch
+            {
+                // Stay Connected — tun advisory refresh failed; do not tear down.
+                _proxyCore.EndSoftRecovery(success: false);
+            }
         }
         catch
         {
@@ -2113,13 +2156,23 @@ public partial class MainWindowViewModel : ViewModelBase
         await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
+        var status =
+            $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi}). Tip: force-stop Instagram once for Direct.";
+        var httpWarn = AppServices.Platform.LastHttpProxyWarning;
+        if (!string.IsNullOrWhiteSpace(httpWarn) && !_httpProxyWarningShown)
+        {
+            _httpProxyWarningShown = true;
+            status += $" · {StatusSanitizer.Scrub(httpWarn)}";
+        }
+
         await SetOnUiAsync(() =>
         {
-            StatusText =
-                $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi}). Tip: force-stop Instagram once for Direct.";
+            StatusText = status;
             IsConnected = true;
         }).ConfigureAwait(true);
     }
+
+    private bool _httpProxyWarningShown;
 
     private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
     private DateTimeOffset _lastSessionResumeUtc = DateTimeOffset.MinValue;

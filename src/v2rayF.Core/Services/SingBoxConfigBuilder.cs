@@ -227,6 +227,22 @@ public static class SingBoxConfigBuilder
                 });
             }
 
+            // Force Google Chromium (Translate / Play Store) off QUIC → TCP → VPN HTTP proxy 10809.
+            // Scoped to Google suffixes only — global UDP/443 blackhole broke messengers (2.4.2).
+            if (androidTun)
+            {
+                var googleSuffixes = new JsonArray();
+                foreach (var suffix in GoogleDnsSuffixes)
+                    googleSuffixes.Add(suffix);
+                rules.Add(new JsonObject
+                {
+                    ["domain_suffix"] = googleSuffixes,
+                    ["port"] = 443,
+                    ["network"] = "udp",
+                    ["outbound"] = "block"
+                });
+            }
+
             var pushRouteHosts = new JsonArray();
             foreach (var host in GetAndroidPushRouteHosts())
                 pushRouteHosts.Add(host);

@@ -32,6 +32,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
 
     public string? LastEstablishError => null;
 
+    public string? LastHttpProxyWarning => null;
+
     public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.7] - 2026-09-03
+
+### Fixed
+
+- **Disconnect loop** — TUN/FCM probe misses no longer increment hard path-fails or trigger UnexpectedStop; soft RefreshRuntime only
+- **VerifyLivePath / soft recovery** — aligned with Connect gate (SOCKS+HTTP); tun-only stays Connected
+- **Google Translate** — Android TUN blocks Google UDP/443 (force TCP → VPN HTTP proxy 10809); not a global QUIC blackhole
+- **Auto-reconnect budget** — resets only after 3 sustained localhost-healthy probes
+- OEM `SetHttpProxy` failure surfaces once in Connected status
+
+### Changed
+
+- TUN advisory probe: gen204 **or** FCM (8s budget); `TunOnlyFailThreshold` = 4
+
 ## [2.6.2.6] - 2026-09-03
 
 ### Fixed

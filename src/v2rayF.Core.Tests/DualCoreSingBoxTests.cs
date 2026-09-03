@@ -379,7 +379,7 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_UsesGvisorStackAndOmitsQuicBlock()
+    public void AndroidTunFd_UsesGvisorStackAndOmitsGlobalQuicBlock()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var root = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!;
@@ -391,6 +391,29 @@ public class DualCoreSingBoxTests
         var rules = root["route"]!["rules"]!.AsArray();
         Assert.DoesNotContain(rules, r =>
             r?["protocol"]?.GetValue<string>() == "quic" &&
+            r["outbound"]?.GetValue<string>() == "block");
+    }
+
+    [Fact]
+    public void AndroidTunFd_BlocksGoogleUdp443ForTranslateTcpFallback()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+            ["route"]!["rules"]!.AsArray();
+
+        Assert.Contains(rules, r =>
+            r?["network"]?.GetValue<string>() == "udp" &&
+            r["port"]?.GetValue<int>() == 443 &&
+            r["outbound"]?.GetValue<string>() == "block" &&
+            r["domain_suffix"] is JsonArray suffixes &&
+            suffixes.Any(s => s!.GetValue<string>() == "google.com"));
+
+        // Desktop auto_route must not get Google UDP block (Android VpnService HTTP proxy path only).
+        var desktopRules = JsonNode.Parse(SingBoxConfigBuilder.Build(
+            server, new AppSettings { EnableTunMode = true }, tunFd: null))!["route"]!["rules"]!.AsArray();
+        Assert.DoesNotContain(desktopRules, r =>
+            r?["network"]?.GetValue<string>() == "udp" &&
+            r["port"]?.GetValue<int>() == 443 &&
             r["outbound"]?.GetValue<string>() == "block");
     }
 

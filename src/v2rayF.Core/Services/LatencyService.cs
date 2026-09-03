@@ -42,7 +42,7 @@ public sealed class LatencyService
     /// <summary>Connect gate: discard one warmup GET, then this many timed samples.</summary>
     public const int ConnectHealthTimedProbeCount = 1;
     /// <summary>TUN default-route probe budget (app traffic path, not localhost SOCKS).</summary>
-    public const int TunAppPathProbeMs = 4000;
+    public const int TunAppPathProbeMs = 8000;
     public const int DesktopSpeedtestWorkers = 3;
     public const int MobileSpeedtestWorkers = 2;
 
@@ -210,14 +210,16 @@ public sealed class LatencyService
             await Task.WhenAll(gen204Task, pushTask).ConfigureAwait(false);
 
             var gen204 = await gen204Task.ConfigureAwait(false);
-            if (gen204 is null or < 0)
-                return gen204;
-
             var pushMs = await pushTask.ConfigureAwait(false);
-            if (pushMs is null or < 0)
-                return pushMs;
 
-            return Math.Max(gen204.Value, pushMs.Value);
+            // Advisory: gen204 OR push host (both required was too flaky for health decisions).
+            if (gen204 is >= 0 && pushMs is >= 0)
+                return Math.Max(gen204.Value, pushMs.Value);
+            if (gen204 is >= 0)
+                return gen204;
+            if (pushMs is >= 0)
+                return pushMs;
+            return -1;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

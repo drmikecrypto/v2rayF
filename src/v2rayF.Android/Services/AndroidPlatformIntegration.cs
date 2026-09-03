@@ -27,10 +27,18 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
 
     public string? LastEstablishError { get; private set; }
 
+    public string? LastHttpProxyWarning { get; private set; }
+
     internal static void ReportEstablishError(string? message)
     {
         if (AppServices.Platform is AndroidPlatformIntegration platform)
             platform.LastEstablishError = message;
+    }
+
+    internal static void ReportHttpProxyWarning(string? message)
+    {
+        if (AppServices.Platform is AndroidPlatformIntegration platform)
+            platform.LastHttpProxyWarning = message;
     }
 
     public Task<int?> EstablishVpnAsync(
@@ -45,6 +53,7 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         CancellationToken cancellationToken)
     {
         LastEstablishError = null;
+        LastHttpProxyWarning = null;
         var activity = MainActivity.Instance;
         if (activity is null)
             throw new InvalidOperationException("Activity not ready.");

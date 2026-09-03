@@ -31,7 +31,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int NatKeepaliveIntervalMs = 25000;
     public const int NatKeepaliveProbeMs = 2000;
     /// <summary>Consecutive tun-only probe failures before soft recovery fires.</summary>
-    public const int TunOnlyFailThreshold = 2;
+    public const int TunOnlyFailThreshold = 4;
+
+    /// <summary>Localhost-healthy PathHealthOk events before resetting auto-reconnect budget.</summary>
+    public const int LocalhostHealthyResetThreshold = 3;
 
     private readonly ICoreEnvironment _environment;
     private readonly LatencyService _latency;
@@ -45,6 +48,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private volatile int _consecutivePathFails;
     private volatile int _consecutiveSocksFails;
     private volatile int _consecutiveTunOnlyFails;
+    private volatile int _consecutiveLocalhostHealthy;
     private DateTimeOffset _lastPathProbeUtc = DateTimeOffset.UtcNow;
     private DateTimeOffset _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
     private DateTimeOffset _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
@@ -92,10 +96,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
                File.Exists(Path.Combine(cores, "geosite.dat"));
     }
 
-    /// <summary>Raised when a soft path probe succeeds (reset AutoReconnect budget).</summary>
+    /// <summary>Raised when a soft path probe succeeds (reset AutoReconnect budget after sustained greens).</summary>
     public event EventHandler? PathHealthOk;
 
-    /// <summary>Raised when TUN app-path probe fails (trigger soft recovery before hard stop).</summary>
+    /// <summary>Raised when TUN app-path probe fails repeatedly (advisory soft refresh; never hard stop).</summary>
     public event EventHandler? TunPathFailed;
 
     /// <summary>True while soft recovery is in flight (pause path-fail escalation).</summary>
@@ -144,17 +148,18 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _consecutiveTunOnlyFails = 0;
+        _consecutiveLocalhostHealthy = 0;
         PathHealthOk?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS+HTTP on Android TUN).</summary>
+    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS+HTTP; TUN advisory).</summary>
     public async Task<bool> VerifyLivePathAsync(CancellationToken cancellationToken = default)
     {
         if (ActiveServer is null || !IsRunning)
             return false;
 
         var budget = GetResumePathProbeMs(ActiveServer);
-        var pathMs = await ProbeConnectPathAsync(
+        var result = await ProbePathComponentsAsync(
                 ActiveServer,
                 _activeUseSingBox,
                 _activeTunFd,
@@ -163,7 +168,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 cancellationToken)
             .ConfigureAwait(false);
 
-        if (pathMs is >= 0)
+        if (result.ConnectGateMs is >= 0)
         {
             ResetPathHealthState();
             return true;
@@ -281,6 +286,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _consecutiveTunOnlyFails = 0;
+        _consecutiveLocalhostHealthy = 0;
         _lastPathProbeUtc = DateTimeOffset.UtcNow;
         _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
@@ -354,6 +360,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
         bool httpRequired,
         bool tunRequired) =>
         FormatConnectGateFailure(new PathProbeResult(socksMs, httpMs, tunMs, httpRequired, tunRequired));
+
+    public static bool IsTunOnlyAdvisory(bool localhostOk, bool tunOk, bool tunRequired) =>
+        localhostOk && tunRequired && !tunOk;
 
     private async Task<PathProbeResult> ProbeConnectGateWithRetryAsync(
         ProxyServer server,
@@ -531,6 +540,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _consecutiveTunOnlyFails = 0;
+        _consecutiveLocalhostHealthy = 0;
         _lastPathProbeUtc = DateTimeOffset.UtcNow;
         _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
@@ -690,23 +700,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
                                 RequiresTunAppPath());
                         }
 
-                        if (probeResult.CombinedMs is null or < 0)
+                        if (!probeResult.LocalhostOk)
                         {
                             if (IsSoftRecoveryInFlight)
                                 continue;
 
-                            if (probeResult.LocalhostOk && !probeResult.TunOk)
-                            {
-                                _consecutiveTunOnlyFails++;
-                                if (_consecutiveTunOnlyFails >= TunOnlyFailThreshold)
-                                {
-                                    BeginSoftRecovery();
-                                    TunPathFailed?.Invoke(this, EventArgs.Empty);
-                                }
-                            }
-                            else
-                                _consecutiveTunOnlyFails = 0;
-
+                            _consecutiveLocalhostHealthy = 0;
+                            _consecutiveTunOnlyFails = 0;
                             _consecutivePathFails++;
                             if (ShouldRaiseOnPathFails(_consecutivePathFails))
                             {
@@ -714,11 +714,44 @@ public sealed class ProxyCoreService : IAsyncDisposable
                                 return;
                             }
                         }
+                        else if (probeResult.TunRequired && !probeResult.TunOk)
+                        {
+                            // Localhost OK — never hard-disconnect for TUN/FCM flap.
+                            if (IsSoftRecoveryInFlight)
+                                continue;
+
+                            _consecutiveTunOnlyFails++;
+                            _consecutiveLocalhostHealthy++;
+                            if (_consecutiveLocalhostHealthy >= LocalhostHealthyResetThreshold)
+                                PathHealthOk?.Invoke(this, EventArgs.Empty);
+
+                            if (_consecutiveTunOnlyFails >= TunOnlyFailThreshold)
+                            {
+                                BeginSoftRecovery();
+                                TunPathFailed?.Invoke(this, EventArgs.Empty);
+                            }
+
+                            if ((now - _lastVpnKeepaliveUtc).TotalMilliseconds >= ActivePathHealthIntervalMs)
+                            {
+                                _lastVpnKeepaliveUtc = now;
+                                try
+                                {
+                                    AppServices.OnVpnKeepalive?.Invoke();
+                                }
+                                catch
+                                {
+                                    // Best-effort.
+                                }
+                            }
+                        }
                         else
                         {
                             _consecutivePathFails = 0;
                             _consecutiveTunOnlyFails = 0;
-                            PathHealthOk?.Invoke(this, EventArgs.Empty);
+                            _consecutiveLocalhostHealthy++;
+                            if (_consecutiveLocalhostHealthy >= LocalhostHealthyResetThreshold)
+                                PathHealthOk?.Invoke(this, EventArgs.Empty);
+
                             if ((now - _lastVpnKeepaliveUtc).TotalMilliseconds >= ActivePathHealthIntervalMs)
                             {
                                 _lastVpnKeepaliveUtc = now;

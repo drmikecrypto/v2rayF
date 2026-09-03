@@ -55,9 +55,10 @@ public class SessionReliabilityTests
     [Fact]
     public void TunAppPathProbe_ConstantDefined()
     {
-        Assert.Equal(4000, LatencyService.TunAppPathProbeMs);
+        Assert.Equal(8000, LatencyService.TunAppPathProbeMs);
         Assert.Equal(90, ProxyCoreService.ActivePathHealthIntervalMs / 1000);
-        Assert.Equal(2, ProxyCoreService.TunOnlyFailThreshold);
+        Assert.Equal(4, ProxyCoreService.TunOnlyFailThreshold);
+        Assert.Equal(3, ProxyCoreService.LocalhostHealthyResetThreshold);
     }
 
     [Fact]
@@ -79,6 +80,20 @@ public class SessionReliabilityTests
         Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(-1, 40, httpRequired: true));
         Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, null, httpRequired: false));
+    }
+
+    [Fact]
+    public void TunOnlyAdvisory_DoesNotEscalatePathFails()
+    {
+        Assert.True(ProxyCoreService.IsTunOnlyAdvisory(
+            localhostOk: true, tunOk: false, tunRequired: true));
+        Assert.False(ProxyCoreService.IsTunOnlyAdvisory(
+            localhostOk: false, tunOk: false, tunRequired: true));
+        Assert.False(ProxyCoreService.IsTunOnlyAdvisory(
+            localhostOk: true, tunOk: true, tunRequired: true));
+        // Path-fail threshold still applies to localhost fails only.
+        Assert.False(ProxyCoreService.ShouldRaiseOnPathFails(2));
+        Assert.True(ProxyCoreService.ShouldRaiseOnPathFails(3));
     }
 
     [Fact]

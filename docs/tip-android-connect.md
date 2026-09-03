@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.7 — stay connected + Translate
+
+**2.6.2.7** stops tearing down sessions when only the TUN/FCM probe flaps (the disconnect↔Auto-reconnect loop). Soft refresh clears FakeIP while staying Connected. Google UDP/443 is blocked on Android TUN so Translate falls back to the VPN HTTP proxy. Force-stop Translate once after update if it was stuck offline.
+
 ## v2.6.2.6 — Connect health-gate false fails
 
 **2.6.2.6** stops blaming every Connect failure on HTTP 10809. Connect needs SOCKS+HTTP only; cold Reality gets SOCKS-then-HTTP warmup, a soft retry, and longer budgets (12s/16s). TUN/FCM remains for background health + soft recovery.

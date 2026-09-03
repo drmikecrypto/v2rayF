@@ -12,7 +12,7 @@ namespace v2rayF.Android.Services;
 
 /// <summary>
 /// Health probe through the active VPN Network (v2rayF is VPN-disallowed — default HttpClient uses clearnet).
-/// Both gen204 and a push host must succeed (matches desktop MeasureTunAppPathAsync).
+/// Advisory: gen204 OR a push host (not both) — dual-required caused false disconnect loops.
 /// </summary>
 internal static class VpnTunPathProbe
 {
@@ -63,9 +63,6 @@ internal static class VpnTunPathProbe
             }
         }
 
-        if (gen204Ms is null or < 0)
-            return -1;
-
         int? pushMs = null;
         foreach (var url in PushProbeUrls)
         {
@@ -78,10 +75,13 @@ internal static class VpnTunPathProbe
             }
         }
 
-        if (pushMs is null or < 0)
-            return -1;
-
-        return Math.Max(gen204Ms.Value, pushMs.Value);
+        if (gen204Ms is >= 0 && pushMs is >= 0)
+            return Math.Max(gen204Ms.Value, pushMs.Value);
+        if (gen204Ms is >= 0)
+            return gen204Ms;
+        if (pushMs is >= 0)
+            return pushMs;
+        return -1;
     }
 
     private static int? ProbeUrl(Network network, string url, int timeoutMs, bool headOnly)

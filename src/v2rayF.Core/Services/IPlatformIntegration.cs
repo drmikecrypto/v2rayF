@@ -17,6 +17,9 @@ public interface IPlatformIntegration
 
     string? LastEstablishError { get; }
 
+    /// <summary>One-shot OEM warning when VpnService.SetHttpProxy fails (Android).</summary>
+    string? LastHttpProxyWarning { get; }
+
     /// <summary>
     /// Establish VPN/TUN. Optional Android per-app bypass package names and IPv6 block flag.
     /// </summary>

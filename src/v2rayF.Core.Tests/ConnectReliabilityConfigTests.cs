@@ -314,6 +314,7 @@ public class SmartConnectShortlistTests
         public string TunRequirementMessage => "";
         public string? LastProxyMethod => null;
         public string? LastEstablishError => null;
+        public string? LastHttpProxyWarning => null;
         public Task<int?> EstablishVpnAsync(
             IReadOnlyList<string>? bypassPackages = null,
             bool blockIpv6 = true,
