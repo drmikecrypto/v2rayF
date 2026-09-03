@@ -31,9 +31,9 @@ public sealed class LatencyService
     public const int RankProbeTimeoutVisionMs = 6000;
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
-    public const int ConnectHealthProbeMs = 8000;
+    public const int ConnectHealthProbeMs = 12000;
     /// <summary>Connect gate budget for Vision / REALITY.</summary>
-    public const int ConnectHealthProbeVisionMs = 12000;
+    public const int ConnectHealthProbeVisionMs = 16000;
     public const int TcpConnectTimeoutMs = 1500;
     public const int SocksPollTimeoutMs = 50;
     public const int HttpConnectTimeoutMs = 2000;

@@ -533,10 +533,10 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void ConnectHealthBudgets_AreSoftened()
+    public void ConnectHealthBudgets_AreRestoredForSlowReality()
     {
-        Assert.Equal(8000, LatencyService.ConnectHealthProbeMs);
-        Assert.Equal(12000, LatencyService.ConnectHealthProbeVisionMs);
+        Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(16000, LatencyService.ConnectHealthProbeVisionMs);
     }
 
     [Fact]

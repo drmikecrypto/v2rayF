@@ -72,6 +72,33 @@ public class SessionReliabilityTests
     }
 
     [Fact]
+    public void ConnectGate_IgnoresTunOnlyFailure()
+    {
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, 40, httpRequired: true));
+        Assert.Null(ProxyCoreService.EvaluateConnectGateMs(null, 40, httpRequired: true));
+        Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(-1, 40, httpRequired: true));
+        Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, null, httpRequired: false));
+    }
+
+    [Fact]
+    public void ConnectGateFailure_NamesFailingComponent()
+    {
+        Assert.Contains(
+            "SOCKS 10808",
+            ProxyCoreService.DescribeConnectGateFailure(-1, 10, 10, httpRequired: true, tunRequired: true));
+        Assert.Contains(
+            "HTTP proxy 10809",
+            ProxyCoreService.DescribeConnectGateFailure(10, -1, 10, httpRequired: true, tunRequired: true));
+        Assert.Contains(
+            "TUN app-path",
+            ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: true, tunRequired: true));
+        Assert.DoesNotContain(
+            "HTTP proxy 10809",
+            ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: true, tunRequired: true));
+    }
+
+    [Fact]
     public void ResolveCorePathFor_MatchesUseSingBox()
     {
         var dir = Path.Combine(Path.GetTempPath(), "v2rayf-ks-" + Guid.NewGuid().ToString("N"));

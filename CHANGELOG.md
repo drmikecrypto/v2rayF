@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.6] - 2026-09-03
+
+### Fixed
+
+- **Android Connect health gate** — no longer hard-fails on TUN/FCM-only misses; requires SOCKS + HTTP (Play Store path) only
+- **Misleading 10809 error** — failure message names SOCKS vs HTTP vs TUN component
+- **Cold Reality race** — SOCKS warms before HTTP; 500ms soft retry; Connect budgets restored to 12s / Vision 16s
+
 ## [2.6.2.5] - 2026-09-03
 
 ### Fixed

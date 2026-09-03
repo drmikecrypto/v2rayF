@@ -230,11 +230,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        // Gate Connected on a real proxy-path probe — SOCKS listen alone is not enough.
+        // Gate Connected on localhost proxy-path probes (TUN is advisory at Connect).
         LastConnectProbeMs = null;
-        var probeMs = await ProbeConnectPathAsync(
-                server, useSingBox, tunFd, healthBudget: null, enableTunMode: settings.EnableTunMode, cancellationToken)
+        var gateResult = await ProbeConnectGateWithRetryAsync(
+                server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
             .ConfigureAwait(false);
+        var probeMs = gateResult.ConnectGateMs;
 
         // If DoH was off and the gate failed, one automatic Secure-DNS retry (no fragment).
         if (probeMs is null or < 0 && !settings.DnsThroughProxy)
@@ -259,18 +260,16 @@ public sealed class ProxyCoreService : IAsyncDisposable
             readyTimeout2.CancelAfter(ConnectTimeoutMs);
             await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
-            probeMs = await ProbeConnectPathAsync(
-                    server, useSingBox, tunFd, healthBudget: null, enableTunMode: dohSettings.EnableTunMode, cancellationToken)
+            gateResult = await ProbeConnectGateWithRetryAsync(
+                    server, useSingBox, tunFd, dohSettings.EnableTunMode, cancellationToken)
                 .ConfigureAwait(false);
+            probeMs = gateResult.ConnectGateMs;
         }
 
         if (probeMs is null or < 0)
         {
             await StopAsync(cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException(
-                RequiresAndroidTunHttpProbe(useSingBox, tunFd)
-                    ? "Proxy path failed after connect (HTTP proxy 10809 probe timed out). Play Store needs the VPN HTTP proxy."
-                    : "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.");
+            throw new InvalidOperationException(FormatConnectGateFailure(gateResult));
         }
 
         LastConnectProbeMs = probeMs;
@@ -289,24 +288,91 @@ public sealed class ProxyCoreService : IAsyncDisposable
         RunningStateChanged?.Invoke(this, true);
     }
 
-    private readonly record struct PathProbeResult(int? LocalhostMs, int? TunMs, bool TunRequired)
+    private readonly record struct PathProbeResult(
+        int? SocksMs,
+        int? HttpMs,
+        int? TunMs,
+        bool HttpRequired,
+        bool TunRequired)
     {
-        public bool LocalhostOk => LocalhostMs is >= 0;
+        public bool SocksOk => SocksMs is >= 0;
+        public bool HttpOk => !HttpRequired || HttpMs is >= 0;
+        public bool LocalhostOk => SocksOk && HttpOk;
         public bool TunOk => !TunRequired || TunMs is >= 0;
 
+        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN); TUN is advisory.</summary>
+        public int? ConnectGateMs
+        {
+            get
+            {
+                if (!SocksOk)
+                    return SocksMs;
+                if (!HttpOk)
+                    return HttpMs;
+                if (HttpRequired && SocksMs is int socks && HttpMs is int http)
+                    return Math.Max(socks, http);
+                return SocksMs;
+            }
+        }
+
+        /// <summary>Periodic health — localhost plus TUN when required.</summary>
         public int? CombinedMs
         {
             get
             {
                 if (!LocalhostOk)
-                    return LocalhostMs;
+                    return !SocksOk ? SocksMs : HttpMs;
                 if (!TunOk)
                     return TunMs;
-                if (TunMs is int tun && LocalhostMs is int local)
+                if (TunMs is int tun && ConnectGateMs is int local)
                     return Math.Max(local, tun);
-                return LocalhostMs;
+                return ConnectGateMs;
             }
         }
+    }
+
+    /// <summary>User-facing Connect failure from component probe results.</summary>
+    private static string FormatConnectGateFailure(PathProbeResult result)
+    {
+        if (!result.SocksOk)
+            return "Proxy path failed after connect (SOCKS 10808 probe timed out). The tunnel is not usable.";
+        if (result.HttpRequired && !result.HttpOk)
+            return "Proxy path failed after connect (HTTP proxy 10809 probe timed out). Play Store needs the VPN HTTP proxy.";
+        if (result.TunRequired && !result.TunOk)
+            return "Proxy path failed after connect (TUN app-path probe failed (gen204/FCM)).";
+        return "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.";
+    }
+
+    // Test seam — PathProbeResult is private; expose gate evaluation for unit tests.
+    public static int? EvaluateConnectGateMs(int? socksMs, int? httpMs, bool httpRequired) =>
+        new PathProbeResult(socksMs, httpMs, null, httpRequired, false).ConnectGateMs;
+
+    public static string DescribeConnectGateFailure(
+        int? socksMs,
+        int? httpMs,
+        int? tunMs,
+        bool httpRequired,
+        bool tunRequired) =>
+        FormatConnectGateFailure(new PathProbeResult(socksMs, httpMs, tunMs, httpRequired, tunRequired));
+
+    private async Task<PathProbeResult> ProbeConnectGateWithRetryAsync(
+        ProxyServer server,
+        bool useSingBox,
+        int? tunFd,
+        bool enableTunMode,
+        CancellationToken cancellationToken)
+    {
+        var result = await ProbePathComponentsAsync(
+                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ConnectGateMs is >= 0)
+            return result;
+
+        // Listen≠path-ready race on cold Reality/Vision.
+        await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+        return await ProbePathComponentsAsync(
+                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<int?> ProbeConnectPathAsync(
@@ -335,6 +401,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         probeCts.CancelAfter(budget);
 
+        var httpRequired = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
         var tunRequired = RequiresTunAppPath(enableTunMode);
         var tunProbeBudget = Math.Min(budget, LatencyService.TunAppPathProbeMs);
         var tunTask = tunRequired
@@ -343,36 +410,33 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         try
         {
-            if (!RequiresAndroidTunHttpProbe(useSingBox, tunFd))
+            // SOCKS first (warmup) so HTTP CONNECT is not racing a cold outbound.
+            var socksMs = await _latency
+                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                .ConfigureAwait(false);
+
+            if (!httpRequired)
             {
-                var socksMs = await _latency
-                    .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
-                    .ConfigureAwait(false);
-                var tunMs = await tunTask.ConfigureAwait(false);
-                return new PathProbeResult(socksMs, tunMs, tunRequired);
+                var tunOnly = await tunTask.ConfigureAwait(false);
+                return new PathProbeResult(socksMs, null, tunOnly, false, tunRequired);
             }
 
-            var socksTask = _latency.MeasureConnectHealthViaSocksAsync(
-                XrayConfigBuilder.SocksPort, probeCts.Token, budget);
-            var httpTask = _latency.MeasureConnectHealthViaHttpAsync(
-                XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false);
-            await Task.WhenAll(socksTask, httpTask, tunTask).ConfigureAwait(false);
+            if (socksMs is null or < 0)
+            {
+                var tunFail = await tunTask.ConfigureAwait(false);
+                return new PathProbeResult(socksMs, -1, tunFail, true, tunRequired);
+            }
 
-            var socksMs2 = await socksTask.ConfigureAwait(false);
-            if (socksMs2 is null or < 0)
-                return new PathProbeResult(socksMs2, await tunTask.ConfigureAwait(false), tunRequired);
-
-            var httpMs = await httpTask.ConfigureAwait(false);
-            if (httpMs is null or < 0)
-                return new PathProbeResult(httpMs, await tunTask.ConfigureAwait(false), tunRequired);
-
+            var httpMs = await _latency
+                .MeasureConnectHealthViaHttpAsync(
+                    XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false)
+                .ConfigureAwait(false);
             var tunAppMs = await tunTask.ConfigureAwait(false);
-            var localhostMs = Math.Max(socksMs2.Value, httpMs.Value);
-            return new PathProbeResult(localhostMs, tunAppMs, tunRequired);
+            return new PathProbeResult(socksMs, httpMs, tunAppMs, true, tunRequired);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new PathProbeResult(-1, -1, tunRequired);
+            return new PathProbeResult(-1, httpRequired ? -1 : null, -1, httpRequired, tunRequired);
         }
     }
 
@@ -422,10 +486,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
         readyTimeout.CancelAfter(ConnectTimeoutMs);
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        var probeMs = await ProbeConnectPathAsync(
-                server, useSingBox, tunFd, healthBudget: null, enableTunMode: settings.EnableTunMode, cancellationToken)
+        var probeMs = await ProbeConnectGateWithRetryAsync(
+                server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
             .ConfigureAwait(false);
-        if (probeMs is null or < 0 && !settings.DnsThroughProxy)
+        var gateMs = probeMs.ConnectGateMs;
+        if (gateMs is null or < 0 && !settings.DnsThroughProxy)
         {
             var dohSettings = CloneSettingsWithDoH(settings);
             await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
@@ -446,15 +511,16 @@ public sealed class ProxyCoreService : IAsyncDisposable
             readyTimeout2.CancelAfter(ConnectTimeoutMs);
             await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
-            probeMs = await ProbeConnectPathAsync(
-                    server, useSingBox, tunFd, healthBudget: null, enableTunMode: dohSettings.EnableTunMode, cancellationToken)
+            probeMs = await ProbeConnectGateWithRetryAsync(
+                    server, useSingBox, tunFd, dohSettings.EnableTunMode, cancellationToken)
                 .ConfigureAwait(false);
+            gateMs = probeMs.ConnectGateMs;
         }
 
-        if (probeMs is null or < 0)
+        if (gateMs is null or < 0)
         {
             await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
-            throw new InvalidOperationException("Proxy path failed after runtime refresh.");
+            throw new InvalidOperationException(FormatConnectGateFailure(probeMs));
         }
 
         Interlocked.Exchange(ref _unexpectedHandled, 0);
@@ -616,7 +682,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
                         }
                         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                         {
-                            probeResult = new PathProbeResult(-1, -1, RequiresTunAppPath());
+                            probeResult = new PathProbeResult(
+                                -1,
+                                _activeUseSingBox && _activeTunFd is >= 0 ? -1 : null,
+                                -1,
+                                _activeUseSingBox && _activeTunFd is >= 0,
+                                RequiresTunAppPath());
                         }
 
                         if (probeResult.CombinedMs is null or < 0)

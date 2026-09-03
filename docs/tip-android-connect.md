@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.6 — Connect health-gate false fails
+
+**2.6.2.6** stops blaming every Connect failure on HTTP 10809. Connect needs SOCKS+HTTP only; cold Reality gets SOCKS-then-HTTP warmup, a soft retry, and longer budgets (12s/16s). TUN/FCM remains for background health + soft recovery.
+
 ## v2.6.2.5 — ACCESS_NETWORK_STATE Connect fix
 
 **2.6.2.5** fixes Connect dying with `Neither user … has android.permission.ACCESS_NETWORK_STATE` (network callbacks added in 2.6.2.x without the manifest permission). Update the APK so the permission is granted at install time.
