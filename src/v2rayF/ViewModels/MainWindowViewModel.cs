@@ -590,6 +590,19 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
+                if (IsMobile)
+                {
+                    var bypass = AppNetworkPolicy.GetDirectIds(connectSettings, mobile: true);
+                    if (AppServices.Platform.NeedsVpnReestablish(bypass, connectSettings.BlockIpv6))
+                    {
+                        var rebuilt = await AppServices.Platform
+                            .EstablishVpnAsync(bypass, connectSettings.BlockIpv6, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        if (rebuilt is not null)
+                            tunFd = rebuilt;
+                    }
+                }
+
                 await _proxyCore.RefreshRuntimeAsync(
                         server,
                         connectSettings,
@@ -628,6 +641,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
+            // Drop stale TUN / core before full reconnect (keep kill switch armed).
+            await SafeTeardownAsync(releaseKillSwitch: false).ConfigureAwait(true);
+
             if (IsMobile)
                 await ConnectAndroidAsync(server, connectSettings, null, CancellationToken.None)
                     .ConfigureAwait(true);
@@ -1016,6 +1032,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var settings = CollectSettings();
         var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: IsMobile);
+        settings.EnablePacketFragment = EnablePacketFragment;
+        settings.AdaptiveSurviveEnabled = false;
 
         // Android: rebuild VPN interface when bypass/IPv6 hash differs, then soft-refresh core.
         if (IsMobile &&
@@ -1030,8 +1048,6 @@ public partial class MainWindowViewModel : ViewModelBase
                     .ConfigureAwait(true);
                 if (tunFd is not null)
                 {
-                    settings.EnablePacketFragment = EnablePacketFragment;
-                    settings.AdaptiveSurviveEnabled = false;
                     await _proxyCore.RefreshRuntimeAsync(
                             server, settings, tunFd, null, CancellationToken.None)
                         .ConfigureAwait(true);
@@ -1039,6 +1055,25 @@ public partial class MainWindowViewModel : ViewModelBase
                     StatusText = $"App Network applied — {StatusSanitizer.Scrub(server.Name)}";
                     return;
                 }
+            }
+            catch
+            {
+                // Fall through to full reconnect.
+            }
+        }
+
+        // Block-only (or desktop process lists): core config change without VPN hash change.
+        if (_proxyCore.IsRunning)
+        {
+            StatusText = "Applying App Network…";
+            try
+            {
+                await _proxyCore.RefreshRuntimeAsync(
+                        server, settings, _proxyCore.ActiveTunFd, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+                await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                StatusText = $"App Network applied — {StatusSanitizer.Scrub(server.Name)}";
+                return;
             }
             catch
             {
@@ -1054,9 +1089,134 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveSettingsAsync()
     {
-        await _settingsStore.SaveAsync(CollectSettings());
-        StatusText = "Settings saved.";
+        var previous = CaptureRuntimeSettings(_settings);
+        var settings = CollectSettings();
+        await _settingsStore.SaveAsync(settings).ConfigureAwait(true);
+
+        var connected = (IsConnected || ConnectionState == ConnectionState.Connected) &&
+                        _proxyCore.IsRunning;
+        if (!connected)
+        {
+            StatusText = "Settings saved.";
+            return;
+        }
+
+        var next = CaptureRuntimeSettings(settings);
+        if (!RuntimeSettingsChanged(previous, next))
+        {
+            StatusText = "Settings saved.";
+            return;
+        }
+
+        var server = SelectedServer ?? _proxyCore.ActiveServer;
+        if (server is null)
+        {
+            StatusText = "Settings saved.";
+            return;
+        }
+
+        // TUN / kill-switch need the full connect path (adapter + KS arming).
+        if (previous.EnableTunMode != next.EnableTunMode ||
+            previous.KillSwitchEnabled != next.KillSwitchEnabled)
+        {
+            StatusText = "Reconnecting to apply settings…";
+            await DisconnectAsync().ConfigureAwait(true);
+            await ConnectWithOrchestrationAsync(server).ConfigureAwait(true);
+            return;
+        }
+
+        settings.EnablePacketFragment = EnablePacketFragment;
+        settings.AdaptiveSurviveEnabled = false;
+
+        try
+        {
+            if (IsMobile)
+            {
+                var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
+                if (AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6))
+                {
+                    var tunFd = await AppServices.Platform
+                        .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    if (tunFd is null)
+                        throw new InvalidOperationException("VPN re-establish returned null.");
+
+                    await _proxyCore.RefreshRuntimeAsync(
+                            server, settings, tunFd, null, CancellationToken.None)
+                        .ConfigureAwait(true);
+                }
+                else
+                {
+                    await _proxyCore.RefreshRuntimeAsync(
+                            server, settings, _proxyCore.ActiveTunFd, null, CancellationToken.None)
+                        .ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                await _proxyCore.RefreshRuntimeAsync(
+                        server, settings, _proxyCore.ActiveTunFd, null, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+
+            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+
+            if (next.RoutingMode == RoutingMode.BypassChina &&
+                CoreRuntime.UseSingBox(server) &&
+                !_bypassChinaSingBoxTipShown)
+            {
+                _bypassChinaSingBoxTipShown = true;
+                StatusText =
+                    "Settings applied — Bypass China uses Bypass LAN on sing-box (no CN geosite); use Xray on desktop for CN.";
+            }
+            else
+            {
+                StatusText = "Settings applied";
+            }
+        }
+        catch
+        {
+            StatusText = "Reconnecting to apply settings…";
+            await DisconnectAsync().ConfigureAwait(true);
+            await ConnectWithOrchestrationAsync(server).ConfigureAwait(true);
+        }
     }
+
+    private bool _bypassChinaSingBoxTipShown;
+
+    private readonly record struct RuntimeSettingsSnapshot(
+        bool DnsThroughProxy,
+        bool BlockIpv6,
+        bool AllowDesktopNotificationRouting,
+        RoutingMode RoutingMode,
+        string CustomDirectRules,
+        string CustomProxyRules,
+        string CustomBlockRules,
+        bool EnableTunMode,
+        bool KillSwitchEnabled);
+
+    private static RuntimeSettingsSnapshot CaptureRuntimeSettings(AppSettings s) =>
+        new(
+            s.DnsThroughProxy,
+            s.BlockIpv6,
+            s.AllowDesktopNotificationRouting,
+            s.RoutingMode,
+            s.CustomDirectRules ?? "",
+            s.CustomProxyRules ?? "",
+            s.CustomBlockRules ?? "",
+            s.EnableTunMode,
+            s.KillSwitchEnabled);
+
+    private static bool RuntimeSettingsChanged(RuntimeSettingsSnapshot a, RuntimeSettingsSnapshot b) =>
+        a.DnsThroughProxy != b.DnsThroughProxy ||
+        a.BlockIpv6 != b.BlockIpv6 ||
+        a.AllowDesktopNotificationRouting != b.AllowDesktopNotificationRouting ||
+        a.RoutingMode != b.RoutingMode ||
+        !string.Equals(a.CustomDirectRules, b.CustomDirectRules, StringComparison.Ordinal) ||
+        !string.Equals(a.CustomProxyRules, b.CustomProxyRules, StringComparison.Ordinal) ||
+        !string.Equals(a.CustomBlockRules, b.CustomBlockRules, StringComparison.Ordinal) ||
+        a.EnableTunMode != b.EnableTunMode ||
+        a.KillSwitchEnabled != b.KillSwitchEnabled;
 
     [RelayCommand]
     private async Task CopySecureShareAsync()

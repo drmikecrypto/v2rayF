@@ -94,4 +94,14 @@ public class PushRoutingTests
         Assert.Contains("chat.signal.org", routes);
         Assert.Contains("uds.signal.org", routes);
     }
+
+    [Fact]
+    public void AndroidPushRoute_IncludesSlackExactHosts()
+    {
+        var routes = SingBoxConfigBuilder.GetAndroidPushRouteHosts();
+        Assert.Contains("hooks.slack.com", routes);
+        Assert.Contains("wss-primary.slack.com", routes);
+        Assert.Contains("hooks.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
+        Assert.Contains("wss-primary.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
+    }
 }

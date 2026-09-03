@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.3] - 2026-09-03
+
+### Fixed
+
+- **Desktop sing-box TUN** — Hy2/TUIC/WG with TUN enabled now create `auto_route` WinTun inbound (no more kill-switch without tunnel)
+- **Settings while connected** — DoH / IPv6 / routing / custom rules / push routing apply via `RefreshRuntime` (or VPN rebuild / full reconnect when needed)
+- **Soft recovery** — teardown before full reconnect; Android soft path re-establishes VPN when bypass/IPv6 hash requires it
+
+### Added
+
+- **Sing-box Custom Direct/Proxy/Block** domain and CIDR rules (Android live path + desktop Hy2/TUIC)
+- Slack exact push hosts `hooks.slack.com`, `wss-primary.slack.com`
+- App Network **Block-only** apply via soft refresh (no full Disconnect when VPN hash unchanged)
+
+### Changed
+
+- Bypass China on sing-box maps to Bypass LAN (no geosite this release); status tip when applied
+
 ## [2.6.2.2] - 2026-09-02
 
 ### Fixed

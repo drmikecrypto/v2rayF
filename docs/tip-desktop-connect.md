@@ -5,6 +5,10 @@
 3. **Connect** — status should reach Connected within a few seconds.
 4. If browsing works but toasts do not, see **Windows notifications** below.
 
+## v2.6.2.3 — desktop TUN + live Settings
+
+**2.6.2.3** creates a real auto_route TUN for desktop Hy2/TUIC/WG when TUN is enabled. Saving Settings while Connected refreshes the live core (or reconnects when TUN/kill-switch changes). Soft recovery tears down before a full reconnect.
+
 ## v2.6.2.2 — soft recovery + Signal/Slack push
 
 **2.6.2.2** gates soft runtime refresh against hard reconnect storms. Desktop push routing includes Signal and Slack edge hosts. Settings → **Route push notifications (WNS, Telegram, Discord, Signal, Slack) via proxy**.

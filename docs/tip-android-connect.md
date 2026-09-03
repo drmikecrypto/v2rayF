@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.3 — Custom routing + live Settings
+
+**2.6.2.3** applies Custom Direct/Proxy/Block on the sing-box path, refreshes Settings (DoH/IPv6/rules) while Connected, and soft-applies App Network Block without a full Disconnect when the VPN hash is unchanged. Bypass China maps to Bypass LAN on sing-box (no CN geosite yet).
+
 ## v2.6.2.2 — revoke, soft recovery, network switch
 
 **2.6.2.2** requires FCM + gen204 for TUN health, handles system VPN revoke, pauses hard reconnect during soft refresh, recovers on Wi‑Fi↔LTE, and applies App Network via VPN re-establish when bypass changes.

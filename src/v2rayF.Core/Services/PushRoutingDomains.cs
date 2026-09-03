@@ -65,7 +65,9 @@ public static class PushRoutingDomains
         "venus.web.telegram.org",
         "gateway.discord.gg",
         "chat.signal.org",
-        "uds.signal.org"
+        "uds.signal.org",
+        "hooks.slack.com",
+        "wss-primary.slack.com"
     ];
 
     /// <summary>Desktop TUN: WNS + messenger + Signal/Slack + Apple push suffixes.</summary>

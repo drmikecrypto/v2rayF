@@ -435,6 +435,77 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void DesktopEnableTunMode_WithoutFd_EmitsAutoRouteSystemTun()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var root = JsonNode.Parse(SingBoxConfigBuilder.Build(
+            server,
+            new AppSettings { EnableTunMode = true },
+            tunFd: null))!;
+        var tun = root["inbounds"]!.AsArray().First(i => i!["tag"]?.GetValue<string>() == "tun-in")!;
+        Assert.Equal("tun", tun["type"]!.GetValue<string>());
+        Assert.True(tun["auto_route"]!.GetValue<bool>());
+        Assert.True(tun["strict_route"]!.GetValue<bool>());
+        Assert.Equal("system", tun["stack"]!.GetValue<string>());
+        Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
+        Assert.True(root["route"]!["auto_detect_interface"]!.GetValue<bool>());
+        Assert.DoesNotContain(
+            root["route"]!["rules"]!.AsArray(),
+            r => r!["ip_cidr"] is JsonArray cidrs &&
+                 cidrs.Any(c => c!.GetValue<string>() == "172.19.0.0/30"));
+    }
+
+    [Fact]
+    public void CustomDirect_EmitsBlockProxyDirectDomainRules()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var settings = new AppSettings
+        {
+            RoutingMode = RoutingMode.CustomDirect,
+            CustomBlockRules = "ads.example.com",
+            CustomProxyRules = "full:must.proxy.example",
+            CustomDirectRules = "domain:direct.example\n10.9.8.0/24"
+        };
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, settings, tunFd: 3))!
+            ["route"]!["rules"]!.AsArray();
+
+        Assert.Contains(rules, r =>
+            r?["domain_suffix"] is JsonArray s &&
+            s.Any(x => x!.GetValue<string>() == "ads.example.com") &&
+            r["outbound"]?.GetValue<string>() == "block");
+        Assert.Contains(rules, r =>
+            r?["domain"] is JsonArray d &&
+            d.Any(x => x!.GetValue<string>() == "must.proxy.example") &&
+            r["outbound"]?.GetValue<string>() == "proxy");
+        Assert.Contains(rules, r =>
+            r?["domain_suffix"] is JsonArray s &&
+            s.Any(x => x!.GetValue<string>() == "direct.example") &&
+            r["outbound"]?.GetValue<string>() == "direct");
+        Assert.Contains(rules, r =>
+            r?["ip_cidr"] is JsonArray c &&
+            c.Any(x => x!.GetValue<string>() == "10.9.8.0/24") &&
+            r["outbound"]?.GetValue<string>() == "direct");
+    }
+
+    [Fact]
+    public void BypassChina_OnSingBox_MapsToPrivateDirectLikeBypassLan()
+    {
+        var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
+        var china = JsonNode.Parse(SingBoxConfigBuilder.Build(
+            server, new AppSettings { RoutingMode = RoutingMode.BypassChina }, tunFd: 3))!;
+        var lan = JsonNode.Parse(SingBoxConfigBuilder.Build(
+            server, new AppSettings { RoutingMode = RoutingMode.BypassLan }, tunFd: 3))!;
+        Assert.Equal("proxy", china["route"]!["final"]!.GetValue<string>());
+        Assert.Contains(
+            china["route"]!["rules"]!.AsArray(),
+            r => r!["ip_is_private"]?.GetValue<bool>() == true &&
+                 r["outbound"]?.GetValue<string>() == "direct");
+        Assert.Equal(
+            china["route"]!["rules"]!.ToJsonString(),
+            lan["route"]!["rules"]!.ToJsonString());
+    }
+
+    [Fact]
     public void ConnectHealthBudgets_AreSoftened()
     {
         Assert.Equal(8000, LatencyService.ConnectHealthProbeMs);

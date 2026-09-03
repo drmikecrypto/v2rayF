@@ -129,7 +129,10 @@ public static class SingBoxConfigBuilder
             });
         }
 
-        if (tunFd is int fd && fd >= 0)
+        // Android: inherited VpnService fd (posix_spawn). Desktop: auto_route WinTun when EnableTunMode.
+        var androidTun = tunFd is int inheritedFd && inheritedFd >= 0;
+        var desktopTun = !androidTun && settings.EnableTunMode;
+        if (androidTun)
         {
             inbounds.Add(new JsonObject
             {
@@ -146,6 +149,23 @@ public static class SingBoxConfigBuilder
                 // FakeIP (WhatsApp/Telegram): rewrite dial target to sniffed domain, not 198.18.x
                 ["sniff_override_destination"] = true,
                 // Long-lived FBNS / MQTT UDP paths — avoid aggressive idle cull.
+                ["udp_timeout"] = "5m"
+            });
+        }
+        else if (desktopTun)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "tun",
+                ["tag"] = "tun-in",
+                ["interface_name"] = TunConstants.InterfaceName,
+                ["mtu"] = XrayConfigBuilder.AndroidTunMtu,
+                ["address"] = new JsonArray { "172.19.0.1/30" },
+                ["auto_route"] = true,
+                ["strict_route"] = true,
+                ["stack"] = "system",
+                ["sniff"] = true,
+                ["sniff_override_destination"] = true,
                 ["udp_timeout"] = "5m"
             });
         }
@@ -170,14 +190,22 @@ public static class SingBoxConfigBuilder
     public static string BuildSpeedtest(ProxyServer server, int socksPort) =>
         Build(server, new AppSettings { DnsThroughProxy = false }, socksPort);
 
+    /// <summary>Android inherited fd or desktop EnableTunMode auto_route.</summary>
+    public static bool UsesTun(AppSettings settings, int? tunFd) =>
+        (tunFd is int fd && fd >= 0) || settings.EnableTunMode;
+
+    /// <summary>Android VpnService inherited TUN (not desktop auto_route).</summary>
+    public static bool UsesAndroidInheritedTun(int? tunFd) =>
+        tunFd is int fd && fd >= 0;
+
     private static JsonObject BuildRoute(AppSettings settings, int? tunFd = null)
     {
         var rules = new JsonArray();
-        var hasTun = tunFd is int fd && fd >= 0;
+        var androidTun = UsesAndroidInheritedTun(tunFd);
+        var useTun = UsesTun(settings, tunFd);
 
-        // Android VpnService DNS is 172.19.0.1 — hijack into the DNS module before
-        // ip_is_private → direct (same role as Xray dns-out for Instagram Direct / MQTT).
-        if (hasTun)
+        // TUN DNS / push routes — Android hijacks 172.19.0.1; desktop auto_route still needs push rules.
+        if (useTun)
         {
             rules.Add(new JsonObject { ["action"] = "sniff" });
             rules.Add(new JsonObject
@@ -190,11 +218,14 @@ public static class SingBoxConfigBuilder
                 ["port"] = new JsonArray { 53, 853 },
                 ["action"] = "hijack-dns"
             });
-            rules.Add(new JsonObject
+            if (androidTun)
             {
-                ["ip_cidr"] = new JsonArray { "172.19.0.0/30" },
-                ["action"] = "hijack-dns"
-            });
+                rules.Add(new JsonObject
+                {
+                    ["ip_cidr"] = new JsonArray { "172.19.0.0/30" },
+                    ["action"] = "hijack-dns"
+                });
+            }
 
             var pushRouteHosts = new JsonArray();
             foreach (var host in GetAndroidPushRouteHosts())
@@ -224,9 +255,9 @@ public static class SingBoxConfigBuilder
             });
         }
 
-        // App Network Block: packages stay on TUN but never reach the internet.
+        // App Network Block: packages stay on TUN but never reach the internet (Android).
         var blockPackages = AppNetworkPolicy.GetBlockIds(settings, mobile: true);
-        if (hasTun && blockPackages.Count > 0)
+        if (androidTun && blockPackages.Count > 0)
         {
             var names = new JsonArray();
             foreach (var pkg in blockPackages)
@@ -238,28 +269,99 @@ public static class SingBoxConfigBuilder
             });
         }
 
+        // Custom routing (Android sing-box + desktop Hy2/TUIC). BypassChina → BypassLan (no geosite).
+        var mode = settings.RoutingMode;
+        if (mode == RoutingMode.BypassChina)
+            mode = RoutingMode.BypassLan;
+
+        if (mode == RoutingMode.CustomDirect)
+        {
+            AppendSingBoxCustomRules(rules, settings.CustomBlockRules, "block");
+            AppendSingBoxCustomRules(rules, settings.CustomProxyRules, "proxy");
+            AppendSingBoxCustomRules(rules, settings.CustomDirectRules, "direct");
+        }
+
         rules.Add(new JsonObject
         {
             ["ip_is_private"] = true,
             ["outbound"] = "direct"
         });
 
-        // Android VPN Connect owns routing; auto_detect can stall sing-box startup.
+        // Android VPN Connect owns routing; desktop auto_route needs interface detect.
         return new JsonObject
         {
             ["rules"] = rules,
             ["final"] = "proxy",
-            ["auto_detect_interface"] = !hasTun
+            ["auto_detect_interface"] = !androidTun
         };
     }
+
+    private static void AppendSingBoxCustomRules(JsonArray rules, string raw, string outbound)
+    {
+        foreach (var entry in ParseSingBoxCustomRules(raw))
+        {
+            if (entry.Contains('/') && !entry.Contains(' '))
+            {
+                // CIDR
+                rules.Add(new JsonObject
+                {
+                    ["ip_cidr"] = new JsonArray { entry },
+                    ["outbound"] = outbound
+                });
+                continue;
+            }
+
+            if (entry.StartsWith("full:", StringComparison.OrdinalIgnoreCase))
+            {
+                rules.Add(new JsonObject
+                {
+                    ["domain"] = new JsonArray { entry["full:".Length..] },
+                    ["outbound"] = outbound
+                });
+                continue;
+            }
+
+            if (entry.StartsWith("domain:", StringComparison.OrdinalIgnoreCase))
+            {
+                rules.Add(new JsonObject
+                {
+                    ["domain_suffix"] = new JsonArray { entry["domain:".Length..] },
+                    ["outbound"] = outbound
+                });
+                continue;
+            }
+
+            if (entry.StartsWith("regexp:", StringComparison.OrdinalIgnoreCase))
+            {
+                rules.Add(new JsonObject
+                {
+                    ["domain_regex"] = new JsonArray { entry["regexp:".Length..] },
+                    ["outbound"] = outbound
+                });
+                continue;
+            }
+
+            // Bare hostname → domain_suffix (matches Xray domain: prefix default).
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = new JsonArray { entry },
+                ["outbound"] = outbound
+            });
+        }
+    }
+
+    private static IEnumerable<string> ParseSingBoxCustomRules(string rules) =>
+        string.IsNullOrWhiteSpace(rules)
+            ? []
+            : rules.Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static JsonObject BuildDns(AppSettings settings, ProxyServer server, int? tunFd = null)
     {
         var servers = new JsonArray();
         var rules = new JsonArray();
         var hasBootstrap = NeedsBootstrapDns(server);
-        // Live Android VPN: hijacked app DNS must use UDP (DoH is unreliable under VpnService).
-        var useTun = tunFd is int fd && fd >= 0;
+        // Live TUN (Android VpnService or desktop auto_route): UDP via proxy; DoH unreliable under VpnService.
+        var useTun = UsesTun(settings, tunFd);
         var useDoh = settings.DnsThroughProxy && !useTun;
 
         if (hasBootstrap)
