@@ -20,10 +20,11 @@ public static class SingBoxConfigBuilder
     public const string BootstrapDnsTag = "bootstrap";
     public const string UdpDnsTag = "udp";
     public const string DohDnsTag = "doh";
+    /// <summary>Legacy tag; FakeIP is no longer emitted on the live TUN path (2.6.2.8+).</summary>
     public const string FakeIpDnsTag = "fakeip";
     public const string FakeIpInet4Range = "198.18.0.0/15";
 
-    /// <summary>Instagram Direct MQTT does not sniff SNI reliably — keep real IPs, not FakeIP.</summary>
+    /// <summary>Instagram Direct MQTT — explicit real UDP before dns.final (same as all apps since 2.6.2.8).</summary>
     public static readonly string[] MetaDnsSuffixes =
     [
         "instagram.com",
@@ -459,15 +460,19 @@ public static class SingBoxConfigBuilder
             servers.Add(udp);
         }
 
-        // FakeIP: apps get immediate A answers; real resolve happens in-core (WhatsApp/Telegram).
+        // TUN: real UDP for all apps (dns.final). FakeIP+sniff left raw-socket apps offline when sniff failed.
         if (useTun)
         {
-            servers.Add(new JsonObject
+            // Block IPv6: refuse AAAA early so Happy Eyeballs fails fast to IPv4 (strategy + route still apply).
+            if (settings.BlockIpv6)
             {
-                ["type"] = "fakeip",
-                ["tag"] = FakeIpDnsTag,
-                ["inet4_range"] = FakeIpInet4Range
-            });
+                rules.Add(new JsonObject
+                {
+                    ["query_type"] = new JsonArray { "AAAA" },
+                    ["action"] = "reject"
+                });
+            }
+
             var metaSuffixes = new JsonArray();
             foreach (var suffix in MetaDnsSuffixes)
                 metaSuffixes.Add(suffix);
@@ -522,12 +527,6 @@ public static class SingBoxConfigBuilder
                     ["server"] = UdpDnsTag
                 });
             }
-
-            rules.Add(new JsonObject
-            {
-                ["query_type"] = new JsonArray { "A", "AAAA" },
-                ["server"] = FakeIpDnsTag
-            });
         }
 
         var dns = new JsonObject

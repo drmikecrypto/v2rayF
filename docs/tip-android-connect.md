@@ -5,6 +5,10 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.8 — all VPN apps get internet
+
+**2.6.2.8** routes TUN apps through real UDP DNS (no FakeIP catch-all), so raw-socket apps like Fotomob work when App Network is VPN. Block IPv6 rejects AAAA early to avoid Happy Eyeballs hangs. Keep **Private DNS Off**; force-stop stuck apps once after update.
+
 ## v2.6.2.7 — stay connected + Translate
 
 **2.6.2.7** stops tearing down sessions when only the TUN/FCM probe flaps (the disconnect↔Auto-reconnect loop). Soft refresh clears FakeIP while staying Connected. Google UDP/443 is blocked on Android TUN so Translate falls back to the VPN HTTP proxy. Force-stop Translate once after update if it was stuck offline.

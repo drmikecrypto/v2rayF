@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.8] - 2026-09-06
+
+### Fixed
+
+- **All VPN apps (not only Chromium)** — Android TUN uses real UDP DNS by default; removed FakeIP catch-all that left raw-socket apps offline when sniff failed
+- **Block IPv6 + Happy Eyeballs** — early AAAA DNS reject so dual-stack apps fail fast to IPv4 through the tunnel
+
+### Changed
+
+- FakeIP DNS server no longer emitted on the live TUN path (Meta/Google/messaging still explicit real UDP; `dns.final` = UDP via proxy)
+
 ## [2.6.2.7] - 2026-09-03
 
 ### Fixed
