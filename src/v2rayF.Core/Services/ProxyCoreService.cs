@@ -11,6 +11,8 @@ namespace v2rayF.Services;
 public sealed class ProxyCoreService : IAsyncDisposable
 {
     public const int ConnectTimeoutMs = 15000;
+    /// <summary>Core ready wait cap for Vision / REALITY (cold handshake).</summary>
+    public const int ConnectTimeoutVisionMs = 18000;
     /// <summary>Extra SOCKS bind budget for sing-box + Android VPN TUN (system stack).</summary>
     public const int SingBoxTunReadyBonusMs = 7000;
     public const int CoreReadyPollMs = 50;
@@ -27,11 +29,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
     /// <summary>Resume/wake live-path verify budget (non-Vision).</summary>
     public const int ResumePathProbeMs = 4000;
     /// <summary>Resume/wake live-path verify budget (Vision / REALITY).</summary>
-    public const int ResumePathProbeVisionMs = 6000;
+    public const int ResumePathProbeVisionMs = 12000;
     public const int NatKeepaliveIntervalMs = 25000;
     public const int NatKeepaliveProbeMs = 2000;
     /// <summary>Consecutive tun-only probe failures before soft recovery fires.</summary>
-    public const int TunOnlyFailThreshold = 4;
+    public const int TunOnlyFailThreshold = 6;
 
     /// <summary>Localhost-healthy PathHealthOk events before resetting auto-reconnect budget.</summary>
     public const int LocalhostHealthyResetThreshold = 3;
@@ -126,21 +128,26 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     public static int GetPathHealthProbeMs(ProxyServer? server)
     {
-        if (server is not null &&
-            (ShareLinkParser.IsVisionFlow(server) ||
-             string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase)))
+        if (server is not null && NeedsVisionBudgets(server))
             return PathHealthProbeVisionMs;
         return PathHealthProbeMs;
     }
 
     public static int GetResumePathProbeMs(ProxyServer? server)
     {
-        if (server is not null &&
-            (ShareLinkParser.IsVisionFlow(server) ||
-             string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase)))
+        if (server is not null && NeedsVisionBudgets(server))
             return ResumePathProbeVisionMs;
         return ResumePathProbeMs;
     }
+
+    public static int GetCoreReadyTimeoutMs(ProxyServer? server) =>
+        server is not null && NeedsVisionBudgets(server)
+            ? ConnectTimeoutVisionMs
+            : ConnectTimeoutMs;
+
+    private static bool NeedsVisionBudgets(ProxyServer server) =>
+        ShareLinkParser.IsVisionFlow(server) ||
+        string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Clear health fail counters after a successful live-path verify.</summary>
     public void ResetPathHealthState()
@@ -231,7 +238,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             cancellationToken).ConfigureAwait(false);
 
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        readyTimeout.CancelAfter(ConnectTimeoutMs);
+        readyTimeout.CancelAfter(GetCoreReadyTimeoutMs(server));
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
@@ -262,7 +269,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 cancellationToken).ConfigureAwait(false);
 
             using var readyTimeout2 = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            readyTimeout2.CancelAfter(ConnectTimeoutMs);
+            readyTimeout2.CancelAfter(GetCoreReadyTimeoutMs(server));
             await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
             gateResult = await ProbeConnectGateWithRetryAsync(
@@ -455,7 +462,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private static bool RequiresAndroidTunHttpProbe(bool useSingBox, int? tunFd) =>
         useSingBox && tunFd is int fd && fd >= 0;
 
-    /// <summary>Restart sing-box/Xray without tearing down VPN interface (clears FakeIP).</summary>
+    /// <summary>Reload sing-box/Xray without tearing down the VPN interface.</summary>
     public async Task RefreshRuntimeAsync(
         ProxyServer server,
         AppSettings settings,
@@ -492,7 +499,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             cancellationToken).ConfigureAwait(false);
 
         using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        readyTimeout.CancelAfter(ConnectTimeoutMs);
+        readyTimeout.CancelAfter(GetCoreReadyTimeoutMs(server));
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
         var probeMs = await ProbeConnectGateWithRetryAsync(
@@ -517,7 +524,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 cancellationToken).ConfigureAwait(false);
 
             using var readyTimeout2 = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            readyTimeout2.CancelAfter(ConnectTimeoutMs);
+            readyTimeout2.CancelAfter(GetCoreReadyTimeoutMs(server));
             await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout2.Token).ConfigureAwait(false);
 
             probeMs = await ProbeConnectGateWithRetryAsync(
@@ -819,13 +826,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
         UnexpectedStop?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Transport-aware SOCKS bind budget for live Connect (uses full ConnectTimeoutMs cap).</summary>
+    /// <summary>Transport-aware SOCKS bind budget for live Connect (uses Vision-aware ready cap).</summary>
     public static int GetConnectReadyWaitMs(ProxyServer server, bool useSingBox, int? tunFd)
     {
         var waitMs = LatencyService.GetCoreReadyWaitMs(server);
         if (useSingBox && tunFd is int fd && fd >= 0)
             waitMs += SingBoxTunReadyBonusMs;
-        return Math.Min(ConnectTimeoutMs, waitMs);
+        return Math.Min(GetCoreReadyTimeoutMs(server), waitMs);
     }
 
     private async Task WaitForCoreReadyAsync(

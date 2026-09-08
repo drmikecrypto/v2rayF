@@ -21,7 +21,9 @@ public class SessionReliabilityTests
         };
         var plain = new ProxyServer { Address = "1.1.1.1", Port = 443, Protocol = ProxyProtocol.VLESS };
         Assert.Equal(4000, ProxyCoreService.GetResumePathProbeMs(plain));
-        Assert.Equal(6000, ProxyCoreService.GetResumePathProbeMs(vision));
+        Assert.Equal(12000, ProxyCoreService.GetResumePathProbeMs(vision));
+        Assert.Equal(ProxyCoreService.ConnectTimeoutMs, ProxyCoreService.GetCoreReadyTimeoutMs(plain));
+        Assert.Equal(ProxyCoreService.ConnectTimeoutVisionMs, ProxyCoreService.GetCoreReadyTimeoutMs(vision));
     }
 
     [Fact]
@@ -57,7 +59,7 @@ public class SessionReliabilityTests
     {
         Assert.Equal(8000, LatencyService.TunAppPathProbeMs);
         Assert.Equal(90, ProxyCoreService.ActivePathHealthIntervalMs / 1000);
-        Assert.Equal(4, ProxyCoreService.TunOnlyFailThreshold);
+        Assert.Equal(6, ProxyCoreService.TunOnlyFailThreshold);
         Assert.Equal(3, ProxyCoreService.LocalhostHealthyResetThreshold);
     }
 

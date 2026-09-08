@@ -147,8 +147,8 @@ public static class SingBoxConfigBuilder
                 // Full gVisor: VpnService inherited fd — system/mixed drops TUN traffic (v2.4.1 regression).
                 ["stack"] = "gvisor",
                 ["sniff"] = true,
-                // FakeIP (WhatsApp/Telegram): rewrite dial target to sniffed domain, not 198.18.x
-                ["sniff_override_destination"] = true,
+                // Real DNS (2.6.2.8+): do not rewrite dial targets from sniffed SNI (stiffens Reality/Vision TLS).
+                ["sniff_override_destination"] = false,
                 // Long-lived FBNS / MQTT UDP paths — avoid aggressive idle cull.
                 ["udp_timeout"] = "5m"
             });
@@ -555,10 +555,15 @@ public static class SingBoxConfigBuilder
     }
 
     /// <summary>Dial defaults (sing-box 1.12+). tcp_keep_alive is 1.13-only — omit on bundled 1.12.</summary>
-    private static void ApplyOutboundDialDefaults(JsonObject outbound)
+    private static void ApplyOutboundDialDefaults(JsonObject outbound, ProxyServer server)
     {
-        outbound["connect_timeout"] = "10s";
+        // Vision/REALITY cold dial often exceeds 10s; align with Connect health budget.
+        outbound["connect_timeout"] = NeedsExtendedDialTimeout(server) ? "15s" : "10s";
     }
+
+    private static bool NeedsExtendedDialTimeout(ProxyServer server) =>
+        ShareLinkParser.IsVisionFlow(server) ||
+        string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase);
 
     private static JsonObject BuildOutbound(ProxyServer server)
     {
@@ -576,7 +581,7 @@ public static class SingBoxConfigBuilder
                 $"Protocol {server.Protocol} is not a sing-box outbound in this builder.")
         };
         ApplyDomainResolver(outbound, server);
-        ApplyOutboundDialDefaults(outbound);
+        ApplyOutboundDialDefaults(outbound, server);
         return outbound;
     }
 

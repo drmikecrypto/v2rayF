@@ -7,16 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.9] - 2026-09-08
+
+### Fixed
+
+- Android TUN: disable `sniff_override_destination` (leftover after FakeIP removal)
+- Reality/Vision: resume verify 12s; outbound dial 15s; core ready wait 18s
+
+### Changed
+
+- Tun-only soft recovery threshold 4 → 6
+
 ## [2.6.2.8] - 2026-09-06
 
 ### Fixed
 
-- **All VPN apps (not only Chromium)** — Android TUN uses real UDP DNS by default; removed FakeIP catch-all that left raw-socket apps offline when sniff failed
-- **Block IPv6 + Happy Eyeballs** — early AAAA DNS reject so dual-stack apps fail fast to IPv4 through the tunnel
+- Android TUN: real UDP DNS by default; FakeIP catch-all removed
+- Block IPv6: early AAAA DNS reject so Happy Eyeballs fails over to IPv4 via TUN
 
 ### Changed
 
-- FakeIP DNS server no longer emitted on the live TUN path (Meta/Google/messaging still explicit real UDP; `dns.final` = UDP via proxy)
+- FakeIP DNS server omitted on the live TUN path; `dns.final` remains UDP via proxy
 
 ## [2.6.2.7] - 2026-09-03
 

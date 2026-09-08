@@ -26,7 +26,7 @@ public class StableLiveConnectionTests
         Assert.Equal(25000, ProxyCoreService.NatKeepaliveIntervalMs);
         Assert.Equal(2000, ProxyCoreService.NatKeepaliveProbeMs);
         Assert.Equal(4000, ProxyCoreService.ResumePathProbeMs);
-        Assert.Equal(6000, ProxyCoreService.ResumePathProbeVisionMs);
+        Assert.Equal(12000, ProxyCoreService.ResumePathProbeVisionMs);
         Assert.Equal(8000, ProxyCoreService.PathHealthProbeMs);
         Assert.Equal(12000, ProxyCoreService.PathHealthProbeVisionMs);
         Assert.False(ProxyCoreService.ShouldRaiseOnPathFails(1));

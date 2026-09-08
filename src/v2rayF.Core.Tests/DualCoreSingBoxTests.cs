@@ -217,7 +217,8 @@ public class DualCoreSingBoxTests
         Assert.Equal("172.19.0.1/30", tun["address"]!.AsArray()[0]!.GetValue<string>());
         Assert.False(tun["auto_route"]!.GetValue<bool>());
         Assert.Equal("gvisor", tun["stack"]!.GetValue<string>());
-        Assert.True(tun["sniff_override_destination"]!.GetValue<bool>());
+        Assert.True(tun["sniff"]!.GetValue<bool>());
+        Assert.False(tun["sniff_override_destination"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -396,6 +397,28 @@ public class DualCoreSingBoxTests
             ["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
         Assert.Equal("10s", proxy["connect_timeout"]!.GetValue<string>());
         Assert.Null(proxy["tcp_keep_alive"]);
+    }
+
+    [Fact]
+    public void VisionReality_OutboundUsesExtendedDialTimeout()
+    {
+        var vision = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "x.com",
+            Port = 443,
+            UserId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            Network = "tcp",
+            PublicKey = "pk",
+            ShortId = "01",
+            Sni = "www.microsoft.com",
+            Fingerprint = "chrome"
+        };
+        var proxy = JsonNode.Parse(SingBoxConfigBuilder.Build(vision, new AppSettings(), tunFd: 3))!
+            ["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal("15s", proxy["connect_timeout"]!.GetValue<string>());
     }
 
     [Fact]

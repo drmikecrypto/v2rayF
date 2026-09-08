@@ -30,7 +30,7 @@ public class ConnectReadyWaitTests
     }
 
     [Fact]
-    public void GetConnectReadyWaitMs_NeverExceedsConnectTimeout()
+    public void GetConnectReadyWaitMs_NeverExceedsReadyTimeoutCap()
     {
         var grpc = new ProxyServer
         {
@@ -42,7 +42,27 @@ public class ConnectReadyWaitTests
         };
 
         var wait = ProxyCoreService.GetConnectReadyWaitMs(grpc, useSingBox: true, tunFd: 3);
-        Assert.True(wait <= ProxyCoreService.ConnectTimeoutMs);
+        Assert.True(wait <= ProxyCoreService.GetCoreReadyTimeoutMs(grpc));
+    }
+
+    [Fact]
+    public void GetConnectReadyWaitMs_VisionTun_UsesVisionReadyCap()
+    {
+        var vision = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "1.2.3.4",
+            Port = 443,
+            UserId = Guid.NewGuid().ToString(),
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            Network = "tcp",
+            PublicKey = "pk"
+        };
+
+        var wait = ProxyCoreService.GetConnectReadyWaitMs(vision, useSingBox: true, tunFd: 3);
+        Assert.True(wait <= ProxyCoreService.ConnectTimeoutVisionMs);
+        Assert.Equal(ProxyCoreService.ConnectTimeoutVisionMs, ProxyCoreService.GetCoreReadyTimeoutMs(vision));
     }
 
     [Fact]
