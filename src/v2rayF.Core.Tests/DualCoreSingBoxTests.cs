@@ -444,12 +444,15 @@ public class DualCoreSingBoxTests
         var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
             ["route"]!["rules"]!.AsArray();
 
-        Assert.Contains(rules, r =>
+        var block = Assert.Single(rules, r =>
             r?["network"]?.GetValue<string>() == "udp" &&
             r["port"]?.GetValue<int>() == 443 &&
-            r["outbound"]?.GetValue<string>() == "block" &&
-            r["domain_suffix"] is JsonArray suffixes &&
-            suffixes.Any(s => s!.GetValue<string>() == "google.com"));
+            r["outbound"]?.GetValue<string>() == "block");
+        var suffixes = block!["domain_suffix"]!.AsArray().Select(s => s!.GetValue<string>()).ToHashSet();
+        Assert.Contains("google.com", suffixes);
+        Assert.Contains("play.google.com", suffixes);
+        Assert.DoesNotContain("googleapis.com", suffixes);
+        Assert.DoesNotContain("android.com", suffixes);
 
         // Desktop auto_route must not get Google UDP block (Android VpnService HTTP proxy path only).
         var desktopRules = JsonNode.Parse(SingBoxConfigBuilder.Build(
@@ -468,6 +471,7 @@ public class DualCoreSingBoxTests
             ["route"]!["rules"]!.AsArray();
 
         var fcmIdx = -1;
+        var mtalkSuffixIdx = -1;
         var googleUdpIdx = -1;
         var waSuffixIdx = -1;
         for (var i = 0; i < rules.Count; i++)
@@ -478,12 +482,17 @@ public class DualCoreSingBoxTests
                 domains.Any(d => d!.GetValue<string>() == "mtalk.google.com") &&
                 r["network"] is null)
             {
-                // Prefer the dedicated FCM-before-block rule (exact FCM hosts only).
                 if (domains.Count == PushRoutingDomains.FcmDnsExactHosts.Length)
                     fcmIdx = i;
                 else if (fcmIdx < 0)
                     fcmIdx = i;
             }
+
+            if (r["outbound"]?.GetValue<string>() == "proxy" &&
+                r["domain_suffix"] is JsonArray mtalk &&
+                mtalk.Count == 1 &&
+                mtalk[0]!.GetValue<string>() == "mtalk.google.com")
+                mtalkSuffixIdx = i;
 
             if (r["network"]?.GetValue<string>() == "udp" &&
                 r["port"]?.GetValue<int>() == 443 &&
@@ -497,8 +506,10 @@ public class DualCoreSingBoxTests
         }
 
         Assert.True(fcmIdx >= 0, "expected FCM exact hosts → proxy");
+        Assert.True(mtalkSuffixIdx >= 0, "expected mtalk.google.com suffix → proxy");
         Assert.True(googleUdpIdx >= 0, "expected Google UDP/443 block");
         Assert.True(fcmIdx < googleUdpIdx, "FCM proxy must precede Google UDP/443 block");
+        Assert.True(mtalkSuffixIdx < googleUdpIdx, "mtalk suffix must precede Google UDP/443 block");
         Assert.True(waSuffixIdx >= 0, "expected whatsapp.net → proxy");
     }
 

@@ -9,6 +9,7 @@ using Android.Content.PM;
 using Android.Net;
 using Android.OS;
 using AndroidX.Core.App;
+using v2rayF.Android;
 using v2rayF.Services;
 
 namespace v2rayF.Android.Services;
@@ -21,8 +22,10 @@ public class V2rayVpnService : VpnService
     private const string ChannelId = "v2rayF";
     private const string ActionEstablish = "com.drmikecrypto.v2rayf.action.ESTABLISH";
     private const string ActionDisconnect = "com.drmikecrypto.v2rayf.action.DISCONNECT";
+    private const string ActionStopAndExit = "com.drmikecrypto.v2rayf.action.STOP_AND_EXIT";
     private const string ExtraBlockIpv6 = "block_ipv6";
     private const string ExtraBypassPackages = "bypass_packages";
+    private const string ExtraStopAndExit = "stop_and_exit";
 
     private static ParcelFileDescriptor? _interface;
     private static int _tunFd = -1;
@@ -86,18 +89,23 @@ public class V2rayVpnService : VpnService
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
         var isDisconnect = string.Equals(intent?.Action, ActionDisconnect, StringComparison.Ordinal);
+        var isStopAndExit = string.Equals(intent?.Action, ActionStopAndExit, StringComparison.Ordinal) ||
+                            (intent?.GetBooleanExtra(ExtraStopAndExit, false) ?? false);
 
         try
         {
             EnsureChannel();
             // Always promote to foreground first (Android 8+ FGS contract).
-            StartVpnForeground(BuildNotification(isDisconnect ? "Stopping VPN…" : "Establishing VPN…"));
+            StartVpnForeground(BuildNotification(
+                isDisconnect || isStopAndExit ? "Stopping VPN…" : "Establishing VPN…"));
 
-            if (isDisconnect)
+            if (isDisconnect || isStopAndExit)
             {
                 StopTrafficNotificationUpdates();
                 TearDownInterface();
                 ClearNotification();
+                if (isStopAndExit)
+                    RequestAppExitAfterDisconnect();
                 StopSelf();
                 return StartCommandResult.NotSticky;
             }
@@ -517,21 +525,79 @@ public class V2rayVpnService : VpnService
         manager?.CreateNotificationChannel(channel);
     }
 
-    private Notification BuildNotification(string text) =>
-        new NotificationCompat.Builder(this, ChannelId)
+    private Notification BuildNotification(string text)
+    {
+        var openIntent = new Intent(this, typeof(MainActivity));
+        openIntent.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
+        var contentPi = PendingIntent.GetActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+
+        var stopIntent = new Intent(this, typeof(V2rayVpnService));
+        stopIntent.SetAction(ActionStopAndExit);
+        stopIntent.PutExtra(ExtraStopAndExit, true);
+        var stopPi = PendingIntent.GetService(
+            this,
+            1,
+            stopIntent,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+
+        return new NotificationCompat.Builder(this, ChannelId)
             .SetContentTitle("v2rayF")
             .SetContentText(text)
             .SetSmallIcon(Resource.Drawable.Icon)
             .SetOngoing(true)
             .SetOnlyAlertOnce(true)
+            .SetContentIntent(contentPi)
+            .AddAction(Resource.Drawable.Icon, "Stop", stopPi)
             .Build();
+    }
+
+    private static void RequestAppExitAfterDisconnect()
+    {
+        try
+        {
+            var disconnect = AppServices.EmergencyDisconnectAsync;
+            if (disconnect is not null)
+                disconnect().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort core teardown.
+        }
+
+        try
+        {
+            var activity = MainActivity.Instance;
+            if (activity is not null)
+            {
+                activity.RunOnUiThread(() =>
+                {
+                    try
+                    {
+                        activity.FinishAffinity();
+                    }
+                    catch
+                    {
+                        // Best effort.
+                    }
+                });
+            }
+        }
+        catch
+        {
+            // Best effort.
+        }
+    }
 
     private void StartTrafficNotificationUpdates()
     {
         StopTrafficNotificationUpdates();
         // Prefer shared hub (UI may already be polling) — one statsquery process for all consumers.
         TrafficStatsHub.Shared.Updated += OnHubUpdated;
-        TrafficStatsHub.Shared.Subscribe();
+        TrafficStatsHub.Shared.Subscribe(foreground: false);
         _subscribedTraffic = true;
         AppServices.OnLiveTraffic = OnLiveTrafficFromUi;
     }
@@ -541,7 +607,7 @@ public class V2rayVpnService : VpnService
         if (_subscribedTraffic)
         {
             TrafficStatsHub.Shared.Updated -= OnHubUpdated;
-            TrafficStatsHub.Shared.Unsubscribe();
+            TrafficStatsHub.Shared.Unsubscribe(foreground: false);
             _subscribedTraffic = false;
         }
 

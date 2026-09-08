@@ -50,6 +50,7 @@ public class StableLiveConnectionTests
     {
         Assert.Equal(TimeSpan.FromMilliseconds(5000), TrafficStatsHub.DefaultPollInterval);
         Assert.Equal(5000, (int)TrafficStatsHub.DefaultPollInterval.TotalMilliseconds);
+        Assert.Equal(15000, (int)TrafficStatsHub.BackgroundPollInterval.TotalMilliseconds);
         Assert.Equal(1500, TrafficStatsService.QueryTimeoutMs);
         Assert.Equal(TrafficStatsHub.DefaultPollInterval, new TrafficStatsHub().PollInterval);
     }

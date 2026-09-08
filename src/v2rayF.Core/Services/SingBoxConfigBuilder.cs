@@ -72,6 +72,17 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
+    /// UDP/443 block for Chromium Translate/Play only — not bare googleapis.com (games / FCM alts).
+    /// </summary>
+    public static readonly string[] GoogleChromiumUdpBlockSuffixes =
+    [
+        "google.com",
+        "gstatic.com",
+        "googleusercontent.com",
+        "play.google.com"
+    ];
+
+    /// <summary>
     /// Android VpnService HTTP proxy exclusion list — MQTT/realtime hosts only.
     /// Full Meta suffixes blackholed Instagram on gVisor (pre-2.5.0.2); empty list trapped Direct in CONNECT.
     /// </summary>
@@ -240,14 +251,21 @@ public static class SingBoxConfigBuilder
                     ["outbound"] = "proxy"
                 });
 
-                // Force Google Chromium (Translate / Play Store) off QUIC → TCP → VPN HTTP proxy 10809.
-                // Scoped to Google suffixes only — global UDP/443 blackhole broke messengers (2.4.2).
-                var googleSuffixes = new JsonArray();
-                foreach (var suffix in GoogleDnsSuffixes)
-                    googleSuffixes.Add(suffix);
+                // alt*-mtalk.google.com and similar — suffix before Chromium UDP block.
                 rules.Add(new JsonObject
                 {
-                    ["domain_suffix"] = googleSuffixes,
+                    ["domain_suffix"] = new JsonArray { "mtalk.google.com" },
+                    ["outbound"] = "proxy"
+                });
+
+                // Force Chromium Translate/Play off QUIC → TCP → VPN HTTP proxy 10809.
+                // Narrow list — blanket googleapis.com/android.com killed games and FCM alts.
+                var googleUdpBlock = new JsonArray();
+                foreach (var suffix in GoogleChromiumUdpBlockSuffixes)
+                    googleUdpBlock.Add(suffix);
+                rules.Add(new JsonObject
+                {
+                    ["domain_suffix"] = googleUdpBlock,
                     ["port"] = 443,
                     ["network"] = "udp",
                     ["outbound"] = "block"

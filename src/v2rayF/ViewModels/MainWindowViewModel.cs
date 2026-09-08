@@ -549,7 +549,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Tun-only failure: rebind VPN (new fd) + soft RefreshRuntime so messengers drop stale sockets.</summary>
+    /// <summary>Tun-only failure: same-fd soft refresh first; rebind VPN at most every 90s (or on refresh fail).</summary>
     private async Task OnTunPathFailedRecoveryAsync()
     {
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
@@ -581,15 +581,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                // Always rebind Android TUN so WhatsApp/Telegram drop dead sockets (same-fd soft refresh left them stale).
-                if (IsMobile)
+                // Prefer same-fd refresh; rebind only when throttled window allows (game UDP).
+                if (IsMobile && ShouldRebindAndroidTun())
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
                     var rebuilt = await AppServices.Platform
                         .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
                         .ConfigureAwait(true);
                     if (rebuilt is not null)
+                    {
                         tunFd = rebuilt;
+                        _lastTunRebindUtc = DateTimeOffset.UtcNow;
+                    }
                 }
 
                 await _proxyCore.RefreshRuntimeAsync(
@@ -628,6 +631,53 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _proxyCore.EndSoftRecovery(success: false);
                 escalateZombie = !_proxyCore.IsRunning;
+
+                // Same-fd refresh failed — force rebind once if still running and Connected.
+                if (!escalateZombie && IsMobile && ConnectionState == ConnectionState.Connected)
+                {
+                    try
+                    {
+                        var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
+                        var rebuilt = await AppServices.Platform
+                            .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                            .ConfigureAwait(true);
+                        if (rebuilt is not null)
+                        {
+                            _lastTunRebindUtc = DateTimeOffset.UtcNow;
+                            await _proxyCore.RefreshRuntimeAsync(
+                                    server, settings, rebuilt, null, CancellationToken.None)
+                                .ConfigureAwait(true);
+                            await RearmKillSwitchIfNeededAsync(server, settings, CancellationToken.None)
+                                .ConfigureAwait(true);
+                            var ok = await _proxyCore.VerifyLivePathAsync(CancellationToken.None)
+                                .ConfigureAwait(true);
+                            if (ok)
+                            {
+                                try
+                                {
+                                    await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                                }
+                                catch
+                                {
+                                    // Best-effort.
+                                }
+
+                                await SetOnUiAsync(() =>
+                                {
+                                    StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)}";
+                                }).ConfigureAwait(true);
+                                return;
+                            }
+                        }
+
+                        escalateZombie = !_proxyCore.IsRunning;
+                    }
+                    catch
+                    {
+                        escalateZombie = !_proxyCore.IsRunning;
+                    }
+                }
+
                 if (!escalateZombie)
                 {
                     await SetOnUiAsync(() =>
@@ -648,10 +698,12 @@ public partial class MainWindowViewModel : ViewModelBase
             await DrainPendingSoftRecoveryAsync().ConfigureAwait(true);
         }
 
-        // RefreshRuntime stops the core before failing — do not leave UI green with a dead process.
         if (escalateZombie && ConnectionState == ConnectionState.Connected)
             await HandleUnexpectedCoreStopAsync().ConfigureAwait(true);
     }
+
+    private bool ShouldRebindAndroidTun() =>
+        DateTimeOffset.UtcNow - _lastTunRebindUtc >= TimeSpan.FromSeconds(TunRebindMinIntervalSeconds);
 
     private async Task DrainPendingSoftRecoveryAsync()
     {
@@ -720,15 +772,17 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             try
             {
-                if (IsMobile)
+                if (IsMobile && ShouldRebindAndroidTun())
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(connectSettings, mobile: true);
-                    // Always rebind TUN on soft session restore so messengers drop stale sockets.
                     var rebuilt = await AppServices.Platform
                         .EstablishVpnAsync(bypass, connectSettings.BlockIpv6, CancellationToken.None)
                         .ConfigureAwait(true);
                     if (rebuilt is not null)
+                    {
                         tunFd = rebuilt;
+                        _lastTunRebindUtc = DateTimeOffset.UtcNow;
+                    }
                 }
 
                 await _proxyCore.RefreshRuntimeAsync(
@@ -2203,8 +2257,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
     private DateTimeOffset _lastSessionResumeUtc = DateTimeOffset.MinValue;
     private DateTimeOffset _lastVpnKeepaliveUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastTunRebindUtc = DateTimeOffset.MinValue;
     public const int SessionResumeThrottleSeconds = 30;
     public const int VpnKeepaliveThrottleSeconds = 90;
+    /// <summary>Min gap between Android VPN rebinds on soft recovery (protects game UDP).</summary>
+    public const int TunRebindMinIntervalSeconds = 90;
 
     private async Task OnVpnKeepaliveAsync(bool force)
     {

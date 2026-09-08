@@ -41,10 +41,15 @@ public sealed class TrafficStatsHub : IDisposable
 
     public LiveTraffic Latest => _latest;
 
-    /// <summary>Default poll cadence — avoid spawning <c>xray api</c> more often than this.</summary>
+    /// <summary>Default poll when the Connected UI is subscribed.</summary>
     public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(5000);
 
+    /// <summary>Quieter poll when only the VPN notification is subscribed (battery).</summary>
+    public static readonly TimeSpan BackgroundPollInterval = TimeSpan.FromMilliseconds(15000);
+
     public TimeSpan PollInterval { get; set; } = DefaultPollInterval;
+
+    private int _foregroundSubscribers;
 
     public TrafficStatsHub(TrafficStatsService? stats = null)
     {
@@ -54,17 +59,20 @@ public sealed class TrafficStatsHub : IDisposable
     private TrafficStatsService Stats =>
         _stats ??= new TrafficStatsService(AppServices.CoreEnvironment);
 
-    public void Subscribe()
+    public void Subscribe(bool foreground = true)
     {
         lock (_gate)
         {
             _subscribers++;
+            if (foreground)
+                _foregroundSubscribers++;
+            RefreshPollIntervalUnlocked();
             if (_subscribers == 1)
                 StartUnlocked();
         }
     }
 
-    public void Unsubscribe()
+    public void Unsubscribe(bool foreground = true)
     {
         lock (_gate)
         {
@@ -72,9 +80,17 @@ public sealed class TrafficStatsHub : IDisposable
                 return;
 
             _subscribers--;
+            if (foreground && _foregroundSubscribers > 0)
+                _foregroundSubscribers--;
+            RefreshPollIntervalUnlocked();
             if (_subscribers == 0)
                 StopUnlocked();
         }
+    }
+
+    private void RefreshPollIntervalUnlocked()
+    {
+        PollInterval = _foregroundSubscribers > 0 ? DefaultPollInterval : BackgroundPollInterval;
     }
 
     public void Reset()

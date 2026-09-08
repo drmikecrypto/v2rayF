@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.11] - 2026-09-09
+
+### Fixed
+
+- Narrow Google UDP/443 block to Chromium Translate/Play hosts (games / FCM alts on googleapis)
+- Soft TUN rebind throttled to 90s (same-fd refresh first); rebind on refresh failure
+- VPN notification opens app; Stop action disconnects and exits
+
+### Changed
+
+- mtalk.google.com suffix → proxy before Google UDP block
+- Notification-only traffic stats poll 15s (UI stays 5s)
+
 ## [2.6.2.10] - 2026-09-08
 
 ### Fixed

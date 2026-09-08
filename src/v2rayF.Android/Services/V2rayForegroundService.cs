@@ -5,41 +5,18 @@ using AndroidX.Core.App;
 
 namespace v2rayF.Android.Services;
 
+/// <summary>
+/// Legacy FGS stub — VPN notification is owned by <see cref="V2rayVpnService"/> (id 1001).
+/// Kept so old start intents do not crash; does not post a duplicate tile.
+/// </summary>
 [Service(Exported = false, ForegroundServiceType = global::Android.Content.PM.ForegroundService.TypeSpecialUse)]
 public class V2rayForegroundService : Service
 {
-    private const int NotificationId = 1001;
-    private const string ChannelId = "v2rayF";
-
     public override StartCommandResult OnStartCommand(Intent? intent, StartCommandFlags flags, int startId)
     {
-        EnsureChannel();
-        var notification = new NotificationCompat.Builder(this, ChannelId)
-            .SetContentTitle("v2rayF")
-            .SetContentText("Proxy connection active")
-            .SetSmallIcon(Resource.Drawable.Icon)
-            .SetOngoing(true)
-            .Build();
-
-        StartForeground(NotificationId, notification);
-        return StartCommandResult.Sticky;
+        StopSelf();
+        return StartCommandResult.NotSticky;
     }
 
     public override IBinder? OnBind(Intent? intent) => null;
-
-    public override void OnDestroy()
-    {
-        StopForeground(true);
-        base.OnDestroy();
-    }
-
-    private void EnsureChannel()
-    {
-        if (Build.VERSION.SdkInt < BuildVersionCodes.O)
-            return;
-
-        var manager = (NotificationManager?)GetSystemService(NotificationService);
-        var channel = new NotificationChannel(ChannelId, "v2rayF", NotificationImportance.Low);
-        manager?.CreateNotificationChannel(channel);
-    }
 }
