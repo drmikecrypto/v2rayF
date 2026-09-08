@@ -549,7 +549,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Tun-only failure: soft RefreshRuntime only (localhost already OK — never full reconnect).</summary>
+    /// <summary>Tun-only failure: rebind VPN (new fd) + soft RefreshRuntime so messengers drop stale sockets.</summary>
     private async Task OnTunPathFailedRecoveryAsync()
     {
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
@@ -564,6 +564,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        var escalateZombie = false;
         try
         {
             _lastSessionResumeUtc = DateTimeOffset.UtcNow;
@@ -573,19 +574,22 @@ public partial class MainWindowViewModel : ViewModelBase
             settings.AdaptiveSurviveEnabled = false;
             var tunFd = _proxyCore.ActiveTunFd;
 
+            await SetOnUiAsync(() =>
+            {
+                StatusText = "Connected — TUN recovering";
+            }).ConfigureAwait(true);
+
             try
             {
+                // Always rebind Android TUN so WhatsApp/Telegram drop dead sockets (same-fd soft refresh left them stale).
                 if (IsMobile)
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
-                    if (AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6))
-                    {
-                        var rebuilt = await AppServices.Platform
-                            .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
-                            .ConfigureAwait(true);
-                        if (rebuilt is not null)
-                            tunFd = rebuilt;
-                    }
+                    var rebuilt = await AppServices.Platform
+                        .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    if (rebuilt is not null)
+                        tunFd = rebuilt;
                 }
 
                 await _proxyCore.RefreshRuntimeAsync(
@@ -606,23 +610,47 @@ public partial class MainWindowViewModel : ViewModelBase
                     {
                         // Best-effort.
                     }
+
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)}";
+                    }).ConfigureAwait(true);
+                }
+                else
+                {
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = "Connected — TUN weak";
+                    }).ConfigureAwait(true);
                 }
             }
             catch
             {
-                // Stay Connected — tun advisory refresh failed; do not tear down.
                 _proxyCore.EndSoftRecovery(success: false);
+                escalateZombie = !_proxyCore.IsRunning;
+                if (!escalateZombie)
+                {
+                    await SetOnUiAsync(() =>
+                    {
+                        StatusText = "Connected — TUN weak";
+                    }).ConfigureAwait(true);
+                }
             }
         }
         catch
         {
             _proxyCore.EndSoftRecovery(success: false);
+            escalateZombie = !_proxyCore.IsRunning;
         }
         finally
         {
             _sessionResumeGate.Release();
             await DrainPendingSoftRecoveryAsync().ConfigureAwait(true);
         }
+
+        // RefreshRuntime stops the core before failing — do not leave UI green with a dead process.
+        if (escalateZombie && ConnectionState == ConnectionState.Connected)
+            await HandleUnexpectedCoreStopAsync().ConfigureAwait(true);
     }
 
     private async Task DrainPendingSoftRecoveryAsync()
@@ -695,14 +723,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (IsMobile)
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(connectSettings, mobile: true);
-                    if (AppServices.Platform.NeedsVpnReestablish(bypass, connectSettings.BlockIpv6))
-                    {
-                        var rebuilt = await AppServices.Platform
-                            .EstablishVpnAsync(bypass, connectSettings.BlockIpv6, CancellationToken.None)
-                            .ConfigureAwait(true);
-                        if (rebuilt is not null)
-                            tunFd = rebuilt;
-                    }
+                    // Always rebind TUN on soft session restore so messengers drop stale sockets.
+                    var rebuilt = await AppServices.Platform
+                        .EstablishVpnAsync(bypass, connectSettings.BlockIpv6, CancellationToken.None)
+                        .ConfigureAwait(true);
+                    if (rebuilt is not null)
+                        tunFd = rebuilt;
                 }
 
                 await _proxyCore.RefreshRuntimeAsync(
@@ -740,7 +766,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
             catch
             {
-                // Fall through to full reconnect.
+                // Fall through to full reconnect (covers RefreshRuntime leaving core stopped).
             }
         }
 

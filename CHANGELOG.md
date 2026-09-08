@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.10] - 2026-09-08
+
+### Fixed
+
+- Android soft recovery rebinds VPN (new TUN fd) so messengers drop stale sockets
+- Soft refresh failure with dead core escalates to reconnect instead of zombie Connected
+- FCM exact hosts routed to proxy before Google UDP/443 block
+
+### Changed
+
+- StatusText reports TUN recovering / TUN weak during advisory soft path
+
 ## [2.6.2.9] - 2026-09-08
 
 ### Fixed

@@ -5,6 +5,11 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.10 — messenger TUN rebind
+
+- Soft recovery always re-establishes Android VPN (new fd) before RefreshRuntime
+- FCM hosts beat Google UDP/443 block; status shows TUN recovering/weak briefly
+
 ## v2.6.2.9 — Reality/Vision budgets + TUN sniff override
 
 - Android TUN: sniff on, `sniff_override_destination` off

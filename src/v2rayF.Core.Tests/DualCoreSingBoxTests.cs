@@ -461,6 +461,48 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void AndroidTunFd_FcmProxyBeforeGoogleUdp443Block()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+            ["route"]!["rules"]!.AsArray();
+
+        var fcmIdx = -1;
+        var googleUdpIdx = -1;
+        var waSuffixIdx = -1;
+        for (var i = 0; i < rules.Count; i++)
+        {
+            var r = rules[i]!;
+            if (r["outbound"]?.GetValue<string>() == "proxy" &&
+                r["domain"] is JsonArray domains &&
+                domains.Any(d => d!.GetValue<string>() == "mtalk.google.com") &&
+                r["network"] is null)
+            {
+                // Prefer the dedicated FCM-before-block rule (exact FCM hosts only).
+                if (domains.Count == PushRoutingDomains.FcmDnsExactHosts.Length)
+                    fcmIdx = i;
+                else if (fcmIdx < 0)
+                    fcmIdx = i;
+            }
+
+            if (r["network"]?.GetValue<string>() == "udp" &&
+                r["port"]?.GetValue<int>() == 443 &&
+                r["outbound"]?.GetValue<string>() == "block")
+                googleUdpIdx = i;
+
+            if (r["outbound"]?.GetValue<string>() == "proxy" &&
+                r["domain_suffix"] is JsonArray suffixes &&
+                suffixes.Any(s => s!.GetValue<string>() == "whatsapp.net"))
+                waSuffixIdx = i;
+        }
+
+        Assert.True(fcmIdx >= 0, "expected FCM exact hosts → proxy");
+        Assert.True(googleUdpIdx >= 0, "expected Google UDP/443 block");
+        Assert.True(fcmIdx < googleUdpIdx, "FCM proxy must precede Google UDP/443 block");
+        Assert.True(waSuffixIdx >= 0, "expected whatsapp.net → proxy");
+    }
+
+    [Fact]
     public void AndroidTunFd_GoogleDnsUsesRealUdp()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;

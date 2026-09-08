@@ -228,10 +228,20 @@ public static class SingBoxConfigBuilder
                 });
             }
 
-            // Force Google Chromium (Translate / Play Store) off QUIC → TCP → VPN HTTP proxy 10809.
-            // Scoped to Google suffixes only — global UDP/443 blackhole broke messengers (2.4.2).
+            // FCM must beat Google UDP/443 block (mtalk/fcm sit under googleapis.com / google.com).
             if (androidTun)
             {
+                var fcmHosts = new JsonArray();
+                foreach (var host in PushRoutingDomains.FcmDnsExactHosts)
+                    fcmHosts.Add(host);
+                rules.Add(new JsonObject
+                {
+                    ["domain"] = fcmHosts,
+                    ["outbound"] = "proxy"
+                });
+
+                // Force Google Chromium (Translate / Play Store) off QUIC → TCP → VPN HTTP proxy 10809.
+                // Scoped to Google suffixes only — global UDP/443 blackhole broke messengers (2.4.2).
                 var googleSuffixes = new JsonArray();
                 foreach (var suffix in GoogleDnsSuffixes)
                     googleSuffixes.Add(suffix);
