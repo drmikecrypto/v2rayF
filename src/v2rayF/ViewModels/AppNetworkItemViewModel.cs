@@ -8,11 +8,12 @@ namespace v2rayF.ViewModels;
 
 public partial class AppNetworkItemViewModel : ObservableObject
 {
-    public AppNetworkItemViewModel(InstalledAppInfo app, AppNetworkMode mode)
+    public AppNetworkItemViewModel(InstalledAppInfo app, AppNetworkMode mode, bool allowVpnMode = true)
     {
         Id = app.Id;
         DisplayName = app.DisplayName;
         IsSelf = app.IsSelf;
+        AllowVpnMode = allowVpnMode && !app.IsSelf;
         Mode = mode;
         Icon = TryDecodeIcon(app.IconPng);
     }
@@ -22,6 +23,9 @@ public partial class AppNetworkItemViewModel : ObservableObject
     public string DisplayName { get; }
 
     public bool IsSelf { get; }
+
+    /// <summary>False for Android GMS/GSF — Direct/Block only (sticky clearnet unless Blocked).</summary>
+    public bool AllowVpnMode { get; }
 
     public Bitmap? Icon { get; }
 
@@ -36,7 +40,7 @@ public partial class AppNetworkItemViewModel : ObservableObject
         get => Mode == AppNetworkMode.Vpn;
         set
         {
-            if (value)
+            if (value && AllowVpnMode)
                 Mode = AppNetworkMode.Vpn;
         }
     }
@@ -63,6 +67,12 @@ public partial class AppNetworkItemViewModel : ObservableObject
 
     partial void OnModeChanged(AppNetworkMode value)
     {
+        if (!AllowVpnMode && value == AppNetworkMode.Vpn)
+        {
+            Mode = AppNetworkMode.Direct;
+            return;
+        }
+
         OnPropertyChanged(nameof(IsVpn));
         OnPropertyChanged(nameof(IsDirect));
         OnPropertyChanged(nameof(IsBlock));

@@ -22,11 +22,13 @@ public interface IPlatformIntegration
 
     /// <summary>
     /// Establish VPN/TUN. Optional Android per-app bypass package names and IPv6 block flag.
+    /// When <paramref name="forceRebind"/> is true, tear down and rebuild even if bypass/IPv6 hash matches.
     /// </summary>
     Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool forceRebind = false);
 
     Task EnableProxyAsync(CancellationToken cancellationToken = default);
 

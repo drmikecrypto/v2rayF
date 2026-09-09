@@ -44,13 +44,16 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
     public Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
-        CancellationToken cancellationToken = default) =>
-        AndroidUiThread.InvokeAsync(() => EstablishVpnOnUiThreadAsync(bypassPackages, blockIpv6, cancellationToken));
+        CancellationToken cancellationToken = default,
+        bool forceRebind = false) =>
+        AndroidUiThread.InvokeAsync(() =>
+            EstablishVpnOnUiThreadAsync(bypassPackages, blockIpv6, cancellationToken, forceRebind));
 
     private async Task<int?> EstablishVpnOnUiThreadAsync(
         IReadOnlyList<string>? bypassPackages,
         bool blockIpv6,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRebind)
     {
         LastEstablishError = null;
         LastHttpProxyWarning = null;
@@ -69,7 +72,8 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         }
 
         var context = activity.ApplicationContext ?? activity;
-        return await V2rayVpnService.EstablishAsync(context, bypassPackages, blockIpv6, cancellationToken)
+        return await V2rayVpnService.EstablishAsync(
+                context, bypassPackages, blockIpv6, cancellationToken, forceRebind)
             .ConfigureAwait(false);
     }
 
@@ -108,7 +112,6 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         {
             var context = Application.Context!;
             V2rayVpnService.Disconnect(context);
-            context.StopService(new Intent(context, typeof(V2rayForegroundService)));
             LastProxyMethod = null;
             await Task.CompletedTask;
         });

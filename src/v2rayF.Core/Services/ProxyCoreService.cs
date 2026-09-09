@@ -89,7 +89,18 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     public bool IsCoreAvailable() => File.Exists(ResolveCorePath());
 
+    public bool IsSingBoxAvailable() => File.Exists(_environment.GetSingBoxPath());
+
+    /// <summary>True when Xray or sing-box is present (DualCore ranking / status).</summary>
+    public bool IsAnyCoreAvailable() => IsCoreAvailable() || IsSingBoxAvailable();
+
     public bool IsCoreAvailableFor(ProxyServer server) => File.Exists(ResolveCorePathFor(server));
+
+    /// <summary>Drop cached TUN fd after a failed rebind so Refresh cannot reuse a closed fd.</summary>
+    public void ClearActiveTunFd() => _activeTunFd = null;
+
+    /// <summary>After soft recovery fails, reset tun-only counter so TunPathFailed does not thrash.</summary>
+    public void BackoffTunOnlyFails() => _consecutiveTunOnlyFails = 0;
 
     public bool HasGeoFiles()
     {

@@ -4,6 +4,14 @@
 2. Tap **Connect** and allow the **VPN** permission when prompted.
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
+5. Keep Private DNS **Off**. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale.
+
+## v2.6.2.13 — force TUN rebind
+
+- TunPathFailed force-rebinds VPN even when bypass hash matches (fixes no-op rebind)
+- Failed establish after teardown clears TUN fd (no Refresh with dead fd)
+- Connect/core status DualCore-aware; GMS/GSF UI Direct/Block only
+- Drop no-op TUN DNS carve-outs; delete unused FakeIP constants / ForegroundService stub
 
 ## v2.6.2.12 — GMS clearnet; IG Direct parity
 
@@ -17,154 +25,17 @@
 
 ## v2.6.2.10 — messenger TUN rebind
 
-- Soft recovery always re-establishes Android VPN (new fd) before RefreshRuntime
+- Soft recovery re-establishes Android VPN (new fd) before RefreshRuntime
 - FCM hosts beat Google UDP/443 block; status shows TUN recovering/weak briefly
 
 ## v2.6.2.9 — Reality/Vision budgets + TUN sniff override
 
 - Android TUN: sniff on, `sniff_override_destination` off
-- Vision/REALITY: longer resume/dial/ready budgets; tun-only soft threshold 6
+- Vision/REALITY: longer resume/dial/ready budgets; tun-only soft threshold **6**
 - Private DNS should stay Off on device
 
 ## v2.6.2.8 — TUN real UDP DNS
 
-- FakeIP catch-all removed; TUN DNS is real UDP via proxy
+- FakeIP catch-all removed; TUN DNS is real UDP via proxy (`dns.final`)
 - Block IPv6: early AAAA reject
 - Private DNS Off; force-stop apps once if sockets were stale across the update
-
-## v2.6.2.7 — TUN advisory + Translate path
-
-- TUN/FCM flaps soft-refresh only (no hard disconnect loop)
-- Google UDP/443 blocked on Android TUN (Translate → HTTP 10809)
-
-## v2.6.2.6 — Connect health-gate false fails
-
-**2.6.2.6** stops blaming every Connect failure on HTTP 10809. Connect needs SOCKS+HTTP only; cold Reality gets SOCKS-then-HTTP warmup, a soft retry, and longer budgets (12s/16s). TUN/FCM remains for background health + soft recovery.
-
-## v2.6.2.5 — ACCESS_NETWORK_STATE Connect fix
-
-**2.6.2.5** fixes Connect dying with `Neither user … has android.permission.ACCESS_NETWORK_STATE` (network callbacks added in 2.6.2.x without the manifest permission). Update the APK so the permission is granted at install time.
-
-## v2.6.2.4 — Bypass China honesty + soft recovery
-
-**2.6.2.4** shows a persistent Settings hint when Bypass China maps to Bypass LAN on sing-box, and soft recovery queues a retry if another resume already owns the gate.
-
-## v2.6.2.3 — Custom routing + live Settings
-
-**2.6.2.3** applies Custom Direct/Proxy/Block on the sing-box path, refreshes Settings (DoH/IPv6/rules) while Connected, and soft-applies App Network Block without a full Disconnect when the VPN hash is unchanged. Bypass China maps to Bypass LAN on sing-box (no CN geosite yet).
-
-## v2.6.2.2 — revoke, soft recovery, network switch
-
-**2.6.2.2** requires FCM + gen204 for TUN health, handles system VPN revoke, pauses hard reconnect during soft refresh, recovers on Wi‑Fi↔LTE, and applies App Network via VPN re-establish when bypass changes.
-
-## v2.6.2.1 — VPN-bound probe + push parity
-
-**2.6.2.1** fixes the Android health probe: it now tests traffic through the VPN Network (not clearnet). Push routing adds Signal/Slack/WhatsApp edge/Telegram API hosts. App Network bypass changes re-establish the VPN interface. Optional battery optimization prompt after first Connect.
-
-## v2.6.2.0 — push notifications + app restart survival
-
-**2.6.2.0** routes FCM, WhatsApp, Telegram, and Discord push through real DNS + proxy (not FakeIP alone). If you force-stop WhatsApp/Telegram and reopen while v2rayF stays connected, the network callback + TUN probe recover without opening v2rayF or tapping Disconnect. Leave v2rayF in background and test notifications after update.
-
-## v2.6.2 — wake recovery + steady sessions
-
-**2.6.2** checks the VPN path on resume and silently reconnects if needed. Play Store/Chrome use the same HTTP+SOCKS health as Connect. If auto-reconnect fails, clearnet works again — tap **Connect** to restore VPN.
-
-## v2.6.1 — faster Connect + Update
-
-**2.6.1** speeds Smart Connect (parallel probes, last-good race) and hardens the Update button (retries, keeps offer on flaky GitHub). Tap Update when available.
-
-## v2.6.0 — Instagram Direct (MQTT bypass + route rules)
-
-**2.6.0** adds `mqtt.facebook.com` / `gateway.facebook.com` and explicit sing-box TUN proxy routes for MQTT hosts. Update → Private DNS Off → Connect → force-stop Instagram once → open Direct. Feed/WhatsApp/Telegram/Google should stay OK.
-
-## v2.5.0.3 — Instagram Direct (MQTT bypass)
-
-**2.5.0.3** keeps feed on VPN HTTP `10809` but routes Meta MQTT hosts over TUN (like V2Box). Update → Private DNS Off → Connect → force-stop Instagram once → open Direct. Feed/WhatsApp/Telegram/Google should stay OK.
-
-## v2.5.0.2 — WhatsApp + Instagram online
-
-**2.5.0.2** restores WhatsApp FakeIP dial override and lets Instagram use VPN HTTP proxy `10809` (like Google). Update → App Network VPN for both → Private DNS Off → Connect → force-stop Instagram and WhatsApp once. If only Direct stays dark, use App Network Direct for Instagram as a last resort.
-
-## v2.5.0.1 — Connect fix (use this)
-
-**2.5.0.1** fixes Connect hang on 2.5.0 (bootstrap DNS no longer detours through proxy). Removed the Instagram clearnet Settings toggle — Instagram stays on VPN; use **App Network** only if you want Direct/clearnet for a package. Private DNS Off → Connect → force-stop Instagram once for Direct.
-
-## v2.5.0 — Instagram Direct + faster Connect
-
-**2.5.0** keeps **gVisor** (do not use 2.4.1). Meta DNS via proxy detour + MQTT hosts + parallel Connect probes. **If Connect fails with “did not become ready”, update to 2.5.0.1.**
-
-## v2.4.2 — restore internet after 2.4.1
-
-**2.4.2** fixes total offline on Connect (2.4.1 `mixed` TUN broke VpnService traffic). Update to **2.4.2**, Disconnect once, Private DNS Off → Connect. If Windows still looks dead with kill switch, Disconnect again or reboot.
-
-## v2.4.1 — Play Store, Translate, Direct
-
-**2.4.1** blocks TUN QUIC (Play Store/Translate use HTTP proxy), restores **mixed** TUN stack for Instagram Direct, and waits for HTTP **10809** before Connected. Private DNS Off → Connect → force-stop Instagram once. **If everything went offline, skip to 2.4.2.**
-
-## v2.4.0 — App Network
-
-**2.4.0** adds **App Network** (Settings): set apps to VPN, Direct (split), or Block. Live rates only while the panel is open. Existing bypass package names become Direct.
-
-## v2.3.3 — Direct bypasses HTTP proxy
-
-**2.3.3** excludes Instagram/Facebook from VPN HTTP proxy so Direct MQTT uses TUN (with 2.3.2 real DNS). Play Store / Translate still use `10809`. After Update: force-stop Instagram once.
-
-## v2.3.2 — Play Store + Direct real DNS
-
-**2.3.2** restores VPN HTTP proxy (Play Store / Translate) and resolves Instagram/Facebook **without FakeIP** so Direct MQTT can dial public IPs. WhatsApp/Telegram stay on FakeIP.
-
-## v2.3.1 — Instagram Direct (drop VPN HTTP proxy)
-
-**2.3.1** removes Android VPN HTTP proxy so Instagram **Direct** uses TUN like WhatsApp/Telegram. Feed still works via TUN. After Update: force-stop Instagram once.
-
-## v2.3.0 — WhatsApp / Telegram / Direct (FakeIP + gVisor)
-
-**2.3.0** uses full **gVisor** TUN and **FakeIP** DNS for messaging apps. If chats stay offline while feed works on 2.2.x, Update to **2.3.0**, then force-stop those apps once.
-
-## v2.2.10 — Direct + Telegram (TUN UDP)
-
-**2.2.10** switches Android TUN to **`mixed`** stack and forces UDP DNS for VpnService. If Direct/Telegram stay offline while feed works on 2.2.9, Update to **2.2.10**, then force-stop those apps once.
-
-## v2.2.9 — Instagram Direct TUN DNS
-
-**2.2.9** hijacks VPN DNS (`172.19.0.1:53`) into sing-box so Instagram **Direct** (MQTT) works again. Feed/reels already used HTTP proxy `10809`. After Update: Private DNS Off → Connect → **force-stop Instagram once**.
-
-## v2.2.8 — sing-box 1.12 DNS (Connect fix)
-
-**2.2.8** migrates live sing-box DNS to the 1.12 schema. If Connect showed `did not become ready in time: …migrate-to-new-dns-server-formats`, update to **2.2.8**.
-
-## v2.2.6 — sing-box TUN fd (not JSON `file_descriptor`)
-
-sing-box **1.12** rejects `file_descriptor` in config. **2.2.6** passes the VPN fd via **`SING_BOX_TUN_FD`** to a patched **libsingbox.so** (built in release CI). Use in-app **Update** — do not stay on 2.2.5 for Connect.
-
-## v2.2.4 — sing-box bundled in APK
-
-Connect needs **libsingbox.so** for Android classic (and Hy2). Older APKs only shipped libxray.so. **2.2.4** includes both; in-app Update is enough.
-
-## v2.2.3 — Test delay on Xray, Connect on sing-box
-
-**Test delay / ping** for classic protocols uses **Xray**. Live **Connect** on Android classic uses **sing-box** TUN for Instagram Direct.
-
-## v2.2.2 — Instagram Direct + classic sing-box TUN
-
-Instagram **feed/reels** often use VPN HTTP proxy `10809`. **Direct** (MQTT / raw sockets) must go through **TUN**.
-
-After Connect: set Android **Private DNS** Off, then **force-stop Instagram** once before opening Direct.
-
-## Idle “Connected” but no internet
-
-**v2.0.6** keepalive + soft path probe; Auto-reconnect up to twice.
-
-## Chrome / WhatsApp / Instagram
-
-IPv6 blackhole + VPN DNS `172.19.0.1` (v2.0.5). HTTP proxy for Chromium/feed; raw-socket chat needs healthy TUN (sing-box on Android classic).
-
-## Still broken?
-
-```bash
-adb logcat -s v2rayF AndroidRuntime
-```
-
-## Product polish (Phase C — deferred)
-
-UI redesign and SpeedyFi-style multi-WAN aggregation are tracked **after** single-link Android speed matches V2Box on the same configs. See [docs/roadmap-engine-first.md](roadmap-engine-first.md).

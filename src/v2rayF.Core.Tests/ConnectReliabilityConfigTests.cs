@@ -318,7 +318,8 @@ public class SmartConnectShortlistTests
         public Task<int?> EstablishVpnAsync(
             IReadOnlyList<string>? bypassPackages = null,
             bool blockIpv6 = true,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            bool forceRebind = false) =>
             Task.FromResult<int?>(null);
         public Task EnableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DisableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;

@@ -38,7 +38,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _suppressSelectionPersist;
     private bool _suppressSelectionSwitch;
     private bool _selectionSwitchInFlight;
+    /// <summary>0=none, 1=Resume, 2=TunFail (TunFail wins if both queued).</summary>
     private int _pendingSoftRecovery;
+    private int _consecutiveSoftRecoveryWeak;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -508,6 +510,28 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private const int SoftRecoveryKindNone = 0;
+    private const int SoftRecoveryKindResume = 1;
+    private const int SoftRecoveryKindTunFail = 2;
+    public const int SoftRecoveryWeakEscalateThreshold = 3;
+
+    private void QueuePendingSoftRecovery(int kind)
+    {
+        while (true)
+        {
+            var cur = Volatile.Read(ref _pendingSoftRecovery);
+            if (cur == SoftRecoveryKindTunFail)
+                return;
+            if (cur == kind)
+                return;
+            var next = kind == SoftRecoveryKindTunFail ? SoftRecoveryKindTunFail : kind;
+            if (cur == SoftRecoveryKindResume && kind == SoftRecoveryKindResume)
+                return;
+            if (Interlocked.CompareExchange(ref _pendingSoftRecovery, next, cur) == cur)
+                return;
+        }
+    }
+
     /// <summary>Called when the main window is activated (desktop) — recheck for updates and session path.</summary>
     public void OnMainWindowActivated()
     {
@@ -533,7 +557,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
         {
-            Volatile.Write(ref _pendingSoftRecovery, 1);
+            QueuePendingSoftRecovery(SoftRecoveryKindResume);
             return;
         }
 
@@ -549,18 +573,19 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Tun-only failure: always rebind Android VPN then RefreshRuntime (drop stale MQTT sockets).</summary>
+    /// <summary>Tun-only failure: force-rebind Android VPN then RefreshRuntime (drop stale MQTT sockets).</summary>
     private async Task OnTunPathFailedRecoveryAsync()
     {
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
         {
             _proxyCore.EndSoftRecovery(success: false);
+            _proxyCore.BackoffTunOnlyFails();
             return;
         }
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
         {
-            Volatile.Write(ref _pendingSoftRecovery, 1);
+            QueuePendingSoftRecovery(SoftRecoveryKindTunFail);
             return;
         }
 
@@ -581,18 +606,29 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                // Always rebind on TunPathFailed so Instagram/WhatsApp drop dead MQTT sockets.
                 if (IsMobile)
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
                     var rebuilt = await AppServices.Platform
-                        .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                        .EstablishVpnAsync(
+                            bypass,
+                            settings.BlockIpv6,
+                            CancellationToken.None,
+                            forceRebind: true)
                         .ConfigureAwait(true);
-                    if (rebuilt is not null)
+                    if (rebuilt is null)
                     {
-                        tunFd = rebuilt;
-                        _lastTunRebindUtc = DateTimeOffset.UtcNow;
+                        // TearDown already ran; never Refresh with a closed fd.
+                        _proxyCore.ClearActiveTunFd();
+                        _proxyCore.EndSoftRecovery(success: false);
+                        _proxyCore.BackoffTunOnlyFails();
+                        _consecutiveSoftRecoveryWeak++;
+                        escalateZombie = true;
+                        return;
                     }
+
+                    tunFd = rebuilt;
+                    _lastTunRebindUtc = DateTimeOffset.UtcNow;
                 }
 
                 await _proxyCore.RefreshRuntimeAsync(
@@ -605,6 +641,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _proxyCore.EndSoftRecovery(success: ok);
                 if (ok)
                 {
+                    _consecutiveSoftRecoveryWeak = 0;
                     try
                     {
                         await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
@@ -621,16 +658,26 @@ public partial class MainWindowViewModel : ViewModelBase
                 }
                 else
                 {
-                    await SetOnUiAsync(() =>
+                    _proxyCore.BackoffTunOnlyFails();
+                    _consecutiveSoftRecoveryWeak++;
+                    if (_consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold)
+                        escalateZombie = true;
+                    else
                     {
-                        StatusText = "Connected — TUN weak";
-                    }).ConfigureAwait(true);
+                        await SetOnUiAsync(() =>
+                        {
+                            StatusText = "Connected — TUN weak";
+                        }).ConfigureAwait(true);
+                    }
                 }
             }
             catch
             {
                 _proxyCore.EndSoftRecovery(success: false);
-                escalateZombie = !_proxyCore.IsRunning;
+                _proxyCore.BackoffTunOnlyFails();
+                _consecutiveSoftRecoveryWeak++;
+                escalateZombie = !_proxyCore.IsRunning ||
+                                 _consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold;
                 if (!escalateZombie)
                 {
                     await SetOnUiAsync(() =>
@@ -643,6 +690,7 @@ public partial class MainWindowViewModel : ViewModelBase
         catch
         {
             _proxyCore.EndSoftRecovery(success: false);
+            _proxyCore.BackoffTunOnlyFails();
             escalateZombie = !_proxyCore.IsRunning;
         }
         finally
@@ -655,24 +703,36 @@ public partial class MainWindowViewModel : ViewModelBase
             await HandleUnexpectedCoreStopAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Opportunistic resume soft path only — TunPathFailed always rebinds.</summary>
+    /// <summary>Opportunistic resume soft path only — TunPathFailed always force-rebinds.</summary>
     private bool ShouldRebindAndroidTun() =>
-        DateTimeOffset.UtcNow - _lastTunRebindUtc >= TimeSpan.FromSeconds(TunRebindMinIntervalSeconds);
+        AndroidTunRebindPolicy.ShouldForceRebind(
+            AndroidTunRebindPolicy.Reason.SessionResume,
+            _lastTunRebindUtc,
+            DateTimeOffset.UtcNow,
+            TunRebindMinIntervalSeconds);
 
     private async Task DrainPendingSoftRecoveryAsync()
     {
-        if (Interlocked.Exchange(ref _pendingSoftRecovery, 0) != 1)
+        var pending = Interlocked.Exchange(ref _pendingSoftRecovery, SoftRecoveryKindNone);
+        if (pending == SoftRecoveryKindNone)
             return;
+
+        if (pending == SoftRecoveryKindTunFail)
+        {
+            await OnTunPathFailedRecoveryAsync().ConfigureAwait(true);
+            return;
+        }
 
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
         {
             _proxyCore.EndSoftRecovery(success: false);
+            _proxyCore.BackoffTunOnlyFails();
             return;
         }
 
         if (!await _sessionResumeGate.WaitAsync(0).ConfigureAwait(true))
         {
-            Volatile.Write(ref _pendingSoftRecovery, 1);
+            QueuePendingSoftRecovery(SoftRecoveryKindResume);
             return;
         }
 
@@ -684,10 +744,19 @@ public partial class MainWindowViewModel : ViewModelBase
             _lastSessionResumeUtc = DateTimeOffset.UtcNow;
             var ok = await RecoverSessionCoreAsync().ConfigureAwait(true);
             _proxyCore.EndSoftRecovery(success: ok);
+            if (ok)
+                _consecutiveSoftRecoveryWeak = 0;
+            else
+            {
+                _proxyCore.BackoffTunOnlyFails();
+                _consecutiveSoftRecoveryWeak++;
+            }
         }
         catch
         {
             _proxyCore.EndSoftRecovery(success: false);
+            _proxyCore.BackoffTunOnlyFails();
+            _consecutiveSoftRecoveryWeak++;
         }
         finally
         {
@@ -730,46 +799,63 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(connectSettings, mobile: true);
                     var rebuilt = await AppServices.Platform
-                        .EstablishVpnAsync(bypass, connectSettings.BlockIpv6, CancellationToken.None)
+                        .EstablishVpnAsync(
+                            bypass,
+                            connectSettings.BlockIpv6,
+                            CancellationToken.None,
+                            forceRebind: false)
                         .ConfigureAwait(true);
-                    if (rebuilt is not null)
+                    if (rebuilt is null)
+                    {
+                        // Establish tore down then failed — do not Refresh with dead fd.
+                        _proxyCore.ClearActiveTunFd();
+                        tunFd = null;
+                    }
+                    else
                     {
                         tunFd = rebuilt;
                         _lastTunRebindUtc = DateTimeOffset.UtcNow;
                     }
                 }
 
-                await _proxyCore.RefreshRuntimeAsync(
-                        server,
-                        connectSettings,
-                        tunFd,
-                        null,
-                        CancellationToken.None)
-                    .ConfigureAwait(true);
-
-                await RearmKillSwitchIfNeededAsync(server, connectSettings, CancellationToken.None)
-                    .ConfigureAwait(true);
-
-                if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+                if (tunFd is null && IsMobile)
                 {
-                    try
-                    {
-                        await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
-                    }
-                    catch
-                    {
-                        // Best-effort.
-                    }
+                    // Fall through to full reconnect below.
+                }
+                else
+                {
+                    await _proxyCore.RefreshRuntimeAsync(
+                            server,
+                            connectSettings,
+                            tunFd,
+                            null,
+                            CancellationToken.None)
+                        .ConfigureAwait(true);
 
-                    _autoReconnectAttempts = 0;
-                    await SetOnUiAsync(() =>
+                    await RearmKillSwitchIfNeededAsync(server, connectSettings, CancellationToken.None)
+                        .ConfigureAwait(true);
+
+                    if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
                     {
-                        ConnectionState = ConnectionState.Connected;
-                        IsConnected = true;
-                        StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
-                        UpdateSecureShareEndpoint();
-                    }).ConfigureAwait(true);
-                    return true;
+                        try
+                        {
+                            await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
+                        }
+                        catch
+                        {
+                            // Best-effort.
+                        }
+
+                        _autoReconnectAttempts = 0;
+                        await SetOnUiAsync(() =>
+                        {
+                            ConnectionState = ConnectionState.Connected;
+                            IsConnected = true;
+                            StatusText = $"Session restored — {StatusSanitizer.Scrub(server.Name)}";
+                            UpdateSecureShareEndpoint();
+                        }).ConfigureAwait(true);
+                        return true;
+                    }
                 }
             }
             catch
@@ -1074,14 +1160,24 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void UpdateCoreStatus()
     {
-        if (!_proxyCore.IsCoreAvailable())
+        var xray = _proxyCore.IsCoreAvailable();
+        var sing = _proxyCore.IsSingBoxAvailable();
+        if (!xray && !sing)
         {
-            CoreStatus = "Xray core missing — place xray in the cores folder";
+            CoreStatus = IsMobile
+                ? "Proxy cores missing — use in-app Update"
+                : "Xray/sing-box missing — place binaries in the cores folder";
             return;
         }
 
         var geo = _proxyCore.HasGeoFiles() ? "geo files OK" : "geo files missing (needed for Bypass China)";
-        CoreStatus = $"Xray core ready · {geo}";
+        var cores = (xray, sing) switch
+        {
+            (true, true) => "Xray + sing-box ready",
+            (false, true) => "sing-box ready",
+            _ => "Xray core ready"
+        };
+        CoreStatus = $"{cores} · {geo}";
     }
 
     private void UpdateTunStatus()
@@ -1745,18 +1841,40 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            if (!_proxyCore.IsCoreAvailable())
+            if (!_proxyCore.IsAnyCoreAvailable())
             {
                 await AppServices.CoreEnvironment.EnsureCoreAsync(token).ConfigureAwait(false);
                 await ResumeOnUiAsync().ConfigureAwait(true);
                 await SetOnUiAsync(UpdateCoreStatus).ConfigureAwait(true);
             }
 
-            if (!_proxyCore.IsCoreAvailable())
+            if (!_proxyCore.IsAnyCoreAvailable())
             {
                 await SetOnUiAsync(() =>
                 {
-                    StatusText = "Xray core not found.";
+                    StatusText = "Proxy core not found.";
+                    ConnectionState = ConnectionState.Failed;
+                }).ConfigureAwait(true);
+                return;
+            }
+
+            if (forceServer is not null && !_proxyCore.IsCoreAvailableFor(forceServer))
+            {
+                await SetOnUiAsync(() =>
+                {
+                    StatusText = $"{CoreRuntime.CoreLabel(forceServer)} core not found.";
+                    ConnectionState = ConnectionState.Failed;
+                }).ConfigureAwait(true);
+                return;
+            }
+
+            if (forceServer is null && SelectedServer is not null &&
+                !_proxyCore.IsCoreAvailableFor(SelectedServer) &&
+                !(_settings.SmartConnectEnabled && Servers.Count > 0))
+            {
+                await SetOnUiAsync(() =>
+                {
+                    StatusText = $"{CoreRuntime.CoreLabel(SelectedServer)} core not found.";
                     ConnectionState = ConnectionState.Failed;
                 }).ConfigureAwait(true);
                 return;

@@ -57,7 +57,9 @@
                             <TextBlock Text="{Binding TrafficText}" FontSize="11" Opacity="0.75"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Spacing="4" IsEnabled="{Binding !IsSelf}">
-                            <ToggleButton Content="VPN" IsChecked="{Binding IsVpn}" Padding="8,4" HorizontalAlignment="Stretch"/>
+                            <ToggleButton Content="VPN" IsChecked="{Binding IsVpn}" Padding="8,4"
+                                          HorizontalAlignment="Stretch"
+                                          IsVisible="{Binding AllowVpnMode}"/>
                             <ToggleButton Content="Direct" IsChecked="{Binding IsDirect}" Padding="8,4" HorizontalAlignment="Stretch"/>
                             <ToggleButton Content="Block" IsChecked="{Binding IsBlock}" Padding="8,4" HorizontalAlignment="Stretch"/>
                         </StackPanel>

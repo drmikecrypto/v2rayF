@@ -20,11 +20,8 @@ public static class SingBoxConfigBuilder
     public const string BootstrapDnsTag = "bootstrap";
     public const string UdpDnsTag = "udp";
     public const string DohDnsTag = "doh";
-    /// <summary>Legacy tag; FakeIP is no longer emitted on the live TUN path (2.6.2.8+).</summary>
-    public const string FakeIpDnsTag = "fakeip";
-    public const string FakeIpInet4Range = "198.18.0.0/15";
 
-    /// <summary>Instagram Direct MQTT — explicit real UDP before dns.final (same as all apps since 2.6.2.8).</summary>
+    /// <summary>Instagram / Meta — route rules (dns.final already UdpDnsTag).</summary>
     public static readonly string[] MetaDnsSuffixes =
     [
         "instagram.com",
@@ -61,18 +58,6 @@ public static class SingBoxConfigBuilder
     /// Feed/CDN stay on 10809 — do not exclude apex instagram.com / facebook.com.
     /// </summary>
     public static readonly string[] MetaMqttHttpProxyExclusionHosts = MetaDnsExactHosts;
-
-    /// <summary>Play Store / Translate TUN fallback — real IPs, not FakeIP.</summary>
-    public static readonly string[] GoogleDnsSuffixes =
-    [
-        "google.com",
-        "googleapis.com",
-        "gstatic.com",
-        "googleusercontent.com",
-        "android.com",
-        "play.googleapis.com",
-        "ggpht.com"
-    ];
 
     /// <summary>
     /// UDP/443 block for Chromium Translate/Play assets only — not apex google.com (FCM/GMS).
@@ -512,7 +497,7 @@ public static class SingBoxConfigBuilder
             servers.Add(udp);
         }
 
-        // TUN: real UDP for all apps (dns.final). FakeIP+sniff left raw-socket apps offline when sniff failed.
+        // TUN: real UDP for all apps (dns.final). No per-app DNS carve-outs — they were no-ops when final=udp.
         if (useTun)
         {
             // Block IPv6: refuse AAAA early so Happy Eyeballs fails fast to IPv4 (strategy + route still apply).
@@ -522,74 +507,6 @@ public static class SingBoxConfigBuilder
                 {
                     ["query_type"] = new JsonArray { "AAAA" },
                     ["action"] = "reject"
-                });
-            }
-
-            var metaSuffixes = new JsonArray();
-            foreach (var suffix in MetaDnsSuffixes)
-                metaSuffixes.Add(suffix);
-            rules.Add(new JsonObject
-            {
-                ["domain_suffix"] = metaSuffixes,
-                ["query_type"] = new JsonArray { "A", "AAAA" },
-                ["server"] = UdpDnsTag
-            });
-            if (MetaDnsExactHosts.Length > 0)
-            {
-                var metaExact = new JsonArray();
-                foreach (var host in MetaDnsExactHosts)
-                    metaExact.Add(host);
-                rules.Add(new JsonObject
-                {
-                    ["domain"] = metaExact,
-                    ["query_type"] = new JsonArray { "A", "AAAA" },
-                    ["server"] = UdpDnsTag
-                });
-            }
-
-            var googleSuffixes = new JsonArray();
-            foreach (var suffix in GoogleDnsSuffixes)
-                googleSuffixes.Add(suffix);
-            rules.Add(new JsonObject
-            {
-                ["domain_suffix"] = googleSuffixes,
-                ["query_type"] = new JsonArray { "A", "AAAA" },
-                ["server"] = UdpDnsTag
-            });
-
-            var messagingSuffixes = new JsonArray();
-            foreach (var suffix in PushRoutingDomains.MessagingDnsSuffixes)
-                messagingSuffixes.Add(suffix);
-            rules.Add(new JsonObject
-            {
-                ["domain_suffix"] = messagingSuffixes,
-                ["query_type"] = new JsonArray { "A", "AAAA" },
-                ["server"] = UdpDnsTag
-            });
-
-            var oemPushSuffixes = new JsonArray();
-            foreach (var suffix in PushRoutingDomains.OemPushDnsSuffixes)
-                oemPushSuffixes.Add(suffix);
-            if (oemPushSuffixes.Count > 0)
-            {
-                rules.Add(new JsonObject
-                {
-                    ["domain_suffix"] = oemPushSuffixes,
-                    ["query_type"] = new JsonArray { "A", "AAAA" },
-                    ["server"] = UdpDnsTag
-                });
-            }
-
-            if (PushRoutingDomains.FcmDnsExactHosts.Length > 0)
-            {
-                var fcmExact = new JsonArray();
-                foreach (var host in PushRoutingDomains.FcmDnsExactHosts)
-                    fcmExact.Add(host);
-                rules.Add(new JsonObject
-                {
-                    ["domain"] = fcmExact,
-                    ["query_type"] = new JsonArray { "A", "AAAA" },
-                    ["server"] = UdpDnsTag
                 });
             }
         }

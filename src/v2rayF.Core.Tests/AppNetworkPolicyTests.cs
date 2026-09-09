@@ -7,6 +7,24 @@ namespace v2rayF.Core.Tests;
 public class AppNetworkPolicyTests
 {
     [Fact]
+    public void Desktop_DoesNotInjectGmsPackages()
+    {
+        var settings = new AppSettings();
+        var direct = AppNetworkPolicy.GetDirectIds(settings, mobile: false);
+        Assert.DoesNotContain("com.google.android.gms", direct);
+        Assert.DoesNotContain("com.google.android.gsf", direct);
+    }
+
+    [Fact]
+    public void SetMode_GmsVpnCoercesToDirect()
+    {
+        var settings = new AppSettings();
+        AppNetworkPolicy.SetMode(settings, "com.google.android.gms", AppNetworkMode.Vpn, mobile: true);
+        Assert.Equal(AppNetworkMode.Direct, AppNetworkPolicy.GetMode(settings, "com.google.android.gms", mobile: true));
+        Assert.True(AppNetworkPolicy.IsAndroidPushBypassPackage("com.google.android.gsf"));
+    }
+
+    [Fact]
     public void AndroidPushBypass_GmsMergedUnlessBlocked()
     {
         var settings = new AppSettings();

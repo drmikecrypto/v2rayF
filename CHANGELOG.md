@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.13] - 2026-09-09
+
+### Fixed
+
+- TunPathFailed force-rebinds VPN even when bypass/IPv6 hash matches
+- Failed VPN re-establish clears TUN fd (no Refresh with closed fd)
+- Connect / core status DualCore-aware (sing-box or Xray)
+- Soft-recovery pending distinguishes TunFail vs Resume; tun-fail backoff + escalate after weak cycles
+- GMS/GSF App Network UI: Direct/Block only; Advanced Direct shows effective list
+
+### Changed
+
+- Remove no-op TUN DNS carve-outs (dns.final already UDP); drop unused FakeIP constants
+- Delete unused V2rayForegroundService stub
+- Desktop push list includes OEM suffixes; drop redundant play.googleapis.com DNS entry
+- Deferred audit items D12–D23 → docs/backlog-2.6.2.14.md
+
 ## [2.6.2.12] - 2026-09-09
 
 ### Fixed

@@ -6,7 +6,7 @@ namespace v2rayF.Services;
 
 /// <summary>
 /// Shared push / messaging domain lists for Android sing-box TUN and desktop Xray TUN.
-/// Real DNS + explicit proxy routes — not FakeIP + sniff alone.
+/// Real UDP dns.final + explicit proxy routes.
 /// </summary>
 public static class PushRoutingDomains
 {
@@ -27,7 +27,7 @@ public static class PushRoutingDomains
         "firebaseinstallations.googleapis.com"
     ];
 
-    /// <summary>WhatsApp / Telegram / Discord / Signal / Slack — real UDP DNS, not FakeIP.</summary>
+    /// <summary>WhatsApp / Telegram / Discord / Signal / Slack — real UDP DNS via dns.final.</summary>
     public static readonly string[] MessagingDnsSuffixes =
     [
         "whatsapp.net",
@@ -44,7 +44,7 @@ public static class PushRoutingDomains
         "slack-edge.com"
     ];
 
-    /// <summary>OEM push CDNs (Android) — real UDP DNS + proxy route.</summary>
+    /// <summary>OEM push CDNs — proxy route (dns.final already UDP).</summary>
     public static readonly string[] OemPushDnsSuffixes =
     [
         "push.hicloud.com",
@@ -55,12 +55,6 @@ public static class PushRoutingDomains
         "jpush.cn",
         "heytapmobi.com",
         "mcs.heytapmobi.com"
-    ];
-
-    /// <summary>Apple push (desktop bridges / iOS sync apps).</summary>
-    public static readonly string[] DesktopOnlyPushSuffixes =
-    [
-        "push.apple.com"
     ];
 
     /// <summary>Push/realtime endpoints that must route to proxy explicitly on Android TUN.</summary>
@@ -83,11 +77,11 @@ public static class PushRoutingDomains
         "wss-primary.slack.com"
     ];
 
-    /// <summary>Desktop TUN: WNS + messenger + Signal/Slack + Apple push suffixes.</summary>
+    /// <summary>Desktop TUN: WNS + messenger + OEM (includes Apple push).</summary>
     public static readonly string[] DesktopPushDomainSuffixes = CombineUnique(
         WindowsNotificationSuffixes,
         MessagingDnsSuffixes,
-        DesktopOnlyPushSuffixes);
+        OemPushDnsSuffixes);
 
     private static string[] CombineUnique(params IEnumerable<string>[] groups)
     {

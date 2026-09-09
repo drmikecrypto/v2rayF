@@ -21,6 +21,10 @@ public static class AppNetworkPolicy
         "com.google.android.gsf"
     ];
 
+    public static bool IsAndroidPushBypassPackage(string id) =>
+        AndroidPushBypassPackages.Any(p =>
+            string.Equals(p, id, StringComparison.OrdinalIgnoreCase));
+
     public static IReadOnlyList<string> ParseIdList(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -89,13 +93,19 @@ public static class AppNetworkPolicy
         return AppNetworkMode.Vpn;
     }
 
-    /// <summary>Apply mode to settings lists. Self id is ignored.</summary>
+    /// <summary>
+    /// Apply mode to settings lists. Self id is ignored.
+    /// Android push packages (GMS/GSF) cannot be Vpn — Direct or Block only.
+    /// </summary>
     public static void SetMode(AppSettings settings, string id, AppNetworkMode mode, bool mobile)
     {
         if (string.IsNullOrWhiteSpace(id) || IsSelfId(id, mobile))
             return;
 
         id = id.Trim();
+        if (mobile && IsAndroidPushBypassPackage(id) && mode == AppNetworkMode.Vpn)
+            mode = AppNetworkMode.Direct;
+
         var direct = ParseIdList(mobile ? settings.AndroidBypassPackages : settings.DesktopDirectProcesses)
             .ToList();
         var block = ParseIdList(mobile ? settings.AndroidBlockPackages : settings.DesktopBlockProcesses)

@@ -186,7 +186,7 @@ public sealed class LatencyService
 
     /// <summary>
     /// Verify default-route app traffic through TUN (not localhost SOCKS/HTTP).
-    /// Used when VPN routes all apps — localhost can stay healthy while TUN/FakeIP is stale.
+    /// Used when VPN routes all apps — localhost can stay healthy while TUN path is stale.
     /// </summary>
     public async Task<int?> MeasureTunAppPathAsync(
         CancellationToken cancellationToken = default,

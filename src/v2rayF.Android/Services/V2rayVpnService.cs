@@ -59,10 +59,13 @@ public class V2rayVpnService : VpnService
         Context context,
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool forceRebind = false)
     {
         var hash = ComputeEstablishHash(bypassPackages, blockIpv6);
-        if (_tunFd >= 0 && string.Equals(_establishConfigHash, hash, StringComparison.Ordinal))
+        if (!forceRebind &&
+            _tunFd >= 0 &&
+            string.Equals(_establishConfigHash, hash, StringComparison.Ordinal))
             return Task.FromResult<int?>(_tunFd);
 
         // In-process teardown only — never StartService(DISCONNECT) before ESTABLISH

@@ -55,7 +55,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
     public Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default,
+        bool forceRebind = false) =>
         Task.FromResult<int?>(null);
 
     public string? GetLanIPv4Address()

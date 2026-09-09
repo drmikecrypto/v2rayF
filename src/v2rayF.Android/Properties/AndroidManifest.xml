@@ -22,9 +22,6 @@
 				android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
 				android:value="vpn_proxy" />
 		</service>
-		<service android:name=".Services.V2rayForegroundService"
-		         android:exported="false"
-		         android:foregroundServiceType="specialUse" />
 		<provider
 			android:name="androidx.core.content.FileProvider"
 			android:authorities="${applicationId}.fileprovider"

@@ -72,7 +72,7 @@ public partial class AppNetworkViewModel : ViewModelBase
     private bool _showAdvanced;
 
     public string PlatformHint => _isMobile
-        ? "Direct = clearnet (outside VPN). Block = no internet while VPN is on."
+        ? "Direct = clearnet (outside VPN). Block = no internet while VPN is on. GMS/GSF stay Direct unless Blocked."
         : "Requires TUN. Direct = core direct egress (not OS bypass). Block = blackhole.";
 
     partial void OnSearchTextChanged(string value) => RebuildVisible();
@@ -82,8 +82,7 @@ public partial class AppNetworkViewModel : ViewModelBase
     public async Task OnOpenedAsync()
     {
         var settings = _getSettings();
-        AdvancedDirectText = _isMobile ? settings.AndroidBypassPackages : settings.DesktopDirectProcesses;
-        AdvancedBlockText = _isMobile ? settings.AndroidBlockPackages : settings.DesktopBlockProcesses;
+        SyncAdvancedFromSettings(settings);
         Subtitle = _isMobile ? "Installed apps" : "Running processes";
         await RefreshInternalAsync(force: false).ConfigureAwait(true);
         StartTrafficPolling();
@@ -121,7 +120,8 @@ public partial class AppNetworkViewModel : ViewModelBase
             _all = apps.Select(a =>
             {
                 var mode = AppNetworkPolicy.GetMode(settings, a.Id, _isMobile);
-                var item = new AppNetworkItemViewModel(a, mode);
+                var allowVpn = !(_isMobile && AppNetworkPolicy.IsAndroidPushBypassPackage(a.Id));
+                var item = new AppNetworkItemViewModel(a, mode, allowVpn);
                 item.PropertyChanged += (_, e) =>
                 {
                     if (e.PropertyName == nameof(AppNetworkItemViewModel.Mode) && !a.IsSelf)
@@ -199,8 +199,10 @@ public partial class AppNetworkViewModel : ViewModelBase
         {
             if (item.IsSelf)
                 continue;
+            if (mode == AppNetworkMode.Vpn && !item.AllowVpnMode)
+                continue;
             item.Mode = mode;
-            AppNetworkPolicy.SetMode(settings, item.Id, mode, _isMobile);
+            AppNetworkPolicy.SetMode(settings, item.Id, item.Mode, _isMobile);
         }
 
         _dirty = true;
@@ -219,7 +221,10 @@ public partial class AppNetworkViewModel : ViewModelBase
 
     private void SyncAdvancedFromSettings(AppSettings settings)
     {
-        AdvancedDirectText = _isMobile ? settings.AndroidBypassPackages : settings.DesktopDirectProcesses;
+        // Mobile Advanced Direct shows effective Direct (includes sticky GMS/GSF).
+        AdvancedDirectText = _isMobile
+            ? AppNetworkPolicy.SerializeIdList(AppNetworkPolicy.GetDirectIds(settings, mobile: true))
+            : settings.DesktopDirectProcesses;
         AdvancedBlockText = _isMobile ? settings.AndroidBlockPackages : settings.DesktopBlockProcesses;
     }
 

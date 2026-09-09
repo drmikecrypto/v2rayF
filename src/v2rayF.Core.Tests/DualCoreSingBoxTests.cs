@@ -287,20 +287,14 @@ public class DualCoreSingBoxTests
 
         Assert.DoesNotContain(
             dns["servers"]!.AsArray(),
-            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
+            s => s!["tag"]?.GetValue<string>() == "fakeip");
         Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, dns["final"]!.GetValue<string>());
         Assert.True(dns["independent_cache"]!.GetValue<bool>());
 
-        var dnsRules = dns["rules"]!.AsArray();
+        // No per-app DNS carve-outs (dns.final already udp); Meta stays on route rules.
         Assert.DoesNotContain(
-            dnsRules,
-            r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
-
-        Assert.Contains(
-            dnsRules,
-            r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
-                 r["domain_suffix"] is JsonArray suffixes &&
-                 suffixes.Any(s => s!.GetValue<string>() == "instagram.com"));
+            dns["rules"]!.AsArray(),
+            r => r!["domain_suffix"] is JsonArray);
     }
 
     [Fact]
@@ -322,7 +316,6 @@ public class DualCoreSingBoxTests
                 new AppSettings { BlockIpv6 = true },
                 tunFd: 7))!["dns"]!["rules"]!.AsArray();
         var aaaaIdx = -1;
-        var metaIdx = -1;
         for (var i = 0; i < withBootstrap.Count; i++)
         {
             var r = withBootstrap[i]!;
@@ -330,14 +323,9 @@ public class DualCoreSingBoxTests
                 r["query_type"] is JsonArray qt &&
                 qt.Any(t => t!.GetValue<string>() == "AAAA"))
                 aaaaIdx = i;
-            if (r["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
-                r["domain_suffix"] is JsonArray suffixes &&
-                suffixes.Any(s => s!.GetValue<string>() == "instagram.com"))
-                metaIdx = i;
         }
 
         Assert.True(aaaaIdx >= 0, "expected AAAA reject");
-        Assert.True(metaIdx >= 0 && aaaaIdx < metaIdx, "AAAA reject before Meta UDP carve-out");
     }
 
     [Fact]
@@ -535,24 +523,18 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_GoogleDnsUsesRealUdp()
+    public void AndroidTunFd_DnsFinalUdp_NoFakeIpServer()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var dns = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!["dns"]!;
-        var dnsRules = dns["rules"]!.AsArray();
 
-        Assert.Contains(
-            dnsRules,
-            r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag &&
-                 r["domain_suffix"] is JsonArray gs &&
-                 gs.Any(s => s!.GetValue<string>() == "google.com"));
-        Assert.DoesNotContain(
-            dnsRules,
-            r => r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
+        Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, dns["final"]!.GetValue<string>());
         Assert.DoesNotContain(
             dns["servers"]!.AsArray(),
-            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
-        Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, dns["final"]!.GetValue<string>());
+            s => s!["tag"]?.GetValue<string>() == "fakeip");
+        Assert.DoesNotContain(
+            dns["rules"]!.AsArray(),
+            r => r!["domain_suffix"] is JsonArray);
     }
 
     [Fact]
@@ -566,7 +548,7 @@ public class DualCoreSingBoxTests
         Assert.Equal(SingBoxConfigBuilder.DohDnsTag, root["dns"]!["final"]!.GetValue<string>());
         Assert.DoesNotContain(
             root["dns"]!["servers"]!.AsArray(),
-            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.FakeIpDnsTag);
+            s => s!["tag"]?.GetValue<string>() == "fakeip");
     }
 
     [Fact]

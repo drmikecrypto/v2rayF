@@ -31,21 +31,22 @@ public class PushRoutingTests
     }
 
     [Fact]
-    public void AndroidTun_MessagingDnsUsesRealUdpNotFakeIp()
+    public void AndroidTun_DnsFinalUdp_NoMessagingCarveOut()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var dns = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!["dns"]!;
-        var rules = dns["rules"]!.AsArray();
-
-        Assert.Contains(rules, r =>
-            r?["domain_suffix"] is JsonArray suffixes &&
-            suffixes.Any(s => s!.GetValue<string>() == "whatsapp.net") &&
-            r["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag);
-
-        Assert.Contains(rules, r =>
-            r?["domain"] is JsonArray domains &&
-            domains.Any(d => d!.GetValue<string>() == "mtalk.google.com") &&
-            r["server"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag);
+        Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, dns["final"]!.GetValue<string>());
+        Assert.DoesNotContain(
+            dns["servers"]!.AsArray(),
+            s => s!["tag"]?.GetValue<string>() == "fakeip");
+        Assert.DoesNotContain(
+            dns["rules"]!.AsArray(),
+            r => r?["domain_suffix"] is JsonArray suffixes &&
+                 suffixes.Any(s => s!.GetValue<string>() == "whatsapp.net"));
+        Assert.DoesNotContain(
+            dns["rules"]!.AsArray(),
+            r => r?["domain"] is JsonArray domains &&
+                 domains.Any(d => d!.GetValue<string>() == "mtalk.google.com"));
     }
 
     [Fact]
@@ -103,5 +104,12 @@ public class PushRoutingTests
         Assert.Contains("wss-primary.slack.com", routes);
         Assert.Contains("hooks.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
         Assert.Contains("wss-primary.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
+    }
+
+    [Fact]
+    public void DesktopPush_IncludesOemApplePush()
+    {
+        Assert.Contains("push.apple.com", PushRoutingDomains.DesktopPushDomainSuffixes);
+        Assert.Contains("push.hicloud.com", PushRoutingDomains.DesktopPushDomainSuffixes);
     }
 }
