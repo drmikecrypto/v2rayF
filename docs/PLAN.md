@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.2.18** HTTP 10809 advisory + Test All warmup release).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.2.19** Xray Test All restore).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -48,7 +48,7 @@ Same subscription, clean install, Private DNS **Off**. Mark pass/fail (not Mbps 
 
 ### Phase 1 — One live engine on Android
 
-- [x] Android live Connect + latency/speedtest both prefer sing-box when `PreferSingBoxOnAndroid` (D13)
+- [x] Android live Connect prefers sing-box when `PreferSingBoxOnAndroid`; classic Test All stays on Xray (`UseSingBoxForSpeedtest` = `RequiresSingBox` only — restore after D13 / v2.2.3)
 - [x] TUN fd lifecycle documented as one state machine (`AndroidTunLifecycle` + rebind policy)
 - [x] CI / package-android: fail if unpatched sing-box in release path (D18)
 

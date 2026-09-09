@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.19] - 2026-09-09
+
+### Fixed
+
+- Android classic Test All / rank uses **Xray** again (v2.2.3 split) — 2.6.2.14 D13 forced sing-box speedtest and caused universal TIMEOUTs
+- Live Connect still uses sing-box TUN via `PreferSingBoxOnAndroid`; Hy2/TUIC/WG/anytls still probe via sing-box
+
+### Changed
+
+- `UseSingBoxForSpeedtest` → `RequiresSingBox` only (not `UseSingBox`)
+
 ## [2.6.2.18] - 2026-09-09
 
 ### Fixed

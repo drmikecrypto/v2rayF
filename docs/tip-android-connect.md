@@ -8,6 +8,12 @@
 6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
+## v2.6.2.19 — Xray Test All
+
+- Classic Test All / rank uses **Xray** again (undo D13 / restore v2.2.3)
+- Live Connect still sing-box TUN; Hy2/TUIC/WG still sing-box probes
+- Confirm Reality + WS + SS show ms before treating this build as ship-ready
+
 ## v2.6.2.18 — HTTP 10809 advisory
 
 - Connect green = SOCKS; Android HTTP `10809` no longer hard-fails Connect when SOCKS works
@@ -32,8 +38,8 @@
 
 ## v2.6.2.14 — trusted tunnel
 
-- Android speedtest = live sing-box path; Iran/China profiles; Bypass China rule-sets
-- Private DNS warning; subscription GitHub mirrors; path truth + scorecard template
+- Iran/China profiles; Bypass China rule-sets; Private DNS warning; subscription mirrors
+- Note: D13 also forced sing-box speedtest (universal Test All TIMEOUT) — fixed in **2.6.2.19**
 - Note: hard TUN Connect gate caused false timeouts — use 2.6.2.15+
 
 ## v2.6.2.13 — force TUN rebind

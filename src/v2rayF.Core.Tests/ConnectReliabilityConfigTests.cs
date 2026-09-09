@@ -295,7 +295,8 @@ public class SmartConnectShortlistTests
             Assert.True(CoreRuntime.PreferSingBoxOnAndroid(classic));
             Assert.True(CoreRuntime.UseSingBox(classic));
             Assert.False(CoreRuntime.RequiresSingBox(classic));
-            Assert.True(CoreRuntime.UseSingBoxForSpeedtest(classic));
+            // Live Connect = sing-box; Test All = Xray (v2.2.3 / restore after D13).
+            Assert.False(CoreRuntime.UseSingBoxForSpeedtest(classic));
             Assert.True(CoreRuntime.UseSingBox(hy2));
             Assert.True(CoreRuntime.UseSingBoxForSpeedtest(hy2));
         }
