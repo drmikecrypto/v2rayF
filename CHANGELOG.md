@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Desktop TUN requirement message honest on macOS/Linux
 - App Network hint explains GMS/GSF Direct as proven breaker, not generic glue
 - Remove GitHub Sponsors badge and FUNDING.yml until Sponsors is configured
+- Fix Android Private DNS check (`global::Android.Provider`); four-part versionCode in release script
 
 ## [2.6.2.13] - 2026-09-09
 

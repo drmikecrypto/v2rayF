@@ -125,7 +125,8 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
                 return null;
 
             // Settings.Global.PRIVATE_DNS_MODE: off | opportunistic | hostname
-            var mode = Android.Provider.Settings.Global.GetString(
+            // Use global:: — this assembly's root namespace is v2rayF.Android.
+            var mode = global::Android.Provider.Settings.Global.GetString(
                 context.ContentResolver,
                 "private_dns_mode");
             if (string.IsNullOrWhiteSpace(mode) ||

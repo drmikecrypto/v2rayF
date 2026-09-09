@@ -22,9 +22,11 @@ function Get-ProjectVersion([string]$csproj) {
 }
 
 function Get-VersionCode([string]$semver) {
+    # major*10000 + minor*100 + patch*10 + revision (matches ApplicationVersion in csproj)
     $parts = $semver.Split('.')
-    if ($parts.Count -lt 3) { throw "Expected major.minor.patch version, got '$semver'" }
-    return ([int]$parts[0] * 10000) + ([int]$parts[1] * 100) + [int]$parts[2]
+    if ($parts.Count -lt 3) { throw "Expected major.minor.patch[.rev] version, got '$semver'" }
+    $rev = if ($parts.Count -ge 4) { [int]$parts[3] } else { 0 }
+    return ([int]$parts[0] * 10000) + ([int]$parts[1] * 100) + ([int]$parts[2] * 10) + $rev
 }
 
 & (Join-Path $Root "scripts\package-android.ps1") -XrayVersion $XrayVersion
