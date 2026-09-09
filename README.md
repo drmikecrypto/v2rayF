@@ -27,6 +27,7 @@ HTTP/2 302  →  grab a zip. no brew. no store tax. MIT.
   <a href="https://github.com/drmikecrypto/v2rayF/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/drmikecrypto/v2rayF/ci.yml?branch=main&style=for-the-badge&label=ci&color=222222&labelColor=111111" alt="ci"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-222222?style=for-the-badge&labelColor=111111" alt="license"></a>
   <a href="https://github.com/drmikecrypto/v2rayF/stargazers"><img src="https://img.shields.io/github/stars/drmikecrypto/v2rayF?style=for-the-badge&color=222222&labelColor=111111" alt="stars"></a>
+  <a href="https://github.com/sponsors/drmikecrypto"><img src="https://img.shields.io/badge/sponsor-♥_keep_it_free-ea4aaa?style=for-the-badge&labelColor=111111" alt="sponsor"></a>
 </p>
 
 ---
@@ -201,6 +202,7 @@ One Avalonia tree across desktop+Android, explicit Sentinel leak profile, Secure
 ## contribute / legal
 
 - [CONTRIBUTING](CONTRIBUTING.md) · [bug](https://github.com/drmikecrypto/v2rayF/issues/new?template=bug_report.md) · [feature](https://github.com/drmikecrypto/v2rayF/issues/new?template=feature_request.md) · [SECURITY](SECURITY.md)
+- [Sponsor](https://github.com/sponsors/drmikecrypto) — keep v2rayF open source and free
 - MIT · ships [Xray-core](https://github.com/XTLS/Xray-core) + [sing-box](https://github.com/SagerNet/sing-box) in release artifacts (not in git)
 - UI: [Avalonia](https://avaloniaui.net/)
 
