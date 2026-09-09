@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.14] - 2026-09-09
+
+### Added
+
+- Canonical product plan: `docs/PLAN.md` (trusted tunnel, Android-first)
+- Golden app matrix + UDP/QUIC messenger QA + exception-list shrink policy tips
+- Iran / China one-tap network profiles (Settings)
+- Android Private DNS conflict warning before Connect
+- sing-box Bypass China via geosite-cn / geoip-cn remote rule-sets (jsDelivr)
+- `AndroidTunLifecycle` state machine documentation for TUN fd lifecycle
+- GitHub/raw subscription mirror auto-retry + `docs/tips/subscription-mirrors.md`
+- Path truth line while Connected; scorecard template copy (Settings)
+- fa/zh Private DNS + battery tips
+
+### Changed
+
+- Android speedtest uses the same sing-box path as live Connect (D13)
+- Connect gate requires TUN app-path probe when TUN is active (no false-green)
+- Import hard-refuse messaging for SIP003 plugins and unsupported schemes
+- CI builds patched Android sing-box (no `-AllowUnpatchedSingBox`); release Go/NDK gated to Android (D18/D19)
+- Shrink messaging exact-host glue; keep FCM + Meta MQTT intentional lists
+- Battery exemption re-prompts after revoke (D14)
+- Desktop TUN requirement message honest on macOS/Linux
+- App Network hint explains GMS/GSF Direct as proven breaker, not generic glue
+- Remove GitHub Sponsors badge and FUNDING.yml until Sponsors is configured
+
 ## [2.6.2.13] - 2026-09-09
 
 ### Fixed

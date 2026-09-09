@@ -116,6 +116,30 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             await Task.CompletedTask;
         });
 
+    public string? GetPrivateDnsConflictWarning()
+    {
+        try
+        {
+            var context = Application.Context;
+            if (context?.ContentResolver is null)
+                return null;
+
+            // Settings.Global.PRIVATE_DNS_MODE: off | opportunistic | hostname
+            var mode = Android.Provider.Settings.Global.GetString(
+                context.ContentResolver,
+                "private_dns_mode");
+            if (string.IsNullOrWhiteSpace(mode) ||
+                mode.Equals("off", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            return "Private DNS is On — set Settings → Network → Private DNS to Off or VPN DNS will break.";
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public string? GetLanIPv4Address()
     {
         try

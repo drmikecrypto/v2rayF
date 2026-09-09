@@ -2,9 +2,17 @@
 
 1. Prefer the in-app **Update** button when a new GitHub release is available — it downloads the signed APK, verifies SHA256, and installs over the existing app (native cores refresh automatically).
 2. Tap **Connect** and allow the **VPN** permission when prompted.
-3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
+3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working. Connect is green only when SOCKS + (on TUN) HTTP proxy + TUN app-path probes pass — see [`tips/golden-app-matrix.md`](tips/golden-app-matrix.md).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
-5. Keep Private DNS **Off**. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale.
+5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale.
+6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
+7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
+
+## v2.6.2.14 — trusted tunnel
+
+- Android speedtest = live sing-box path; Connect requires TUN app-path
+- Iran/China profiles; Bypass China rule-sets; Private DNS warning
+- Subscription GitHub mirrors; path truth + scorecard template
 
 ## v2.6.2.13 — force TUN rebind
 

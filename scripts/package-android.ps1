@@ -199,6 +199,8 @@ try {
     Write-Host "Installed patched libsingbox.so (SING_BOX_TUN_FD support)"
 }
 catch {
+    # PLAN D18: release/CI must not ship stock sing-box. Local debug only:
+    #   ./scripts/package-android.ps1 -AllowUnpatchedSingBox
     if (-not $AllowUnpatchedSingBox) {
         throw
     }

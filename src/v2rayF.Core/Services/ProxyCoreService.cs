@@ -253,7 +253,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        // Gate Connected on localhost proxy-path probes (TUN is advisory at Connect).
+        // Gate Connected on SOCKS (+ HTTP on Android TUN) + TUN app-path when TUN is required (PLAN).
         LastConnectProbeMs = null;
         var gateResult = await ProbeConnectGateWithRetryAsync(
                 server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
@@ -324,7 +324,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         public bool LocalhostOk => SocksOk && HttpOk;
         public bool TunOk => !TunRequired || TunMs is >= 0;
 
-        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN); TUN is advisory.</summary>
+        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN) + TUN when required.</summary>
         public int? ConnectGateMs
         {
             get
@@ -333,9 +333,15 @@ public sealed class ProxyCoreService : IAsyncDisposable
                     return SocksMs;
                 if (!HttpOk)
                     return HttpMs;
+                if (!TunOk)
+                    return TunMs;
                 if (HttpRequired && SocksMs is int socks && HttpMs is int http)
-                    return Math.Max(socks, http);
-                return SocksMs;
+                {
+                    var local = Math.Max(socks, http);
+                    return TunMs is int tun ? Math.Max(local, tun) : local;
+                }
+
+                return TunMs is int tunOnly ? Math.Max(SocksMs ?? tunOnly, tunOnly) : SocksMs;
             }
         }
 
@@ -370,6 +376,14 @@ public sealed class ProxyCoreService : IAsyncDisposable
     // Test seam — PathProbeResult is private; expose gate evaluation for unit tests.
     public static int? EvaluateConnectGateMs(int? socksMs, int? httpMs, bool httpRequired) =>
         new PathProbeResult(socksMs, httpMs, null, httpRequired, false).ConnectGateMs;
+
+    public static int? EvaluateConnectGateMs(
+        int? socksMs,
+        int? httpMs,
+        int? tunMs,
+        bool httpRequired,
+        bool tunRequired) =>
+        new PathProbeResult(socksMs, httpMs, tunMs, httpRequired, tunRequired).ConnectGateMs;
 
     public static string DescribeConnectGateFailure(
         int? socksMs,
@@ -429,7 +443,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         probeCts.CancelAfter(budget);
 
         var httpRequired = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
-        var tunRequired = RequiresTunAppPath(enableTunMode);
+        var tunRequired = RequiresTunAppPath(enableTunMode, tunFd);
         var tunProbeBudget = Math.Min(budget, LatencyService.TunAppPathProbeMs);
         var tunTask = tunRequired
             ? AppServices.Platform.ProbeTunAppPathAsync(probeCts.Token, tunProbeBudget)
@@ -467,8 +481,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
     }
 
-    private bool RequiresTunAppPath(bool? enableTunMode = null) =>
-        enableTunMode ?? _activeEnableTunMode;
+    private bool RequiresTunAppPath(bool? enableTunMode = null, int? tunFd = null) =>
+        (enableTunMode ?? _activeEnableTunMode) ||
+        (tunFd ?? _activeTunFd) is int fd && fd >= 0;
 
     private static bool RequiresAndroidTunHttpProbe(bool useSingBox, int? tunFd) =>
         useSingBox && tunFd is int fd && fd >= 0;

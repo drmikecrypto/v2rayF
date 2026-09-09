@@ -57,24 +57,17 @@ public static class PushRoutingDomains
         "mcs.heytapmobi.com"
     ];
 
-    /// <summary>Push/realtime endpoints that must route to proxy explicitly on Android TUN.</summary>
+    /// <summary>
+    /// Push/realtime endpoints that need exact-host proxy before Chromium UDP blocks.
+    /// Prefer MessagingDnsSuffixes for coverage; keep this list short (exception-list policy).
+    /// FCM hosts live in <see cref="FcmDnsExactHosts"/> only — do not duplicate here.
+    /// </summary>
     public static readonly string[] MessagingPushRouteHosts =
     [
-        "mtalk.google.com",
-        "fcm.googleapis.com",
-        "firebaseinstallations.googleapis.com",
+        // WhatsApp edge nodes not always under whatsapp.net suffix in some OEM resolvers.
         "g.whatsapp.net",
         "e1.whatsapp.net",
-        "e2.whatsapp.net",
-        "web.telegram.org",
-        "api.telegram.org",
-        "pluto.web.telegram.org",
-        "venus.web.telegram.org",
-        "gateway.discord.gg",
-        "chat.signal.org",
-        "uds.signal.org",
-        "hooks.slack.com",
-        "wss-primary.slack.com"
+        "e2.whatsapp.net"
     ];
 
     /// <summary>Desktop TUN: WNS + messenger + OEM (includes Apple push).</summary>

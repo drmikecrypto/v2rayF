@@ -89,21 +89,13 @@ public class PushRoutingTests
     }
 
     [Fact]
-    public void AndroidPushRoute_IncludesSignalExactHosts()
+    public void AndroidMessaging_UsesSuffixesNotExactHostGlue()
     {
-        var routes = SingBoxConfigBuilder.GetAndroidPushRouteHosts();
-        Assert.Contains("chat.signal.org", routes);
-        Assert.Contains("uds.signal.org", routes);
-    }
-
-    [Fact]
-    public void AndroidPushRoute_IncludesSlackExactHosts()
-    {
-        var routes = SingBoxConfigBuilder.GetAndroidPushRouteHosts();
-        Assert.Contains("hooks.slack.com", routes);
-        Assert.Contains("wss-primary.slack.com", routes);
-        Assert.Contains("hooks.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
-        Assert.Contains("wss-primary.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
+        // Shrink policy: Signal/Slack covered by MessagingDnsSuffixes, not long exact-host tables.
+        Assert.Contains("signal.org", PushRoutingDomains.MessagingDnsSuffixes);
+        Assert.Contains("slack.com", PushRoutingDomains.MessagingDnsSuffixes);
+        Assert.DoesNotContain("chat.signal.org", PushRoutingDomains.MessagingPushRouteHosts);
+        Assert.DoesNotContain("hooks.slack.com", PushRoutingDomains.MessagingPushRouteHosts);
     }
 
     [Fact]

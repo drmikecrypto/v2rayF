@@ -1,16 +1,10 @@
-# Engine-first roadmap (Beat V2Box)
+# Engine-first roadmap
 
-Shipped through **v2.2.2**:
+**Canonical plan:** [`PLAN.md`](PLAN.md) — trusted tunnel, Android-first for CN/IR, no GitHub push until maintainer approval.
 
-- Phase A: default DoH for Connect + DoH retry — **kept**. Speedtest DNS stays UDP (v2.2.1; DoH-in-speedtest caused universal timeouts).
-- Phase B: Android classic on sing-box TUN (`stack: system`) — **re-enabled in v2.2.2** for Instagram Direct / raw-socket apps; keeps v2.2.1 speedtest safeguards. Desktop classic stays Xray. Hy2/TUIC/WG remain on sing-box.
+Shipped through v2.2.2 (kept):
 
-## Phase C (not in this release)
+- Phase A: default DoH for Connect + DoH retry. Speedtest DNS stays UDP.
+- Phase B: Android classic on sing-box TUN; desktop classic on Xray; Hy2/TUIC/WG on sing-box.
 
-Track separately once head-to-head Mbps vs V2Box on the same subscription links is competitive:
-
-1. Visual / UX system (brand, motion, hierarchy — not default Avalonia panels)
-2. Multi-path / bonding aggregation (SpeedyFi-like) only after single-link engine wins
-3. Onboarding + diagnostics that show path RTT vs Mbps honestly
-
-Do not start Phase C as a substitute for engine parity.
+Former “Phase C” (UX / multipath / diagnostics) stays deferred until single-link engine + golden app matrix meet [`PLAN.md`](PLAN.md) exit gates.

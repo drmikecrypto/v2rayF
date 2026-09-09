@@ -14,7 +14,8 @@ internal static class BatteryOptimizationHelper
 
     /// <summary>
     /// Prompt for battery exemption when still optimizing.
-    /// Marks BatteryOptimizationPromptShown only after grant; otherwise re-prompts after 7 days.
+    /// Marks BatteryOptimizationPromptShown only after grant. If the user later revokes
+    /// exemption, clears the sticky flag and re-prompts on the 7-day schedule (D14).
     /// </summary>
     public static bool TryPromptIfNeeded(Activity? activity, AppSettings settings)
     {
@@ -31,9 +32,9 @@ internal static class BatteryOptimizationHelper
             return false;
         }
 
-        // Already granted flag but OS says still optimizing — allow re-prompt on schedule.
+        // D14: sticky "shown" must not block forever after the user revokes exemption.
         if (settings.BatteryOptimizationPromptShown)
-            return false;
+            settings.BatteryOptimizationPromptShown = false;
 
         if (!ShouldReprompt(settings))
             return false;

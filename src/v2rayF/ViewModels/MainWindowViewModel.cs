@@ -172,6 +172,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _tunStatus = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPathTruth))]
+    private string _pathTruthText = "";
+
+    public bool ShowPathTruth => !string.IsNullOrWhiteSpace(PathTruthText);
+
+    [ObservableProperty]
     private bool _updateAvailable;
 
     [ObservableProperty]
@@ -229,11 +235,10 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool ShowCustomRules => SelectedRoutingMode?.Mode == RoutingMode.CustomDirect;
 
-    /// <summary>Bypass China has no geosite on sing-box (Android classic + Hy2/TUIC).</summary>
+    /// <summary>Bypass China on sing-box uses remote CN rule-sets (first fetch may need clearnet).</summary>
     public bool ShowBypassChinaSingBoxHint =>
         SelectedRoutingMode?.Mode == RoutingMode.BypassChina &&
-        SelectedServer is not null &&
-        CoreRuntime.UseSingBox(SelectedServer);
+        (IsMobile || SelectedServer is null || CoreRuntime.UseSingBox(SelectedServer));
 
     /// <summary>Secure Share and Smart Multipath are Xray-config only.</summary>
     public bool ShowXrayOnlyFeatures =>
@@ -1126,16 +1131,63 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ApplySentinelProfile()
+    private async Task ExportScorecardTemplateAsync()
     {
-        SelectedRoutingMode = RoutingModes.First(m => m.Mode == RoutingMode.Global);
-        KillSwitchEnabled = true;
-        DnsThroughProxy = true;
-        BlockIpv6 = true;
+        var md = ConnectivityScorecard.ExportMarkdown(
+            "v2rayF",
+            ConnectivityScorecard.AppChecks.ToDictionary(c => c, _ => (bool?)null),
+            notes: "Fill yes/no after testing. Same phone + same subscription vs v2rayNG / V2Box.");
+        var clipboard = GetClipboard();
+        if (clipboard is null)
+        {
+            StatusText = "Clipboard unavailable — scorecard not copied.";
+            return;
+        }
+
+        await clipboard.SetTextAsync(md);
+        StatusText = "Scorecard template copied — paste into notes and mark pass/fail.";
+    }
+
+    [RelayCommand]
+    private void ApplySentinelProfile() => ApplyNetworkProfile(NetworkProfiles.SentinelId);
+
+    [RelayCommand]
+    private void ApplyIranProfile() => ApplyNetworkProfile(NetworkProfiles.IranId);
+
+    [RelayCommand]
+    private void ApplyChinaProfile() => ApplyNetworkProfile(NetworkProfiles.ChinaId);
+
+    private void ApplyNetworkProfile(string profileId)
+    {
+        var draft = CollectSettings();
+        switch (profileId)
+        {
+            case NetworkProfiles.ChinaId:
+                NetworkProfiles.ApplyChina(draft);
+                break;
+            case NetworkProfiles.IranId:
+            case NetworkProfiles.SentinelId:
+            default:
+                NetworkProfiles.ApplyIran(draft);
+                break;
+        }
+
+        SelectedRoutingMode = RoutingModes.First(m => m.Mode == draft.RoutingMode);
+        KillSwitchEnabled = draft.KillSwitchEnabled;
+        DnsThroughProxy = draft.DnsThroughProxy;
+        BlockIpv6 = draft.BlockIpv6;
         if (!IsMobile)
-            EnableTunMode = AppServices.Platform.CanUseTunMode;
+            EnableTunMode = draft.EnableTunMode && AppServices.Platform.CanUseTunMode;
+        else
+            EnableTunMode = true;
         EnableSystemProxy = !EnableTunMode && !IsMobile;
-        StatusText = "Sentinel profile applied — Save settings to persist.";
+
+        StatusText = profileId switch
+        {
+            NetworkProfiles.ChinaId => "China profile applied — Save settings to persist.",
+            NetworkProfiles.IranId => "Iran profile applied — Save settings to persist.",
+            _ => "Sentinel profile applied — Save settings to persist."
+        };
     }
 
     partial void OnEnableTunModeChanged(bool value)
@@ -1184,13 +1236,53 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (!EnableTunMode)
         {
-            TunStatus = "";
+            TunStatus = IsMobile
+                ? ""
+                : (AppServices.Platform.CanUseTunMode
+                    ? ""
+                    : AppServices.Platform.TunRequirementMessage);
             return;
         }
 
         TunStatus = AppServices.Platform.CanUseTunMode
             ? IsMobile ? "VPN mode — routes all device traffic" : "TUN ready — full-device capture via virtual adapter"
             : AppServices.Platform.TunRequirementMessage;
+    }
+
+    /// <summary>PLAN early Phase 4 — show how traffic is captured (TUN vs HTTP proxy vs Direct).</summary>
+    private void RefreshPathTruth(AppSettings? settings = null)
+    {
+        settings ??= _settings;
+        if (!IsConnected && ConnectionState != ConnectionState.Connected)
+        {
+            PathTruthText = "";
+            return;
+        }
+
+        var parts = new List<string>();
+        if (IsMobile || settings.EnableTunMode)
+            parts.Add("path: TUN");
+        else if (settings.EnableSystemProxy)
+            parts.Add($"path: system proxy ({AppServices.Platform.LastProxyMethod ?? "HTTP"})");
+        else
+            parts.Add("path: manual SOCKS/HTTP localhost");
+
+        if (IsMobile)
+            parts.Add("HTTP assist :10809 (Chromium); MQTT Meta hosts bypass CONNECT");
+
+        var directCount = AppNetworkPolicy.GetDirectIds(settings, IsMobile).Count;
+        if (directCount > 0)
+            parts.Add($"App Network Direct×{directCount}");
+
+        if (settings.BlockIpv6)
+            parts.Add("IPv6 blocked");
+
+        var dns = settings.DnsThroughProxy
+            ? (IsMobile || settings.EnableTunMode ? "DNS: UDP via proxy" : "DNS: DoH via proxy")
+            : "DNS: clearnet UDP";
+        parts.Add(dns);
+
+        PathTruthText = string.Join(" · ", parts);
     }
 
     private void UpdateSecureShareEndpoint()
@@ -1423,7 +1515,7 @@ public partial class MainWindowViewModel : ViewModelBase
             else if (next.RoutingMode == RoutingMode.BypassChina && CoreRuntime.UseSingBox(server))
             {
                 StatusText =
-                    "Settings applied — Bypass China uses Bypass LAN on sing-box (no CN geosite).";
+                    "Settings applied — Bypass China uses geosite-cn / geoip-cn rule-sets on sing-box.";
             }
             else
             {
@@ -1886,8 +1978,12 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 settings.EnableTunMode = true;
                 settings.EnableSystemProxy = false;
-                if (settings.RoutingMode == RoutingMode.BypassChina && !_proxyCore.HasGeoFiles())
-                    settings.RoutingMode = RoutingMode.BypassLan;
+            }
+
+            var privateDnsWarn = AppServices.Platform.GetPrivateDnsConflictWarning();
+            if (!string.IsNullOrEmpty(privateDnsWarn))
+            {
+                await SetOnUiAsync(() => StatusText = privateDnsWarn).ConfigureAwait(true);
             }
 
             await _settingsStore.SaveAsync(settings).ConfigureAwait(false);
@@ -2264,6 +2360,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             StatusText = status;
             IsConnected = true;
+            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
 
@@ -2321,6 +2418,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             StatusText = status;
             IsConnected = true;
+            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
 
@@ -2530,6 +2628,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 ConnectionState = ConnectionState.Idle;
                 StatusText = "Disconnected";
+                PathTruthText = "";
                 _autoReconnectAttempts = 0;
             }).ConfigureAwait(true);
         }
@@ -2733,13 +2832,15 @@ public partial class MainWindowViewModel : ViewModelBase
             IsBusy = true;
             StatusText = "Fetching subscription…";
             var viaProxy = SubscriptionViaProxy && IsConnected;
-            var imported = await _subscriptionService.FetchAsync(SubscriptionUrl, viaProxy);
-            await MergeImportedAsync(imported);
+            var fetched = await _subscriptionService.FetchDetailedAsync(SubscriptionUrl, viaProxy);
+            await MergeImportedAsync(fetched.Servers);
             await _settingsStore.SaveAsync(CollectSettings());
             var hint = ConfigImportParser.LastSkippedSingBoxHint;
             var baseMsg = viaProxy
-                ? $"Imported {imported.Count} server(s) via proxy."
-                : $"Imported {imported.Count} server(s) from subscription.";
+                ? $"Imported {fetched.Servers.Count} server(s) via proxy."
+                : $"Imported {fetched.Servers.Count} server(s) from subscription.";
+            if (!string.IsNullOrEmpty(fetched.MirrorNote))
+                baseMsg += $" ({fetched.MirrorNote})";
             StatusText = string.IsNullOrEmpty(hint) ? baseMsg : $"{baseMsg} {hint}";
             return true;
         }

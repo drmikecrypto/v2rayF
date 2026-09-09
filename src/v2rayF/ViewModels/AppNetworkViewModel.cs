@@ -72,7 +72,7 @@ public partial class AppNetworkViewModel : ViewModelBase
     private bool _showAdvanced;
 
     public string PlatformHint => _isMobile
-        ? "Direct = clearnet (outside VPN). Block = no internet while VPN is on. GMS/GSF stay Direct unless Blocked."
+        ? "Default is full VPN for apps. Direct = clearnet outside the tunnel (GMS/GSF stay Direct so FCM works — proven breaker, not a generic exception). Block = no internet while VPN is on."
         : "Requires TUN. Direct = core direct egress (not OS bypass). Block = blackhole.";
 
     partial void OnSearchTextChanged(string value) => RebuildVisible();

@@ -8,6 +8,14 @@
             <TextBlock Text="Connect" FontWeight="SemiBold" FontSize="15"/>
             <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"
                     HorizontalAlignment="Stretch"/>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                <Button Grid.Column="0" Content="Iran profile" Command="{Binding ApplyIranProfileCommand}"
+                        HorizontalAlignment="Stretch"/>
+                <Button Grid.Column="1" Content="China profile" Command="{Binding ApplyChinaProfileCommand}"
+                        HorizontalAlignment="Stretch"/>
+            </Grid>
+            <Button Content="Copy scorecard template" Command="{Binding ExportScorecardTemplateCommand}"
+                    HorizontalAlignment="Stretch"/>
             <CheckBox Content="Smart Connect" IsChecked="{Binding SmartConnectEnabled}"/>
             <CheckBox Content="Rank servers on startup" IsChecked="{Binding StartupRankServersEnabled}"/>
             <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"
@@ -17,7 +25,7 @@
             <ComboBox ItemsSource="{Binding RoutingModes}"
                       SelectedItem="{Binding SelectedRoutingMode}"
                       HorizontalAlignment="Stretch"/>
-            <TextBlock Text="Bypass China uses Bypass LAN on this core (no CN geosite). Use an Xray desktop profile for CN direct."
+            <TextBlock Text="Bypass China downloads geosite-cn / geoip-cn rule-sets (brief clearnet needed for first fetch)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.75"
                        IsVisible="{Binding ShowBypassChinaSingBoxHint}"/>
             <StackPanel Spacing="8" IsVisible="{Binding ShowCustomRules}">

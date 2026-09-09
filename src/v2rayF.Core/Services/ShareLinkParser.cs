@@ -137,8 +137,24 @@ public static class ShareLinkParser
     /// <summary>Human-readable skip reason — null when the link can be imported (Xray or sing-box).</summary>
     public static string? GetUnsupportedSchemeHint(string link)
     {
-        // All known schemes are importable in 2.0 when the matching core binary is present.
-        return null;
+        var trimmed = link.Trim();
+        var schemeEnd = trimmed.IndexOf("://", StringComparison.Ordinal);
+        if (schemeEnd <= 0)
+            return null;
+
+        var scheme = trimmed[..schemeEnd].ToLowerInvariant();
+        return scheme switch
+        {
+            "hysteria" or "hysteria1" or "hy" =>
+                "Hysteria1 not supported (use hy2:// / Hysteria2)",
+            "naive" or "naive+https" or "naive+quic" =>
+                "NaiveProxy not supported",
+            "brook" => "Brook not supported",
+            "ssr" => "ShadowsocksR not supported",
+            "juicity" => "Juicity not supported",
+            "mieru" => "mieru not supported",
+            _ => null
+        };
     }
 
     /// <summary>True when SIP003 plugin query would produce a non-working plain SS node.</summary>

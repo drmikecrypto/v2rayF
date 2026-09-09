@@ -2,6 +2,10 @@
 
 Thank you for your interest in improving v2rayF!
 
+## Maintainer release gate
+
+**Do not push to GitHub or cut a public release** unless the project maintainer explicitly asks for a push/release. Local builds and private APK sideloads are fine. Product direction lives in [`docs/PLAN.md`](docs/PLAN.md).
+
 ## How to contribute
 
 1. **Fork** the repository on GitHub

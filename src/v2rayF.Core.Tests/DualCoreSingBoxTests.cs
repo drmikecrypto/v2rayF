@@ -605,21 +605,26 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void BypassChina_OnSingBox_MapsToPrivateDirectLikeBypassLan()
+    public void BypassChina_OnSingBox_EmitsCnRuleSetsAndDirectRules()
     {
         var server = ShareLinkParser.Parse("hy2://secret@h.example:443#h")!;
         var china = JsonNode.Parse(SingBoxConfigBuilder.Build(
             server, new AppSettings { RoutingMode = RoutingMode.BypassChina }, tunFd: 3))!;
-        var lan = JsonNode.Parse(SingBoxConfigBuilder.Build(
-            server, new AppSettings { RoutingMode = RoutingMode.BypassLan }, tunFd: 3))!;
         Assert.Equal("proxy", china["route"]!["final"]!.GetValue<string>());
+        var ruleSets = china["route"]!["rule_set"]!.AsArray();
+        Assert.Contains(ruleSets, r => r!["tag"]?.GetValue<string>() == "geosite-cn");
+        Assert.Contains(ruleSets, r => r!["tag"]?.GetValue<string>() == "geoip-cn");
+        var rules = china["route"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r!["rule_set"]?.GetValue<string>() == "geosite-cn" &&
+            r["outbound"]?.GetValue<string>() == "direct");
+        Assert.Contains(rules, r =>
+            r!["rule_set"]?.GetValue<string>() == "geoip-cn" &&
+            r["outbound"]?.GetValue<string>() == "direct");
         Assert.Contains(
-            china["route"]!["rules"]!.AsArray(),
+            rules,
             r => r!["ip_is_private"]?.GetValue<bool>() == true &&
                  r["outbound"]?.GetValue<string>() == "direct");
-        Assert.Equal(
-            china["route"]!["rules"]!.ToJsonString(),
-            lan["route"]!["rules"]!.ToJsonString());
     }
 
     [Fact]

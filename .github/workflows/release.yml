@@ -1,5 +1,8 @@
 name: Release
 
+# Tag push (v*) publishes platform zips via softprops/action-gh-release.
+# body_path: docs/releases/<tag>.md
+
 on:
   push:
     tags:
@@ -61,10 +64,12 @@ jobs:
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/v2rayf-release.jks" >> "$GITHUB_ENV"
 
       - uses: actions/setup-go@v5
+        if: matrix.android == true
         with:
           go-version: "1.23"
 
       - uses: nttld/setup-ndk@v1
+        if: matrix.android == true
         id: ndk
         with:
           ndk-version: r26d

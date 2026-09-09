@@ -85,11 +85,13 @@ public static class SingBoxConfigBuilder
         return list;
     }
 
-    /// <summary>Meta MQTT + messaging push exact hosts for explicit TUN proxy route.</summary>
+    /// <summary>Meta MQTT + FCM exact hosts for explicit TUN proxy route (WhatsApp edges optional).</summary>
     public static string[] GetAndroidPushRouteHosts()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var host in MetaMqttHttpProxyExclusionHosts)
+            set.Add(host);
+        foreach (var host in PushRoutingDomains.FcmDnsExactHosts)
             set.Add(host);
         foreach (var host in PushRoutingDomains.MessagingPushRouteHosts)
             set.Add(host);
@@ -327,10 +329,14 @@ public static class SingBoxConfigBuilder
         if (!androidTun && settings.EnableTunMode)
             AppendSingBoxProcessAppNetworkRules(rules, settings);
 
-        // Custom routing (Android sing-box + desktop Hy2/TUIC). BypassChina → BypassLan (no geosite).
+        // Custom routing (Android sing-box + desktop Hy2/TUIC). BypassChina uses remote rule-sets.
         var mode = settings.RoutingMode;
+        JsonArray? ruleSetRefs = null;
         if (mode == RoutingMode.BypassChina)
-            mode = RoutingMode.BypassLan;
+        {
+            ruleSetRefs = BuildChinaRuleSets();
+            AppendChinaDirectRules(rules);
+        }
 
         if (mode == RoutingMode.CustomDirect)
         {
@@ -346,12 +352,50 @@ public static class SingBoxConfigBuilder
         });
 
         // Android VPN Connect owns routing; desktop auto_route needs interface detect.
-        return new JsonObject
+        var route = new JsonObject
         {
             ["rules"] = rules,
             ["final"] = "proxy",
             ["auto_detect_interface"] = !androidTun
         };
+        if (ruleSetRefs is not null)
+            route["rule_set"] = ruleSetRefs;
+        return route;
+    }
+
+    /// <summary>SagerNet geosite/geoip CN rule-sets (downloaded once; detour direct for CN users).</summary>
+    private static JsonArray BuildChinaRuleSets() =>
+    [
+        new JsonObject
+        {
+            ["type"] = "remote",
+            ["tag"] = "geosite-cn",
+            ["format"] = "binary",
+            ["url"] = "https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-cn.srs",
+            ["download_detour"] = "direct"
+        },
+        new JsonObject
+        {
+            ["type"] = "remote",
+            ["tag"] = "geoip-cn",
+            ["format"] = "binary",
+            ["url"] = "https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs",
+            ["download_detour"] = "direct"
+        }
+    ];
+
+    private static void AppendChinaDirectRules(JsonArray rules)
+    {
+        rules.Add(new JsonObject
+        {
+            ["rule_set"] = "geosite-cn",
+            ["outbound"] = "direct"
+        });
+        rules.Add(new JsonObject
+        {
+            ["rule_set"] = "geoip-cn",
+            ["outbound"] = "direct"
+        });
     }
 
     private static void AppendSingBoxProcessAppNetworkRules(JsonArray rules, AppSettings settings)

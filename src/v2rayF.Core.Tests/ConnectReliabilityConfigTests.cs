@@ -295,7 +295,7 @@ public class SmartConnectShortlistTests
             Assert.True(CoreRuntime.PreferSingBoxOnAndroid(classic));
             Assert.True(CoreRuntime.UseSingBox(classic));
             Assert.False(CoreRuntime.RequiresSingBox(classic));
-            Assert.False(CoreRuntime.UseSingBoxForSpeedtest(classic));
+            Assert.True(CoreRuntime.UseSingBoxForSpeedtest(classic));
             Assert.True(CoreRuntime.UseSingBox(hy2));
             Assert.True(CoreRuntime.UseSingBoxForSpeedtest(hy2));
         }
@@ -333,6 +333,7 @@ public class SmartConnectShortlistTests
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
         public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
+        public string? GetPrivateDnsConflictWarning() => null;
         public string? GetLanIPv4Address() => null;
         public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
             bool forceRefresh = false,

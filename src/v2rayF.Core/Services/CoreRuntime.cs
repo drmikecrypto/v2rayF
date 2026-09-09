@@ -13,9 +13,8 @@ public static class CoreRuntime
             or ProxyProtocol.AnyTls;
 
     /// <summary>
-    /// Android classic protocols use sing-box TUN (system stack) — V2Box-class path for
-    /// raw-socket apps (Instagram Direct / MQTT). Desktop keeps Xray for VLESS/VMess/Trojan/SS.
-    /// Speedtest still uses UDP DNS + no ephemeral 10809 (v2.2.1 safeguards).
+    /// Android classic protocols use sing-box TUN — same live path as Connect (PLAN Phase 1 / D13).
+    /// Desktop keeps Xray for VLESS/VMess/Trojan/SS. Speedtest omits ephemeral 10809 via BuildSpeedtest.
     /// </summary>
     public static bool PreferSingBoxOnAndroid(ProxyServer server) =>
         AppServices.Platform?.IsMobile == true &&
@@ -28,10 +27,10 @@ public static class CoreRuntime
         RequiresSingBox(server) || PreferSingBoxOnAndroid(server);
 
     /// <summary>
-    /// Test delay / speedtest only. Classic stays on Xray even when PreferSingBoxOnAndroid
-    /// (live Connect) is true — Android sing-box speedtest caused universal timeouts in 2.2.2.
+    /// Test delay / speedtest uses the same core as live Connect on Android (D13).
+    /// Ephemeral SOCKS-only config (no 10809) avoids parallel Test All port clashes.
     /// </summary>
-    public static bool UseSingBoxForSpeedtest(ProxyServer server) => RequiresSingBox(server);
+    public static bool UseSingBoxForSpeedtest(ProxyServer server) => UseSingBox(server);
 
     public static string CoreLabel(ProxyServer server) =>
         UseSingBox(server) ? "sing-box" : "Xray";

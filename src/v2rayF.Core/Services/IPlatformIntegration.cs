@@ -59,6 +59,12 @@ public interface IPlatformIntegration
     /// </summary>
     bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6);
 
+    /// <summary>
+    /// True when Private DNS (Android) or equivalent OS DNS override conflicts with VPN DNS hijack.
+    /// Null when OK or unknown (desktop).
+    /// </summary>
+    string? GetPrivateDnsConflictWarning();
+
     /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
     string? GetLanIPv4Address();
 

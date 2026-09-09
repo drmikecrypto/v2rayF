@@ -312,7 +312,7 @@ public sealed class LatencyService
             var socksPort = GetFreeTcpPort();
             var configDir = Path.Combine(_environment.GetDataDirectory(), "runtime");
             Directory.CreateDirectory(configDir);
-            // Speedtest: classic on Xray even when live Connect prefers sing-box on Android.
+            // Speedtest uses the same core as live Connect on Android (D13).
             var useSingBox = CoreRuntime.UseSingBoxForSpeedtest(server);
             var configPath = Path.Combine(configDir, useSingBox ? $"speedtest-sb-{socksPort}.json" : $"speedtest-{socksPort}.json");
             var configJson = useSingBox

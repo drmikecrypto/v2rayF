@@ -25,8 +25,25 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
     public bool CanUseTunMode =>
         OperatingSystem.IsWindows() && IsWindowsAdministrator();
 
-    public string TunRequirementMessage =>
-        "TUN mode requires running v2rayF as Administrator.";
+    public string TunRequirementMessage
+    {
+        get
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return IsWindowsAdministrator()
+                    ? "TUN available (running as Administrator)."
+                    : "TUN mode requires running v2rayF as Administrator on Windows.";
+            }
+
+            if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+            {
+                return "TUN and firewall kill switch are not supported on macOS/Linux in this build — use system HTTP proxy. (Honest: README TUN claims are Windows-first.)";
+            }
+
+            return "TUN mode is not available on this platform.";
+        }
+    }
 
     public string? LastProxyMethod { get; private set; }
 
@@ -51,6 +68,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         Task.CompletedTask;
 
     public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
+
+    public string? GetPrivateDnsConflictWarning() => null;
 
     public Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
