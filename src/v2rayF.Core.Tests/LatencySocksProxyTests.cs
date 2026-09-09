@@ -8,10 +8,11 @@ namespace v2rayF.Core.Tests;
 public class LatencySocksProxyTests
 {
     [Fact]
-    public void SocksProxyScheme_IsSocks5_NotSocks5h()
+    public void SocksProxyScheme_IsSocks5_ProbesUseRemoteDns()
     {
         Assert.Equal("socks5", LatencyService.SocksProxyScheme);
         Assert.DoesNotContain("socks5h", LatencyService.SocksProxyScheme, StringComparison.OrdinalIgnoreCase);
+        Assert.True(LatencyService.SocksProbeUsesRemoteDns);
     }
 
     [Fact]

@@ -40,6 +40,9 @@ publish/
 # Local agent knowledge graph (never publish)
 graphify-out/
 
+# Local connectivity sandbox (credentials + cores + results — never push)
+_sandbox/
+
 # Android signing (never commit keystores / passwords)
 *.jks
 *.keystore

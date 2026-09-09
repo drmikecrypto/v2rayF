@@ -453,9 +453,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 if (socksMs is null or < 0)
                     return new PathProbeResult(socksMs, -1, null, true, tunRequired);
 
+                // Fresh HTTP budget after SOCKS — cold REALITY must not drain shared CTS into 10809 fail.
+                using var httpCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                httpCts.CancelAfter(budget);
                 httpMs = await _latency
                     .MeasureConnectHealthViaHttpAsync(
-                        XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false)
+                        XrayConfigBuilder.HttpPort, httpCts.Token, budget, warmThenMeasure: false)
                     .ConfigureAwait(false);
             }
 

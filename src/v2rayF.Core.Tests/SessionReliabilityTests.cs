@@ -91,6 +91,16 @@ public class SessionReliabilityTests
     }
 
     [Fact]
+    public void ConnectGate_HttpUsesSeparateBudgetAfterSocks()
+    {
+        // After SOCKS success, HTTP probe gets a fresh CTS with full health budget
+        // (same pattern as TUN advisory). See ProbePathComponentsAsync.
+        Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);
+        Assert.Equal(16000, LatencyService.ConnectHealthProbeVisionMs);
+        Assert.True(LatencyService.SocksProbeUsesRemoteDns);
+    }
+
+    [Fact]
     public void TunOnlyAdvisory_DoesNotEscalatePathFails()
     {
         Assert.True(ProxyCoreService.IsTunOnlyAdvisory(

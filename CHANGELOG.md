@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.16] - 2026-09-09
+
+### Fixed
+
+- Test All / rank: Vision/REALITY use 12s SOCKS probe budget (was hard-capped at 4s → false TIMEOUT)
+- SOCKS health probes resolve DNS through the core (DOMAIN ATYP) so poisoned clearnet DNS cannot fail every link
+- Android Connect: HTTP 10809 probe gets a fresh budget after SOCKS succeeds (shared CTS no longer drains into false HTTP TIMEOUT)
+
+### Changed
+
+- Local `_sandbox` matrix is ephemeral-port only and must not touch system 10808/10809 or kill host v2ray
+
 ## [2.6.2.15] - 2026-09-09
 
 ### Fixed

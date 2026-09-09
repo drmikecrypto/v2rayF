@@ -113,12 +113,26 @@ function Build-PatchedSingBoxAndroid([string]$Version, [string]$OutPath) {
         }
         New-Item -ItemType Directory -Force -Path $SingBoxTools | Out-Null
         tar -xzf $srcArchive -C $SingBoxTools
-        $extracted = Get-ChildItem -Path $SingBoxTools -Directory |
-            Where-Object { $_.Name -like "sing-box-*" } |
-            Sort-Object Name -Descending |
-            Select-Object -First 1
-        if (-not $extracted) { throw "sing-box source extract failed." }
-        Move-Item $extracted.FullName $srcRoot -Force
+
+        # Source archive extracts to sing-box-<version>; never pick platform bundles.
+        $sourceDir = Join-Path $SingBoxTools "sing-box-$Version"
+        if (-not (Test-Path $sourceDir)) {
+            $sourceDir = Get-ChildItem -Path $SingBoxTools -Directory |
+                Where-Object { Test-Path (Join-Path $_.FullName "protocol\tun\inbound.go") } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1 -ExpandProperty FullName
+        }
+        if (-not $sourceDir) { throw "sing-box source extract failed." }
+        Move-Item $sourceDir $srcRoot -Force
+    }
+
+    # Heal old wrong src-v<version> folders created from platform bundles.
+    if (-not (Test-Path (Join-Path $srcRoot "protocol\tun\inbound.go"))) {
+        $sourceDir = Join-Path $SingBoxTools "sing-box-$Version"
+        if (Test-Path $sourceDir) {
+            if (Test-Path $srcRoot) { Remove-Item -Recurse -Force $srcRoot }
+            Move-Item $sourceDir $srcRoot -Force
+        }
     }
 
     $inbound = Join-Path $srcRoot "protocol\tun\inbound.go"

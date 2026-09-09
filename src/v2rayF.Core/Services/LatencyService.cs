@@ -27,8 +27,8 @@ public sealed class LatencyService
 
     public const int TimeoutMs = 4000;
     public const int RankProbeTimeoutMs = 4000;
-    /// <summary>Cold Vision/REALITY core boot often needs more than 4s for rank proxy-path.</summary>
-    public const int RankProbeTimeoutVisionMs = 6000;
+    /// <summary>Cold Vision/REALITY often needs 6–12s for first HTTPS via SOCKS (sandbox matrix).</summary>
+    public const int RankProbeTimeoutVisionMs = 12000;
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
     public const int ConnectHealthProbeMs = 12000;
@@ -351,7 +351,9 @@ public sealed class LatencyService
                 return -1;
             }
 
-            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken, TimeoutMs).ConfigureAwait(false);
+            // Use Vision/REALITY rank budget — hard TimeoutMs (4s) falsely times out cold Reality.
+            var probeBudget = GetRankProbeTimeoutMs(server);
+            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken, probeBudget).ConfigureAwait(false);
             if (ms is null or < 0)
                 LastProbeError ??= "Proxy-path HTTPS probe timed out.";
             return ms;
@@ -435,7 +437,14 @@ public sealed class LatencyService
         }
     }
 
+    /// <summary>
+    /// Documented WebProxy scheme (.NET rejects socks5h). Probes dial via
+    /// <see cref="SocksProbeUsesRemoteDns"/> ConnectCallback instead.
+    /// </summary>
     public const string SocksProxyScheme = "socks5";
+
+    /// <summary>SOCKS probes send DOMAIN ATYP so the core resolves DNS (avoids poisoned clearnet DNS).</summary>
+    public const bool SocksProbeUsesRemoteDns = true;
 
     private async Task<int?> ProbeThroughSocksAsync(
         int socksPort,
@@ -446,12 +455,19 @@ public sealed class LatencyService
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(timeoutMs);
 
-        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
+        // Remote DNS via SOCKS5 DOMAIN — do not use WebProxy socks5 (local resolve).
+        var connectMs = Math.Min(Math.Max(HttpConnectTimeoutMs, 8000), timeoutMs);
         var handler = new SocketsHttpHandler
         {
-            Proxy = new WebProxy($"{SocksProxyScheme}://127.0.0.1:{socksPort}"),
-            UseProxy = true,
-            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs)
+            UseProxy = false,
+            ConnectTimeout = TimeSpan.FromMilliseconds(connectMs),
+            ConnectCallback = async (context, ct) =>
+                await Socks5RemoteDns.ConnectAsync(
+                        socksPort,
+                        context.DnsEndPoint.Host,
+                        context.DnsEndPoint.Port,
+                        ct)
+                    .ConfigureAwait(false)
         };
 
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };

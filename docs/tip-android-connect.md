@@ -8,6 +8,12 @@
 6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
+## v2.6.2.16 — probes
+
+- Test All / rank Vision-REALITY budget: **12s** (was 4s hard cap)
+- SOCKS gen204 resolves DNS **through the core** (not poisoned clearnet DNS)
+- Android HTTP `10809` gets a fresh budget after SOCKS OK
+
 ## v2.6.2.15 — Connect gate
 
 - TUN app-path is advisory at Connect again (fixes REALITY/Vision false TIMEOUT vs other clients)
