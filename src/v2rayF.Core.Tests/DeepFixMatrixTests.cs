@@ -179,7 +179,7 @@ public class DeepFixMatrixTests
 
         Assert.Equal(3000, LatencyService.GetCoreReadyWaitMs(ws));
         Assert.Equal(4000, LatencyService.GetCoreReadyWaitMs(grpc));
-        Assert.Equal(2500, LatencyService.GetCoreReadyWaitMs(reality));
+        Assert.Equal(5000, LatencyService.GetCoreReadyWaitMs(reality));
         Assert.Equal(2000, LatencyService.GetCoreReadyWaitMs(plain));
     }
 

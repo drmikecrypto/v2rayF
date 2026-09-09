@@ -163,9 +163,11 @@ public sealed class LatencyService
     public async Task<int?> MeasureConnectHealthViaSocksAsync(
         int socksPort,
         CancellationToken cancellationToken = default,
-        int timeoutMs = ConnectHealthProbeMs)
+        int timeoutMs = ConnectHealthProbeMs,
+        bool singlePingUrl = false)
     {
-        return await ProbeThroughSocksAsync(socksPort, cancellationToken, timeoutMs, warmThenMeasure: true)
+        return await ProbeThroughSocksAsync(
+                socksPort, cancellationToken, timeoutMs, warmThenMeasure: true, singlePingUrl)
             .ConfigureAwait(false);
     }
 
@@ -176,9 +178,11 @@ public sealed class LatencyService
         int httpPort,
         CancellationToken cancellationToken = default,
         int timeoutMs = ConnectHealthProbeMs,
-        bool warmThenMeasure = false)
+        bool warmThenMeasure = false,
+        bool singlePingUrl = false)
     {
-        return await ProbeThroughHttpProxyAsync(httpPort, cancellationToken, timeoutMs, warmThenMeasure)
+        return await ProbeThroughHttpProxyAsync(
+                httpPort, cancellationToken, timeoutMs, warmThenMeasure, singlePingUrl)
             .ConfigureAwait(false);
     }
 
@@ -349,13 +353,13 @@ public sealed class LatencyService
                 return -1;
             }
 
-            // Use Vision/REALITY rank budget — hard TimeoutMs (4s) falsely times out cold Reality.
+            // Warmup + Vision/REALITY single URL — cold outbound often needs more than a race of three GETs.
             var probeBudget = GetRankProbeTimeoutMs(server);
             var ms = await ProbeThroughSocksAsync(
                     socksPort,
                     cancellationToken,
                     probeBudget,
-                    warmThenMeasure: false,
+                    warmThenMeasure: true,
                     singlePingUrl: IsVisionOrReality(server))
                 .ConfigureAwait(false);
             if (ms is null or < 0)
@@ -382,11 +386,13 @@ public sealed class LatencyService
     public static int GetCoreReadyWaitMs(ProxyServer server)
     {
         var network = ShareLinkParser.NormalizeNetwork(server.Network);
+        if (IsVisionOrReality(server))
+            return 5000;
+
         return network switch
         {
             "grpc" or "httpupgrade" => 4000,
             "ws" or "h2" or "xhttp" => 3000,
-            "tcp" when string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase) => 2500,
             _ => CoreReadyWaitMs
         };
     }
@@ -496,12 +502,14 @@ public sealed class LatencyService
         int httpPort,
         CancellationToken cancellationToken,
         int timeoutMs,
-        bool warmThenMeasure = false)
+        bool warmThenMeasure = false,
+        bool singlePingUrl = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(timeoutMs);
 
-        var connectMs = Math.Min(HttpConnectTimeoutMs, timeoutMs);
+        // Match SOCKS probe connect budget — 2s falsely timed out cold REALITY on 10809.
+        var connectMs = Math.Min(Math.Max(HttpConnectTimeoutMs, 8000), timeoutMs);
         var handler = new SocketsHttpHandler
         {
             Proxy = new WebProxy($"http://127.0.0.1:{httpPort}"),
@@ -513,7 +521,8 @@ public sealed class LatencyService
 
         try
         {
-            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure).ConfigureAwait(false);
+            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure, singlePingUrl)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

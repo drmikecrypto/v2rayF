@@ -75,19 +75,22 @@ public class SessionReliabilityTests
     }
 
     [Fact]
-    public void ConnectGate_IgnoresTunOnlyFailure()
+    public void ConnectGate_IgnoresHttpAndTunOnlyFailure()
     {
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, 40, httpRequired: true));
         Assert.Null(ProxyCoreService.EvaluateConnectGateMs(null, 40, httpRequired: true));
         Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(-1, 40, httpRequired: true));
-        Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
+        // HTTP 10809 advisory — SOCKS OK keeps Connect green (v2.6.2.18).
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, null, httpRequired: false));
 
-        // TUN remains advisory at Connect — SOCKS+HTTP green even when TUN probe fails.
+        // TUN remains advisory at Connect — SOCKS green even when TUN probe fails.
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, -1, httpRequired: true, tunRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, 60, httpRequired: true, tunRequired: true));
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
+            50, -1, -1, httpRequired: true, tunRequired: true));
     }
 
     [Fact]
@@ -98,6 +101,20 @@ public class SessionReliabilityTests
         Assert.Equal(12000, LatencyService.ConnectHealthProbeMs);
         Assert.Equal(16000, LatencyService.ConnectHealthProbeVisionMs);
         Assert.True(LatencyService.SocksProbeUsesRemoteDns);
+        Assert.True(LatencyService.ProbeUsesHttp11);
+    }
+
+    [Fact]
+    public void IsHttpOnlyAdvisory_WhenSocksOkHttpMiss()
+    {
+        Assert.True(ProxyCoreService.IsHttpOnlyAdvisory(
+            socksOk: true, httpOk: false, httpProbed: true));
+        Assert.False(ProxyCoreService.IsHttpOnlyAdvisory(
+            socksOk: true, httpOk: true, httpProbed: true));
+        Assert.False(ProxyCoreService.IsHttpOnlyAdvisory(
+            socksOk: false, httpOk: false, httpProbed: true));
+        Assert.False(ProxyCoreService.IsHttpOnlyAdvisory(
+            socksOk: true, httpOk: false, httpProbed: false));
     }
 
     [Fact]
@@ -120,7 +137,8 @@ public class SessionReliabilityTests
         Assert.Contains(
             "SOCKS 10808",
             ProxyCoreService.DescribeConnectGateFailure(-1, 10, 10, httpRequired: true, tunRequired: true));
-        Assert.Contains(
+        // HTTP miss is advisory — Describe only names SOCKS/TUN hard fails.
+        Assert.DoesNotContain(
             "HTTP proxy 10809",
             ProxyCoreService.DescribeConnectGateFailure(10, -1, 10, httpRequired: true, tunRequired: true));
         Assert.Contains(

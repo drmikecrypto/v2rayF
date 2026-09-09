@@ -2407,6 +2407,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
         var status =
             $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi}). Tip: force-stop Instagram once for Direct.";
+        if (_proxyCore.LastConnectHttpWeak)
+            status += " · HTTP assist weak (Play Store/Translate may need reconnect)";
         var httpWarn = AppServices.Platform.LastHttpProxyWarning;
         if (!string.IsNullOrWhiteSpace(httpWarn) && !_httpProxyWarningShown)
         {

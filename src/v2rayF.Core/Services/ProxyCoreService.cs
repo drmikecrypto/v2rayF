@@ -67,6 +67,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
     /// <summary>Last successful post-connect proxy-path RTT (ms), if health probe ran.</summary>
     public int? LastConnectProbeMs { get; private set; }
 
+    /// <summary>True when Connect/rank left SOCKS green but Android HTTP 10809 was weak (advisory).</summary>
+    public bool LastConnectHttpWeak { get; private set; }
+
     public bool IsRunning => ProcessHost.IsRunning;
 
     public ProxyServer? ActiveServer { get; private set; }
@@ -253,8 +256,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        // Gate Connected on SOCKS (+ HTTP on Android TUN). TUN app-path is advisory at Connect.
+        // Gate Connected on SOCKS. Android HTTP 10809 is advisory (same as TUN) — hard-fail
+        // tore down working tunnels after cold REALITY/Vision (false TIMEOUT vs other clients).
         LastConnectProbeMs = null;
+        LastConnectHttpWeak = false;
         var gateResult = await ProbeConnectGateWithRetryAsync(
                 server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
             .ConfigureAwait(false);
@@ -296,6 +301,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
 
         LastConnectProbeMs = probeMs;
+        LastConnectHttpWeak = IsHttpOnlyAdvisory(gateResult);
 
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -316,41 +322,30 @@ public sealed class ProxyCoreService : IAsyncDisposable
         int? SocksMs,
         int? HttpMs,
         int? TunMs,
-        bool HttpRequired,
+        bool HttpProbed,
         bool TunRequired)
     {
         public bool SocksOk => SocksMs is >= 0;
-        public bool HttpOk => !HttpRequired || HttpMs is >= 0;
-        public bool LocalhostOk => SocksOk && HttpOk;
+        public bool HttpOk => !HttpProbed || HttpMs is >= 0;
+        /// <summary>Hard localhost gate is SOCKS only — HTTP 10809 is advisory like TUN.</summary>
+        public bool LocalhostOk => SocksOk;
         public bool TunOk => !TunRequired || TunMs is >= 0;
 
-        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN). TUN is advisory at Connect.</summary>
-        public int? ConnectGateMs
+        /// <summary>Connect / refresh gate — SOCKS only. HTTP/TUN advisory at Connect.</summary>
+        public int? ConnectGateMs => SocksMs;
+
+        /// <summary>Periodic health — SOCKS plus TUN when required (HTTP advisory).</summary>
+        public int? CombinedMs
         {
             get
             {
                 if (!SocksOk)
                     return SocksMs;
-                if (!HttpOk)
-                    return HttpMs;
-                if (HttpRequired && SocksMs is int socks && HttpMs is int http)
-                    return Math.Max(socks, http);
-                return SocksMs;
-            }
-        }
-
-        /// <summary>Periodic health — localhost plus TUN when required.</summary>
-        public int? CombinedMs
-        {
-            get
-            {
-                if (!LocalhostOk)
-                    return !SocksOk ? SocksMs : HttpMs;
                 if (!TunOk)
                     return TunMs;
-                if (TunMs is int tun && ConnectGateMs is int local)
-                    return Math.Max(local, tun);
-                return ConnectGateMs;
+                if (TunMs is int tun && SocksMs is int socks)
+                    return Math.Max(socks, tun);
+                return SocksMs;
             }
         }
     }
@@ -360,8 +355,6 @@ public sealed class ProxyCoreService : IAsyncDisposable
     {
         if (!result.SocksOk)
             return "Proxy path failed after connect (SOCKS 10808 probe timed out). The tunnel is not usable.";
-        if (result.HttpRequired && !result.HttpOk)
-            return "Proxy path failed after connect (HTTP proxy 10809 probe timed out). Play Store needs the VPN HTTP proxy.";
         if (result.TunRequired && !result.TunOk)
             return "Proxy path failed after connect (TUN app-path probe failed (gen204/FCM)).";
         return "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.";
@@ -389,6 +382,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     public static bool IsTunOnlyAdvisory(bool localhostOk, bool tunOk, bool tunRequired) =>
         localhostOk && tunRequired && !tunOk;
+
+    public static bool IsHttpOnlyAdvisory(bool socksOk, bool httpOk, bool httpProbed) =>
+        socksOk && httpProbed && !httpOk;
+
+    private static bool IsHttpOnlyAdvisory(PathProbeResult result) =>
+        IsHttpOnlyAdvisory(result.SocksOk, result.HttpOk, result.HttpProbed);
 
     private async Task<PathProbeResult> ProbeConnectGateWithRetryAsync(
         ProxyServer server,
@@ -436,19 +435,21 @@ public sealed class ProxyCoreService : IAsyncDisposable
         using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         probeCts.CancelAfter(budget);
 
-        var httpRequired = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
+        var httpProbed = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
         var tunRequired = RequiresTunAppPath(enableTunMode, tunFd);
+        var singleUrl = LatencyService.IsVisionOrReality(server);
 
         try
         {
             // SOCKS first (warmup) so HTTP CONNECT is not racing a cold outbound.
             // Do not start TUN in parallel — a slow TUN probe must not cancel a healthy SOCKS path.
             var socksMs = await _latency
-                .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
+                .MeasureConnectHealthViaSocksAsync(
+                    XrayConfigBuilder.SocksPort, probeCts.Token, budget, singlePingUrl: singleUrl)
                 .ConfigureAwait(false);
 
             int? httpMs = null;
-            if (httpRequired)
+            if (httpProbed)
             {
                 if (socksMs is null or < 0)
                     return new PathProbeResult(socksMs, -1, null, true, tunRequired);
@@ -458,16 +459,19 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 httpCts.CancelAfter(budget);
                 httpMs = await _latency
                     .MeasureConnectHealthViaHttpAsync(
-                        XrayConfigBuilder.HttpPort, httpCts.Token, budget, warmThenMeasure: false)
+                        XrayConfigBuilder.HttpPort,
+                        httpCts.Token,
+                        budget,
+                        warmThenMeasure: true,
+                        singlePingUrl: singleUrl)
                     .ConfigureAwait(false);
             }
 
-            var localhostOk = socksMs is >= 0 && (!httpRequired || httpMs is >= 0);
+            // TUN advisory after SOCKS OK (HTTP miss must not skip TUN probe).
             int? tunAppMs = null;
             if (tunRequired)
             {
-                // Fresh TUN budget after localhost probes so cold REALITY does not share a drained CTS.
-                if (localhostOk)
+                if (socksMs is >= 0)
                 {
                     using var tunCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     tunCts.CancelAfter(LatencyService.TunAppPathProbeMs);
@@ -481,11 +485,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 }
             }
 
-            return new PathProbeResult(socksMs, httpMs, tunAppMs, httpRequired, tunRequired);
+            return new PathProbeResult(socksMs, httpMs, tunAppMs, httpProbed, tunRequired);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new PathProbeResult(-1, httpRequired ? -1 : null, tunRequired ? -1 : null, httpRequired, tunRequired);
+            return new PathProbeResult(-1, httpProbed ? -1 : null, tunRequired ? -1 : null, httpProbed, tunRequired);
         }
     }
 
@@ -573,6 +577,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
             throw new InvalidOperationException(FormatConnectGateFailure(probeMs));
         }
 
+        LastConnectProbeMs = gateMs;
+        LastConnectHttpWeak = IsHttpOnlyAdvisory(probeMs);
         Interlocked.Exchange(ref _unexpectedHandled, 0);
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -632,6 +638,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         Interlocked.Exchange(ref _unexpectedHandled, 1);
         StopHealthMonitor();
         LastConnectProbeMs = null;
+        LastConnectHttpWeak = false;
         Interlocked.Exchange(ref _softRecoveryInFlight, 0);
         await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
         ActiveServer = null;

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.18] - 2026-09-09
+
+### Fixed
+
+- Connect no longer hard-fails when Android HTTP 10809 is slow/cold while SOCKS works (false TIMEOUT vs other clients)
+- HTTP 10809 probe uses 8s+ connect budget, Vision/REALITY single gen204 URL, and warmup after SOCKS
+- Test All / rank: SOCKS probes warm then measure; Reality/Vision core-ready wait 5s
+
+### Changed
+
+- Connect green = SOCKS; Android HTTP 10809 remains advisory (status tip when weak), same as TUN
+
 ## [2.6.2.17] - 2026-09-09
 
 ### Fixed

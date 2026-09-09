@@ -41,6 +41,14 @@ public class LatencySocksProxyTests
             Security = "reality"
         }));
         Assert.False(LatencyService.IsVisionOrReality(ss));
+        Assert.Equal(5000, LatencyService.GetCoreReadyWaitMs(new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Security = "reality",
+            Network = "tcp",
+            Address = "1.1.1.1",
+            Port = 443
+        }));
     }
 
     [Fact]
