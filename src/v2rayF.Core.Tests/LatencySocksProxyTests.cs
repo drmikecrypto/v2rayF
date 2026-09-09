@@ -13,6 +13,34 @@ public class LatencySocksProxyTests
         Assert.Equal("socks5", LatencyService.SocksProxyScheme);
         Assert.DoesNotContain("socks5h", LatencyService.SocksProxyScheme, StringComparison.OrdinalIgnoreCase);
         Assert.True(LatencyService.SocksProbeUsesRemoteDns);
+        Assert.True(LatencyService.ProbeUsesHttp11);
+    }
+
+    [Fact]
+    public void GetRankProbeTimeout_WsTlsAndSsGetTwelveSeconds()
+    {
+        var ws = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Security = "tls",
+            Network = "ws",
+            Address = "node.example.com",
+            Port = 443
+        };
+        var ss = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Shadowsocks,
+            Address = "1.2.3.4",
+            Port = 8880
+        };
+        Assert.Equal(12000, LatencyService.GetRankProbeTimeoutMs(ws));
+        Assert.Equal(12000, LatencyService.GetRankProbeTimeoutMs(ss));
+        Assert.True(LatencyService.IsVisionOrReality(new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Security = "reality"
+        }));
+        Assert.False(LatencyService.IsVisionOrReality(ss));
     }
 
     [Fact]

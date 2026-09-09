@@ -181,6 +181,49 @@ public class SentinelBulkImportTests
             o => o!["tag"]?.GetValue<string>() == "proxy");
     }
 
+    [Fact]
+    public void SingBoxSpeedtest_EverySentinelLink_IsLeanSocksOnly()
+    {
+        var servers = ConfigImportParser.Parse(SentinelBulkPaste);
+        Assert.Equal(15, servers.Count);
+
+        var port = 32000;
+        foreach (var server in servers)
+        {
+            port++;
+            var root = JsonNode.Parse(SingBoxConfigBuilder.BuildSpeedtest(server, port))!.AsObject();
+            Assert.Equal("proxy", root["route"]!["final"]!.GetValue<string>());
+            Assert.Null(root["route"]!["rules"]);
+            Assert.DoesNotContain(
+                root["inbounds"]!.AsArray(),
+                i => i!["listen_port"]?.GetValue<int>() == XrayConfigBuilder.HttpPort);
+            Assert.Contains(
+                root["inbounds"]!.AsArray(),
+                i => i!["listen_port"]?.GetValue<int>() == port);
+
+            var proxy = root["outbounds"]!.AsArray().First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+            Assert.False(string.IsNullOrWhiteSpace(proxy["type"]?.GetValue<string>()));
+
+            var udp = root["dns"]!["servers"]!.AsArray()
+                .First(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag)!;
+            Assert.Equal("proxy", udp["detour"]!.GetValue<string>());
+
+            var isIp = System.Net.IPAddress.TryParse(server.Address, out _);
+            if (isIp)
+            {
+                Assert.Null(root["dns"]!["rules"]);
+                Assert.Null(proxy["domain_resolver"]);
+            }
+            else
+            {
+                Assert.Contains(
+                    root["dns"]!["servers"]!.AsArray(),
+                    s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag);
+                Assert.Equal(SingBoxConfigBuilder.BootstrapDnsTag, proxy["domain_resolver"]!.GetValue<string>());
+            }
+        }
+    }
+
     private static bool DnsServersInclude(JsonArray dnsServers, string address) =>
         dnsServers.Any(n =>
         {

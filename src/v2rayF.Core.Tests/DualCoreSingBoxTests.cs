@@ -662,6 +662,69 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void BuildSpeedtest_OmitsTunHttpAndPrivateIpRule_DestDnsDetoursProxy()
+    {
+        var domain = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Address = "rfau8vd61dcf.dop33.com",
+            Port = 2053,
+            UserId = Guid.NewGuid().ToString(),
+            Security = "tls",
+            Network = "ws",
+            Path = "/ws",
+            Host = "rfau8vd61dcf.dop33.com"
+        };
+        var ip = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Shadowsocks,
+            Address = "169.40.32.81",
+            Port = 8880,
+            Cipher = "aes-128-gcm",
+            Password = "secret"
+        };
+
+        var domainRoot = JsonNode.Parse(SingBoxConfigBuilder.BuildSpeedtest(domain, 34567))!;
+        var ipRoot = JsonNode.Parse(SingBoxConfigBuilder.BuildSpeedtest(ip, 34568))!;
+
+        foreach (var root in new[] { domainRoot, ipRoot })
+        {
+            var ports = root["inbounds"]!.AsArray()
+                .Select(i => i!["listen_port"]?.GetValue<int>() ?? -1)
+                .ToList();
+            Assert.DoesNotContain(XrayConfigBuilder.HttpPort, ports);
+            Assert.DoesNotContain(
+                root["inbounds"]!.AsArray(),
+                i => i!["type"]?.GetValue<string>() == "tun");
+            Assert.Equal("proxy", root["route"]!["final"]!.GetValue<string>());
+            Assert.Null(root["route"]!["rules"]);
+
+            var udp = root["dns"]!["servers"]!.AsArray()
+                .First(s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.UdpDnsTag)!;
+            Assert.Equal("proxy", udp["detour"]!.GetValue<string>());
+            Assert.Equal(SingBoxConfigBuilder.UdpDnsTag, root["dns"]!["final"]!.GetValue<string>());
+        }
+
+        Assert.Contains(34567, domainRoot["inbounds"]!.AsArray().Select(i => i!["listen_port"]!.GetValue<int>()));
+        Assert.Contains(
+            domainRoot["dns"]!["servers"]!.AsArray(),
+            s => s!["tag"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag);
+        var bootstrapRule = domainRoot["dns"]!["rules"]!.AsArray().First(r =>
+            r!["server"]?.GetValue<string>() == SingBoxConfigBuilder.BootstrapDnsTag)!;
+        Assert.Contains(
+            "rfau8vd61dcf.dop33.com",
+            bootstrapRule["domain"]!.AsArray().Select(d => d!.GetValue<string>()));
+        var domainProxy = domainRoot["outbounds"]!.AsArray()
+            .First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Equal(SingBoxConfigBuilder.BootstrapDnsTag, domainProxy["domain_resolver"]!.GetValue<string>());
+
+        Assert.Null(ipRoot["dns"]!["rules"]);
+        var ipProxy = ipRoot["outbounds"]!.AsArray()
+            .First(o => o!["tag"]?.GetValue<string>() == "proxy")!;
+        Assert.Null(ipProxy["domain_resolver"]);
+    }
+
+    [Fact]
     public void DnsThroughProxy_DefaultsOn()
     {
         Assert.True(new AppSettings().DnsThroughProxy);

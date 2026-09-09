@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.17] - 2026-09-09
+
+### Fixed
+
+- Test All / rank: sing-box speedtest no longer resolves gen204 via clearnet (`ip_is_private` + 1.1.1.1) — every Sentinel protocol was false TIMEOUT vs other clients
+- Rank probe budget is 12s for all protocols (was 4s for non-Vision, shorter than outbound connect_timeout)
+- SOCKS probes use HTTP/1.1; Vision/REALITY rank hits one gen204 URL (no HTTP/2 triple-race)
+
+### Changed
+
+- Ephemeral sing-box speedtest is SOCKS-only: dest DNS detours through the proxy; outbound hostname still uses clearnet bootstrap
+
 ## [2.6.2.16] - 2026-09-09
 
 ### Fixed

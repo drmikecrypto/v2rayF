@@ -26,8 +26,9 @@ public sealed class LatencyService
     public const string GoogleProbeUrl = "https://cp.cloudflare.com/generate_204";
 
     public const int TimeoutMs = 4000;
-    public const int RankProbeTimeoutMs = 4000;
-    /// <summary>Cold Vision/REALITY often needs 6–12s for first HTTPS via SOCKS (sandbox matrix).</summary>
+    /// <summary>Test All / rank — 4s was shorter than sing-box connect_timeout (10s) and false-TIMEOUTed TLS/WS/SS.</summary>
+    public const int RankProbeTimeoutMs = 12000;
+    /// <summary>Same budget as <see cref="RankProbeTimeoutMs"/> (kept for callers that named Vision explicitly).</summary>
     public const int RankProbeTimeoutVisionMs = 12000;
     public const int CoreReadyWaitMs = 2000;
     /// <summary>Connect gate budget (non-Vision). Warmup + one timed GET.</summary>
@@ -66,21 +67,18 @@ public sealed class LatencyService
     public static int ResolveWorkerCount(bool mobile) =>
         mobile ? MobileSpeedtestWorkers : DesktopSpeedtestWorkers;
 
-    public static int GetConnectHealthProbeMs(ProxyServer server)
-    {
-        if (ShareLinkParser.IsVisionFlow(server) ||
-            string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase))
-            return ConnectHealthProbeVisionMs;
-        return ConnectHealthProbeMs;
-    }
+    public static int GetConnectHealthProbeMs(ProxyServer server) =>
+        IsVisionOrReality(server) ? ConnectHealthProbeVisionMs : ConnectHealthProbeMs;
 
     public static int GetRankProbeTimeoutMs(ProxyServer server)
     {
-        if (ShareLinkParser.IsVisionFlow(server) ||
-            string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase))
-            return RankProbeTimeoutVisionMs;
+        _ = server;
         return RankProbeTimeoutMs;
     }
+
+    public static bool IsVisionOrReality(ProxyServer server) =>
+        ShareLinkParser.IsVisionFlow(server) ||
+        string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase);
 
     public readonly record struct LatencyResult(int? TcpMs, int? ProxyPathMs, bool ProxyPathOk)
     {
@@ -353,7 +351,13 @@ public sealed class LatencyService
 
             // Use Vision/REALITY rank budget — hard TimeoutMs (4s) falsely times out cold Reality.
             var probeBudget = GetRankProbeTimeoutMs(server);
-            var ms = await ProbeThroughSocksAsync(socksPort, cancellationToken, probeBudget).ConfigureAwait(false);
+            var ms = await ProbeThroughSocksAsync(
+                    socksPort,
+                    cancellationToken,
+                    probeBudget,
+                    warmThenMeasure: false,
+                    singlePingUrl: IsVisionOrReality(server))
+                .ConfigureAwait(false);
             if (ms is null or < 0)
                 LastProbeError ??= "Proxy-path HTTPS probe timed out.";
             return ms;
@@ -446,11 +450,15 @@ public sealed class LatencyService
     /// <summary>SOCKS probes send DOMAIN ATYP so the core resolves DNS (avoids poisoned clearnet DNS).</summary>
     public const bool SocksProbeUsesRemoteDns = true;
 
+    /// <summary>Probes use HTTP/1.1 so HTTP/2 does not open concurrent streams on Vision.</summary>
+    public const bool ProbeUsesHttp11 = true;
+
     private async Task<int?> ProbeThroughSocksAsync(
         int socksPort,
         CancellationToken cancellationToken,
         int timeoutMs,
-        bool warmThenMeasure = false)
+        bool warmThenMeasure = false,
+        bool singlePingUrl = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(timeoutMs);
@@ -470,11 +478,12 @@ public sealed class LatencyService
                     .ConfigureAwait(false)
         };
 
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+        using var client = CreateProbeHttpClient(handler, timeoutMs);
 
         try
         {
-            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure).ConfigureAwait(false);
+            return await RacePingUrlsAsync(client, timeout.Token, warmThenMeasure, singlePingUrl)
+                .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -500,7 +509,7 @@ public sealed class LatencyService
             ConnectTimeout = TimeSpan.FromMilliseconds(connectMs)
         };
 
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+        using var client = CreateProbeHttpClient(handler, timeoutMs);
 
         try
         {
@@ -513,15 +522,29 @@ public sealed class LatencyService
         }
     }
 
+    private static HttpClient CreateProbeHttpClient(HttpMessageHandler handler, int timeoutMs)
+    {
+        var client = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(timeoutMs) };
+        if (ProbeUsesHttp11)
+        {
+            client.DefaultRequestVersion = HttpVersion.Version11;
+            client.DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact;
+        }
+
+        return client;
+    }
+
     /// <summary>Race PingUrls; first successful GET wins (warmup+timed when Connect gate).</summary>
     private async Task<int?> RacePingUrlsAsync(
         HttpClient client,
         CancellationToken cancellationToken,
-        bool warmThenMeasure)
+        bool warmThenMeasure,
+        bool singlePingUrl = false)
     {
         using var raceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var errorBox = new Exception?[1];
-        var tasks = PingUrls.Select(async url =>
+        var urls = singlePingUrl ? PingUrls.Take(1) : PingUrls;
+        var tasks = urls.Select(async url =>
         {
             try
             {

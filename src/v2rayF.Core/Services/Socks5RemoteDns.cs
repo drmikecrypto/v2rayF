@@ -54,6 +54,7 @@ public static class Socks5RemoteDns
         CancellationToken cancellationToken)
     {
         await stream.WriteAsync(new byte[] { 0x05, 0x01, 0x00 }, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         var method = new byte[2];
         await ReadExactAsync(stream, method, cancellationToken).ConfigureAwait(false);
         if (method[0] != 0x05 || method[1] != 0x00)
@@ -72,6 +73,7 @@ public static class Socks5RemoteDns
         hostBytes.CopyTo(req, 5);
         BinaryPrimitives.WriteUInt16BigEndian(req.AsSpan(5 + hostBytes.Length), (ushort)port);
         await stream.WriteAsync(req, cancellationToken).ConfigureAwait(false);
+        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
         var head = new byte[4];
         await ReadExactAsync(stream, head, cancellationToken).ConfigureAwait(false);

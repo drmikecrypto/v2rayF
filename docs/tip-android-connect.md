@@ -8,6 +8,11 @@
 6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
+## v2.6.2.17 — Test All TIMEOUT
+
+- Sing-box Test All no longer resolves gen204 on clearnet (`ip_is_private` / 1.1.1.1) — SS/VLESS/Trojan were false TIMEOUT
+- Rank budget **12s for all** protocols; Vision/REALITY rank uses one gen204 URL (HTTP/1.1)
+
 ## v2.6.2.16 — probes
 
 - Test All / rank Vision-REALITY budget: **12s** (was 4s hard cap)

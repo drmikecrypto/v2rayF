@@ -188,8 +188,43 @@ public static class SingBoxConfigBuilder
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
-    public static string BuildSpeedtest(ProxyServer server, int socksPort) =>
-        Build(server, new AppSettings { DnsThroughProxy = false }, socksPort);
+    /// <summary>
+    /// Ephemeral Test All / rank: SOCKS-only, no TUN/10809, no ip_is_private
+    /// (that rule resolves gen204 locally via blocked 1.1.1.1 → every protocol TIMEOUT).
+    /// Dest DNS detours through the proxy; outbound hostname still uses clearnet bootstrap.
+    /// </summary>
+    public static string BuildSpeedtest(ProxyServer server, int socksPort)
+    {
+        var outbound = BuildOutbound(server);
+        var root = new JsonObject
+        {
+            ["log"] = new JsonObject { ["level"] = "warn" },
+            ["inbounds"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "mixed",
+                    ["tag"] = "mixed-in",
+                    ["listen"] = "127.0.0.1",
+                    ["listen_port"] = socksPort
+                }
+            },
+            ["outbounds"] = new JsonArray
+            {
+                outbound,
+                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
+                new JsonObject { ["type"] = "block", ["tag"] = "block" }
+            },
+            ["route"] = new JsonObject
+            {
+                ["final"] = "proxy",
+                ["auto_detect_interface"] = true
+            },
+            ["dns"] = BuildSpeedtestDns(server)
+        };
+
+        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
 
     /// <summary>Android inherited fd or desktop EnableTunMode auto_route.</summary>
     public static bool UsesTun(AppSettings settings, int? tunFd) =>
@@ -563,6 +598,49 @@ public static class SingBoxConfigBuilder
         };
         if (useTun)
             dns["independent_cache"] = true;
+        if (rules.Count > 0)
+            dns["rules"] = rules;
+        return dns;
+    }
+
+    /// <summary>
+    /// Rank/Test All DNS: bootstrap the outbound host on clearnet; gen204 and other
+    /// destinations resolve through the proxy (socks5h). No AAAA reject / ip_is_private.
+    /// </summary>
+    private static JsonObject BuildSpeedtestDns(ProxyServer server)
+    {
+        var servers = new JsonArray();
+        var rules = new JsonArray();
+        if (NeedsBootstrapDns(server))
+        {
+            servers.Add(new JsonObject
+            {
+                ["type"] = "udp",
+                ["tag"] = BootstrapDnsTag,
+                ["server"] = "1.1.1.1"
+            });
+            rules.Add(new JsonObject
+            {
+                ["domain"] = new JsonArray { server.Address },
+                ["action"] = "route",
+                ["server"] = BootstrapDnsTag
+            });
+        }
+
+        servers.Add(new JsonObject
+        {
+            ["type"] = "udp",
+            ["tag"] = UdpDnsTag,
+            ["server"] = "1.1.1.1",
+            ["detour"] = "proxy"
+        });
+
+        var dns = new JsonObject
+        {
+            ["servers"] = servers,
+            ["strategy"] = "prefer_ipv4",
+            ["final"] = UdpDnsTag
+        };
         if (rules.Count > 0)
             dns["rules"] = rules;
         return dns;

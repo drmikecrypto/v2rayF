@@ -18,7 +18,7 @@ public class SmartConnectServiceTests
     }
 
     [Fact]
-    public void GetRankProbeTimeout_VisionGetsLongerBudget()
+    public void GetRankProbeTimeout_AllProtocolsGetTwelveSeconds()
     {
         var vision = new ProxyServer
         {
@@ -30,9 +30,10 @@ public class SmartConnectServiceTests
         };
         var plain = new ProxyServer { Address = "1.1.1.1", Port = 443, Protocol = ProxyProtocol.VLESS };
         Assert.Equal(12000, LatencyService.GetRankProbeTimeoutMs(vision));
-        Assert.Equal(4000, LatencyService.GetRankProbeTimeoutMs(plain));
+        Assert.Equal(12000, LatencyService.GetRankProbeTimeoutMs(plain));
+        Assert.Equal(LatencyService.RankProbeTimeoutMs, LatencyService.GetRankProbeTimeoutMs(plain));
         Assert.Equal(LatencyService.RankProbeTimeoutVisionMs, LatencyService.GetRankProbeTimeoutMs(vision));
-        Assert.True(LatencyService.RankProbeTimeoutVisionMs >= 12000);
+        Assert.True(LatencyService.RankProbeTimeoutMs >= 12000);
     }
 
     [Fact]
