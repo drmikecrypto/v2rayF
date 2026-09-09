@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.15] - 2026-09-09
+
+### Fixed
+
+- Connect no longer hard-fails when TUN gen204/FCM is slow/cold while SOCKS works (REALITY/Vision false TIMEOUT vs other clients)
+- Path probes run SOCKS (+ HTTP) first; TUN uses a fresh budget after localhost OK
+
+### Changed
+
+- Connect green = SOCKS (+ Android HTTP 10809); TUN remains advisory with soft rebind
+
 ## [2.6.2.14] - 2026-09-09
 
 ### Added

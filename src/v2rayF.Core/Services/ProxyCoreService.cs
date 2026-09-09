@@ -253,7 +253,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        // Gate Connected on SOCKS (+ HTTP on Android TUN) + TUN app-path when TUN is required (PLAN).
+        // Gate Connected on SOCKS (+ HTTP on Android TUN). TUN app-path is advisory at Connect.
         LastConnectProbeMs = null;
         var gateResult = await ProbeConnectGateWithRetryAsync(
                 server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
@@ -324,7 +324,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         public bool LocalhostOk => SocksOk && HttpOk;
         public bool TunOk => !TunRequired || TunMs is >= 0;
 
-        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN) + TUN when required.</summary>
+        /// <summary>Connect / refresh gate — SOCKS (+ HTTP on Android TUN). TUN is advisory at Connect.</summary>
         public int? ConnectGateMs
         {
             get
@@ -333,15 +333,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
                     return SocksMs;
                 if (!HttpOk)
                     return HttpMs;
-                if (!TunOk)
-                    return TunMs;
                 if (HttpRequired && SocksMs is int socks && HttpMs is int http)
-                {
-                    var local = Math.Max(socks, http);
-                    return TunMs is int tun ? Math.Max(local, tun) : local;
-                }
-
-                return TunMs is int tunOnly ? Math.Max(SocksMs ?? tunOnly, tunOnly) : SocksMs;
+                    return Math.Max(socks, http);
+                return SocksMs;
             }
         }
 
@@ -444,40 +438,51 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         var httpRequired = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
         var tunRequired = RequiresTunAppPath(enableTunMode, tunFd);
-        var tunProbeBudget = Math.Min(budget, LatencyService.TunAppPathProbeMs);
-        var tunTask = tunRequired
-            ? AppServices.Platform.ProbeTunAppPathAsync(probeCts.Token, tunProbeBudget)
-            : Task.FromResult<int?>(null);
 
         try
         {
             // SOCKS first (warmup) so HTTP CONNECT is not racing a cold outbound.
+            // Do not start TUN in parallel — a slow TUN probe must not cancel a healthy SOCKS path.
             var socksMs = await _latency
                 .MeasureConnectHealthViaSocksAsync(XrayConfigBuilder.SocksPort, probeCts.Token, budget)
                 .ConfigureAwait(false);
 
-            if (!httpRequired)
+            int? httpMs = null;
+            if (httpRequired)
             {
-                var tunOnly = await tunTask.ConfigureAwait(false);
-                return new PathProbeResult(socksMs, null, tunOnly, false, tunRequired);
+                if (socksMs is null or < 0)
+                    return new PathProbeResult(socksMs, -1, null, true, tunRequired);
+
+                httpMs = await _latency
+                    .MeasureConnectHealthViaHttpAsync(
+                        XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false)
+                    .ConfigureAwait(false);
             }
 
-            if (socksMs is null or < 0)
+            var localhostOk = socksMs is >= 0 && (!httpRequired || httpMs is >= 0);
+            int? tunAppMs = null;
+            if (tunRequired)
             {
-                var tunFail = await tunTask.ConfigureAwait(false);
-                return new PathProbeResult(socksMs, -1, tunFail, true, tunRequired);
+                // Fresh TUN budget after localhost probes so cold REALITY does not share a drained CTS.
+                if (localhostOk)
+                {
+                    using var tunCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    tunCts.CancelAfter(LatencyService.TunAppPathProbeMs);
+                    tunAppMs = await AppServices.Platform
+                        .ProbeTunAppPathAsync(tunCts.Token, LatencyService.TunAppPathProbeMs)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    tunAppMs = -1;
+                }
             }
 
-            var httpMs = await _latency
-                .MeasureConnectHealthViaHttpAsync(
-                    XrayConfigBuilder.HttpPort, probeCts.Token, budget, warmThenMeasure: false)
-                .ConfigureAwait(false);
-            var tunAppMs = await tunTask.ConfigureAwait(false);
-            return new PathProbeResult(socksMs, httpMs, tunAppMs, true, tunRequired);
+            return new PathProbeResult(socksMs, httpMs, tunAppMs, httpRequired, tunRequired);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new PathProbeResult(-1, httpRequired ? -1 : null, -1, httpRequired, tunRequired);
+            return new PathProbeResult(-1, httpRequired ? -1 : null, tunRequired ? -1 : null, httpRequired, tunRequired);
         }
     }
 

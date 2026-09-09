@@ -75,7 +75,7 @@ public class SessionReliabilityTests
     }
 
     [Fact]
-    public void ConnectGate_RequiresTunWhenTunRequired()
+    public void ConnectGate_IgnoresTunOnlyFailure()
     {
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, 40, httpRequired: true));
         Assert.Null(ProxyCoreService.EvaluateConnectGateMs(null, 40, httpRequired: true));
@@ -83,10 +83,10 @@ public class SessionReliabilityTests
         Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, null, httpRequired: false));
 
-        // PLAN: SOCKS+HTTP OK is not enough when TUN is required.
-        Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(
+        // TUN remains advisory at Connect — SOCKS+HTTP green even when TUN probe fails.
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, -1, httpRequired: true, tunRequired: true));
-        Assert.Equal(60, ProxyCoreService.EvaluateConnectGateMs(
+        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, 60, httpRequired: true, tunRequired: true));
     }
 

@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.2.14**).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.2.15** Connect gate hotfix).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -14,11 +14,13 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Success criteria (Connect green)
 
-Connect may show Connected only when:
+Connect may show Connected when:
 
 1. Core process is alive, and
 2. Local SOCKS probe passes, and
-3. On Android TUN sessions: TUN path probe passes (no false-green on HTTP-proxy-only paths).
+3. On Android sing-box TUN: local HTTP proxy `10809` probe passes.
+
+TUN gen204/FCM is **advisory at Connect** (soft rebind if weak). Hard-requiring TUN at Connect caused false timeouts on cold REALITY/Vision (v2.6.2.14 → fixed in 2.6.2.15).
 
 ## Golden app matrix
 

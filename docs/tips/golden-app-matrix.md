@@ -6,10 +6,11 @@ See also [`PLAN.md`](PLAN.md).
 
 1. Core process alive  
 2. Local SOCKS probe OK (`127.0.0.1:10808`)  
-3. Android TUN: HTTP proxy probe OK when sing-box TUN is up (`10809`)  
-4. Android TUN: TUN app-path probe OK (gen204 / FCM-style) — **not advisory at Connect**
+3. Android TUN: HTTP proxy probe OK when sing-box TUN is up (`10809`)
 
-If any fail → tear down and show a component-specific error (no false-green).
+TUN gen204/FCM is **advisory** after Connected (soft rebind if weak). Do not refuse Connect solely on TUN probe failure — that caused false timeouts on cold REALITY/Vision (fixed in 2.6.2.15).
+
+If SOCKS/HTTP fail → tear down and show a component-specific error.
 
 ## Golden apps (pass/fail)
 
