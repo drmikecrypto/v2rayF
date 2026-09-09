@@ -351,11 +351,31 @@ public class DualCoreSingBoxTests
         Assert.Contains("gateway.facebook.com", excl);
         Assert.Contains("gateway.instagram.com", excl);
         Assert.Contains("graph.instagram.com", excl);
+        Assert.Contains("edge-chat.facebook.com", excl);
+        Assert.Contains("chat-e2ee.facebook.com", excl);
+        Assert.Contains("web-chat-e2ee.facebook.com", excl);
         Assert.DoesNotContain("instagram.com", excl);
         Assert.DoesNotContain("*.instagram.com", excl);
         Assert.DoesNotContain("cdninstagram.com", excl);
         Assert.DoesNotContain("facebook.com", excl);
         Assert.Equal(SingBoxConfigBuilder.MetaMqttHttpProxyExclusionHosts.Length * 2, excl.Count);
+    }
+
+    [Fact]
+    public void AndroidTunFd_MetaSuffixRoutesViaProxy()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))![
+            "route"]!["rules"]!.AsArray();
+        Assert.Contains(rules, r =>
+            r?["outbound"]?.GetValue<string>() == "proxy" &&
+            r["domain_suffix"] is JsonArray suffixes &&
+            suffixes.Any(s => s!.GetValue<string>() == "instagram.com") &&
+            suffixes.Any(s => s!.GetValue<string>() == "facebook.com"));
+        Assert.Contains(rules, r =>
+            r?["outbound"]?.GetValue<string>() == "proxy" &&
+            r["domain_suffix"] is JsonArray oem &&
+            oem.Any(s => s!.GetValue<string>() == "push.hicloud.com"));
     }
 
     [Fact]
@@ -449,8 +469,9 @@ public class DualCoreSingBoxTests
             r["port"]?.GetValue<int>() == 443 &&
             r["outbound"]?.GetValue<string>() == "block");
         var suffixes = block!["domain_suffix"]!.AsArray().Select(s => s!.GetValue<string>()).ToHashSet();
-        Assert.Contains("google.com", suffixes);
         Assert.Contains("play.google.com", suffixes);
+        Assert.Contains("gstatic.com", suffixes);
+        Assert.DoesNotContain("google.com", suffixes);
         Assert.DoesNotContain("googleapis.com", suffixes);
         Assert.DoesNotContain("android.com", suffixes);
 

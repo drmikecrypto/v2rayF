@@ -549,7 +549,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Tun-only failure: same-fd soft refresh first; rebind VPN at most every 90s (or on refresh fail).</summary>
+    /// <summary>Tun-only failure: always rebind Android VPN then RefreshRuntime (drop stale MQTT sockets).</summary>
     private async Task OnTunPathFailedRecoveryAsync()
     {
         if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
@@ -581,8 +581,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                // Prefer same-fd refresh; rebind only when throttled window allows (game UDP).
-                if (IsMobile && ShouldRebindAndroidTun())
+                // Always rebind on TunPathFailed so Instagram/WhatsApp drop dead MQTT sockets.
+                if (IsMobile)
                 {
                     var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
                     var rebuilt = await AppServices.Platform
@@ -631,53 +631,6 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 _proxyCore.EndSoftRecovery(success: false);
                 escalateZombie = !_proxyCore.IsRunning;
-
-                // Same-fd refresh failed — force rebind once if still running and Connected.
-                if (!escalateZombie && IsMobile && ConnectionState == ConnectionState.Connected)
-                {
-                    try
-                    {
-                        var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
-                        var rebuilt = await AppServices.Platform
-                            .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
-                            .ConfigureAwait(true);
-                        if (rebuilt is not null)
-                        {
-                            _lastTunRebindUtc = DateTimeOffset.UtcNow;
-                            await _proxyCore.RefreshRuntimeAsync(
-                                    server, settings, rebuilt, null, CancellationToken.None)
-                                .ConfigureAwait(true);
-                            await RearmKillSwitchIfNeededAsync(server, settings, CancellationToken.None)
-                                .ConfigureAwait(true);
-                            var ok = await _proxyCore.VerifyLivePathAsync(CancellationToken.None)
-                                .ConfigureAwait(true);
-                            if (ok)
-                            {
-                                try
-                                {
-                                    await AppServices.Platform.NotifyVpnReadyAsync().ConfigureAwait(true);
-                                }
-                                catch
-                                {
-                                    // Best-effort.
-                                }
-
-                                await SetOnUiAsync(() =>
-                                {
-                                    StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)}";
-                                }).ConfigureAwait(true);
-                                return;
-                            }
-                        }
-
-                        escalateZombie = !_proxyCore.IsRunning;
-                    }
-                    catch
-                    {
-                        escalateZombie = !_proxyCore.IsRunning;
-                    }
-                }
-
                 if (!escalateZombie)
                 {
                     await SetOnUiAsync(() =>
@@ -702,6 +655,7 @@ public partial class MainWindowViewModel : ViewModelBase
             await HandleUnexpectedCoreStopAsync().ConfigureAwait(true);
     }
 
+    /// <summary>Opportunistic resume soft path only — TunPathFailed always rebinds.</summary>
     private bool ShouldRebindAndroidTun() =>
         DateTimeOffset.UtcNow - _lastTunRebindUtc >= TimeSpan.FromSeconds(TunRebindMinIntervalSeconds);
 

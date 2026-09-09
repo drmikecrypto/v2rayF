@@ -7,6 +7,21 @@ namespace v2rayF.Core.Tests;
 public class AppNetworkPolicyTests
 {
     [Fact]
+    public void AndroidPushBypass_GmsMergedUnlessBlocked()
+    {
+        var settings = new AppSettings();
+        var direct = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
+        Assert.Contains("com.google.android.gms", direct);
+        Assert.Contains("com.google.android.gsf", direct);
+        Assert.Equal(AppNetworkMode.Direct, AppNetworkPolicy.GetMode(settings, "com.google.android.gms", mobile: true));
+
+        AppNetworkPolicy.SetMode(settings, "com.google.android.gms", AppNetworkMode.Block, mobile: true);
+        Assert.Equal(AppNetworkMode.Block, AppNetworkPolicy.GetMode(settings, "com.google.android.gms", mobile: true));
+        Assert.DoesNotContain("com.google.android.gms", AppNetworkPolicy.GetDirectIds(settings, mobile: true));
+        Assert.Contains("com.google.android.gsf", AppNetworkPolicy.GetDirectIds(settings, mobile: true));
+    }
+
+    [Fact]
     public void ParseIdList_SplitsAndDedupes()
     {
         var list = AppNetworkPolicy.ParseIdList("com.a\ncom.b;com.a, com.c");

@@ -12,6 +12,15 @@ public static class AppNetworkPolicy
 {
     public const string AndroidSelfPackage = "com.drmikecrypto.v2rayf";
 
+    /// <summary>
+    /// Clearnet for system FCM (V2Box-class). Merged into Android VPN Direct unless user Blocks.
+    /// </summary>
+    public static readonly string[] AndroidPushBypassPackages =
+    [
+        "com.google.android.gms",
+        "com.google.android.gsf"
+    ];
+
     public static IReadOnlyList<string> ParseIdList(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -33,10 +42,29 @@ public static class AppNetworkPolicy
 
     /// <summary>
     /// Direct list for VpnService disallow / desktop process→direct.
+    /// Android merges <see cref="AndroidPushBypassPackages"/> unless user Blocked them.
     /// Never includes the v2rayF package (already excluded from the tunnel by the OS builder).
     /// </summary>
-    public static IReadOnlyList<string> GetDirectIds(AppSettings settings, bool mobile) =>
-        FilterSelf(ParseIdList(mobile ? settings.AndroidBypassPackages : settings.DesktopDirectProcesses), mobile);
+    public static IReadOnlyList<string> GetDirectIds(AppSettings settings, bool mobile)
+    {
+        var ids = ParseIdList(mobile ? settings.AndroidBypassPackages : settings.DesktopDirectProcesses)
+            .ToList();
+        if (mobile)
+        {
+            var blocked = new HashSet<string>(
+                ParseIdList(settings.AndroidBlockPackages),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var pkg in AndroidPushBypassPackages)
+            {
+                if (!blocked.Contains(pkg))
+                    ids.Add(pkg);
+            }
+        }
+
+        return FilterSelf(
+            ids.Distinct(StringComparer.OrdinalIgnoreCase),
+            mobile);
+    }
 
     /// <summary>
     /// Block list for core routing. Excludes ids that are also Direct (Direct never hits TUN).

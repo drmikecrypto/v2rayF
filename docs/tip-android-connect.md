@@ -5,6 +5,11 @@
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working.
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 
+## v2.6.2.12 — GMS clearnet; IG Direct parity
+
+- GMS/GSF Direct by default; expanded Meta MQTT exclusions; Meta routes like messaging
+- TunPathFailed always rebinds; apex google.com removed from UDP/443 block
+
 ## v2.6.2.11 — notify Stop; games/push UDP
 
 - Status bar opens app; Stop disconnects and exits

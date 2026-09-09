@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.12] - 2026-09-09
+
+### Fixed
+
+- GMS/GSF VPN-disallowed by default for clearnet FCM (unless user Blocks)
+- Instagram Direct: expand MQTT HTTP exclusions; Meta domain_suffix → proxy
+- Drop apex google.com from Chromium UDP/443 block
+- TunPathFailed always rebinds VPN (90s throttle only on opportunistic resume)
+
+### Changed
+
+- OEM push DNS/route suffixes (Huawei/Xiaomi/HeyTap/JPush/Getui)
+
 ## [2.6.2.11] - 2026-09-09
 
 ### Fixed

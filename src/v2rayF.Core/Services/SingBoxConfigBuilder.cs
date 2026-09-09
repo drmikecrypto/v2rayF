@@ -50,7 +50,10 @@ public static class SingBoxConfigBuilder
         "mqtt.facebook.com",
         "gateway.facebook.com",
         "z-m-gateway.facebook.com",
-        "b-graph.facebook.com"
+        "b-graph.facebook.com",
+        "edge-chat.facebook.com",
+        "chat-e2ee.facebook.com",
+        "web-chat-e2ee.facebook.com"
     ];
 
     /// <summary>
@@ -72,11 +75,10 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
-    /// UDP/443 block for Chromium Translate/Play only — not bare googleapis.com (games / FCM alts).
+    /// UDP/443 block for Chromium Translate/Play assets only — not apex google.com (FCM/GMS).
     /// </summary>
     public static readonly string[] GoogleChromiumUdpBlockSuffixes =
     [
-        "google.com",
         "gstatic.com",
         "googleusercontent.com",
         "play.google.com"
@@ -289,6 +291,28 @@ public static class SingBoxConfigBuilder
                 ["domain_suffix"] = messagingSuffixes,
                 ["outbound"] = "proxy"
             });
+
+            // Meta (Instagram Direct) — same suffix→proxy shape as messaging.
+            var metaSuffixes = new JsonArray();
+            foreach (var suffix in MetaDnsSuffixes)
+                metaSuffixes.Add(suffix);
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = metaSuffixes,
+                ["outbound"] = "proxy"
+            });
+
+            var oemPushSuffixes = new JsonArray();
+            foreach (var suffix in PushRoutingDomains.OemPushDnsSuffixes)
+                oemPushSuffixes.Add(suffix);
+            if (oemPushSuffixes.Count > 0)
+            {
+                rules.Add(new JsonObject
+                {
+                    ["domain_suffix"] = oemPushSuffixes,
+                    ["outbound"] = "proxy"
+                });
+            }
         }
 
         if (settings.BlockIpv6)
@@ -542,6 +566,19 @@ public static class SingBoxConfigBuilder
                 ["query_type"] = new JsonArray { "A", "AAAA" },
                 ["server"] = UdpDnsTag
             });
+
+            var oemPushSuffixes = new JsonArray();
+            foreach (var suffix in PushRoutingDomains.OemPushDnsSuffixes)
+                oemPushSuffixes.Add(suffix);
+            if (oemPushSuffixes.Count > 0)
+            {
+                rules.Add(new JsonObject
+                {
+                    ["domain_suffix"] = oemPushSuffixes,
+                    ["query_type"] = new JsonArray { "A", "AAAA" },
+                    ["server"] = UdpDnsTag
+                });
+            }
 
             if (PushRoutingDomains.FcmDnsExactHosts.Length > 0)
             {

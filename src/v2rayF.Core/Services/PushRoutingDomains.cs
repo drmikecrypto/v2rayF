@@ -44,6 +44,19 @@ public static class PushRoutingDomains
         "slack-edge.com"
     ];
 
+    /// <summary>OEM push CDNs (Android) — real UDP DNS + proxy route.</summary>
+    public static readonly string[] OemPushDnsSuffixes =
+    [
+        "push.hicloud.com",
+        "push.apple.com",
+        "xiaomi.com",
+        "xmpush.xiaomi.com",
+        "getui.com",
+        "jpush.cn",
+        "heytapmobi.com",
+        "mcs.heytapmobi.com"
+    ];
+
     /// <summary>Apple push (desktop bridges / iOS sync apps).</summary>
     public static readonly string[] DesktopOnlyPushSuffixes =
     [
