@@ -320,7 +320,8 @@ public class SmartConnectShortlistTests
             IReadOnlyList<string>? bypassPackages = null,
             bool blockIpv6 = true,
             CancellationToken cancellationToken = default,
-            bool forceRebind = false) =>
+            bool forceRebind = false,
+            bool chromiumHttpProxyAssist = false) =>
             Task.FromResult<int?>(null);
         public Task EnableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DisableProxyAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -333,7 +334,10 @@ public class SmartConnectShortlistTests
             AppSettings settings,
             CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-        public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
+        public bool NeedsVpnReestablish(
+            IReadOnlyList<string>? bypassPackages,
+            bool blockIpv6,
+            bool chromiumHttpProxyAssist = false) => false;
         public string? GetPrivateDnsConflictWarning() => null;
         public string? GetLanIPv4Address() => null;
         public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
@@ -345,6 +349,8 @@ public class SmartConnectShortlistTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<string, AppTrafficSnapshot>>(
                 new Dictionary<string, AppTrafficSnapshot>());
+        public Task<string?> TryGetClipboardTextAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 
     [Fact]

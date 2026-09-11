@@ -4,9 +4,17 @@
 2. Tap **Connect** and allow the **VPN** permission when prompted.
 3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working. Connect is green when SOCKS passes; Android HTTP `10809` and TUN gen204 are advisory (soft rebind / status tip if weak) — see [`tips/golden-app-matrix.md`](tips/golden-app-matrix.md).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
-5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale.
+5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale (manual; Connect no longer auto-tips this).
 6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
+
+## v2.6.2.20 — Chromium HTTP assist off by default
+
+- Default: full TUN (no `SetHttpProxy`) — Unity/games like Narco Empire stay off HTTP CONNECT
+- Settings → **Chromium HTTP proxy assist (10809)** ON only if Play Store / Translate need it
+- Reconnect after toggling
+- Connected status is clean (no Instagram force-stop tip; no path-truth line)
+- **Paste** uses Android system clipboard when Avalonia clipboard fails — or paste into the box and tap **Add**
 
 ## v2.6.2.19 — Xray Test All
 

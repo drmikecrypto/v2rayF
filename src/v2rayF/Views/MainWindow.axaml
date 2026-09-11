@@ -137,8 +137,6 @@
                     <TextBlock Text="{Binding ConnectedPingText}" FontWeight="SemiBold"/>
                 </StackPanel>
                 <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding PathTruthText}" FontSize="12" Opacity="0.8" TextWrapping="Wrap"
-                           IsVisible="{Binding ShowPathTruth}"/>
                 <TextBlock Text="{Binding CoreStatus}" FontSize="12" Opacity="0.75"/>
             </StackPanel>
         </Border>

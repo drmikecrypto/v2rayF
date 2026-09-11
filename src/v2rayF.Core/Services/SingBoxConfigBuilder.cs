@@ -282,18 +282,21 @@ public static class SingBoxConfigBuilder
                     ["outbound"] = "proxy"
                 });
 
-                // Force Chromium Translate/Play off QUIC → TCP → VPN HTTP proxy 10809.
-                // Narrow list — blanket googleapis.com/android.com killed games and FCM alts.
-                var googleUdpBlock = new JsonArray();
-                foreach (var suffix in GoogleChromiumUdpBlockSuffixes)
-                    googleUdpBlock.Add(suffix);
-                rules.Add(new JsonObject
+                // Only with Chromium HTTP proxy assist: force Translate/Play off QUIC → TCP → 10809.
+                // Default off (V2Box-shaped TUN) — CONNECT path lagged Unity games (Narco Empire Web Access).
+                if (settings.ChromiumHttpProxyAssist)
                 {
-                    ["domain_suffix"] = googleUdpBlock,
-                    ["port"] = 443,
-                    ["network"] = "udp",
-                    ["outbound"] = "block"
-                });
+                    var googleUdpBlock = new JsonArray();
+                    foreach (var suffix in GoogleChromiumUdpBlockSuffixes)
+                        googleUdpBlock.Add(suffix);
+                    rules.Add(new JsonObject
+                    {
+                        ["domain_suffix"] = googleUdpBlock,
+                        ["port"] = 443,
+                        ["network"] = "udp",
+                        ["outbound"] = "block"
+                    });
+                }
             }
 
             var pushRouteHosts = new JsonArray();

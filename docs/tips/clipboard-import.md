@@ -1,6 +1,6 @@
 # Clipboard import
 
-Copy a single share link, then use **Import from clipboard** in v2rayF.
+Copy a share link (or multi-line list), then tap **Paste** in v2rayF — or paste into the import box and tap **Add**.
 
 Supported prefixes include:
 
@@ -8,5 +8,6 @@ Supported prefixes include:
 - `vless://`
 - `trojan://`
 - `ss://`
+- `hy2://`, `tuic://`, and other schemes the importer accepts
 
-If clipboard import fails, paste into the manual import box â€” some mobile apps wrap links with extra whitespace.
+On Android, **Paste** reads the system clipboard (native fallback if Avalonia clipboard is empty). If Paste still fails, long-press paste into the text box and use **Add**.

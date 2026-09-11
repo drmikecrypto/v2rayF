@@ -18,6 +18,10 @@ Direct wins over Block for the same app.
 - Per-app ↑/↓ rates poll only while App Network is open (Android)
 - No extra foreground service for App Network
 
+## Games / Unity (Android)
+
+Do **not** put international games on **Direct** from Iran (clearnet cannot reach them). Keep them on **VPN**. Prefer Settings → **Chromium HTTP proxy assist** **off** (default in 2.6.2.20+) so HTTPS stays on raw TUN like V2Box — not VPN HTTP CONNECT `10809`.
+
 ## Apply
 
 Tap **Apply** or **Done**. If you are connected, v2rayF reconnects once so VPN exclusions and core rules reload.

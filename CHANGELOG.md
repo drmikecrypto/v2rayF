@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.20] - 2026-09-10
+
+### Fixed
+
+- Android Unity/game HTTPS (Narco Empire Web Access / lag) no longer forced through VPN HTTP CONNECT `10809` by default — matches V2Box full-TUN path
+- Android **Paste** falls back to native `ClipboardManager` when Avalonia clipboard is empty/unavailable
+
+### Changed
+
+- New Settings toggle **Chromium HTTP proxy assist (10809)** — **default off**; when on, restores SetHttpProxy + Google UDP/443 block for Play/Translate
+- Connected status no longer shows Instagram force-stop tip or path-truth (TUN / HTTP assist / App Network) line
+
 ## [2.6.2.19] - 2026-09-09
 
 ### Fixed

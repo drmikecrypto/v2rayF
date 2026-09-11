@@ -446,10 +446,25 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_BlocksGoogleUdp443ForTranslateTcpFallback()
+    public void AndroidTunFd_DefaultOmitsGoogleUdp443Block()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
         var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+            ["route"]!["rules"]!.AsArray();
+
+        Assert.DoesNotContain(rules, r =>
+            r?["network"]?.GetValue<string>() == "udp" &&
+            r["port"]?.GetValue<int>() == 443 &&
+            r["outbound"]?.GetValue<string>() == "block");
+        Assert.False(new AppSettings().ChromiumHttpProxyAssist);
+    }
+
+    [Fact]
+    public void AndroidTunFd_BlocksGoogleUdp443ForTranslateTcpFallback()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(
+                server, new AppSettings { ChromiumHttpProxyAssist = true }, tunFd: 3))!
             ["route"]!["rules"]!.AsArray();
 
         var block = Assert.Single(rules, r =>
@@ -465,7 +480,9 @@ public class DualCoreSingBoxTests
 
         // Desktop auto_route must not get Google UDP block (Android VpnService HTTP proxy path only).
         var desktopRules = JsonNode.Parse(SingBoxConfigBuilder.Build(
-            server, new AppSettings { EnableTunMode = true }, tunFd: null))!["route"]!["rules"]!.AsArray();
+            server,
+            new AppSettings { EnableTunMode = true, ChromiumHttpProxyAssist = true },
+            tunFd: null))!["route"]!["rules"]!.AsArray();
         Assert.DoesNotContain(desktopRules, r =>
             r?["network"]?.GetValue<string>() == "udp" &&
             r["port"]?.GetValue<int>() == 443 &&
@@ -476,7 +493,8 @@ public class DualCoreSingBoxTests
     public void AndroidTunFd_FcmProxyBeforeGoogleUdp443Block()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
-        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(
+                server, new AppSettings { ChromiumHttpProxyAssist = true }, tunFd: 3))!
             ["route"]!["rules"]!.AsArray();
 
         var fcmIdx = -1;

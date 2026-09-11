@@ -61,6 +61,12 @@
             <TextBlock Text="Encrypts DNS via DoH; can add first-page latency vs plain DNS. Off by default for snappier browsing."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
+            <CheckBox Content="Chromium HTTP proxy assist (10809)"
+                      IsChecked="{Binding ChromiumHttpProxyAssist}"
+                      IsVisible="{Binding ShowAndroidBypass}"/>
+            <TextBlock Text="Off (default): full TUN like V2Box — better for games/Unity. On: Play Store / Translate via VPN HTTP CONNECT."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                       IsVisible="{Binding ShowAndroidBypass}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
             <CheckBox Content="Adaptive Survive (DPI; can slow)" IsChecked="{Binding AdaptiveSurviveEnabled}"/>
             <CheckBox Content="Auto-reconnect after drop" IsChecked="{Binding AutoReconnectEnabled}"/>

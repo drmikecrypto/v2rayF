@@ -67,7 +67,10 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) => false;
+    public bool NeedsVpnReestablish(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        bool chromiumHttpProxyAssist = false) => false;
 
     public string? GetPrivateDnsConflictWarning() => null;
 
@@ -75,7 +78,8 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default,
-        bool forceRebind = false) =>
+        bool forceRebind = false,
+        bool chromiumHttpProxyAssist = false) =>
         Task.FromResult<int?>(null);
 
     public string? GetLanIPv4Address()
@@ -376,4 +380,7 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         IReadOnlyList<string> ids,
         CancellationToken cancellationToken = default) =>
         _appNetwork.GetAppTrafficAsync(ids, cancellationToken);
+
+    public Task<string?> TryGetClipboardTextAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
 }

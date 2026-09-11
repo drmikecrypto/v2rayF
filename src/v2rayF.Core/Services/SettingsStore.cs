@@ -96,6 +96,7 @@ public sealed class SettingsStore
         SelectedServerId = s.SelectedServerId,
         KillSwitchEnabled = s.KillSwitchEnabled,
         BlockIpv6 = s.BlockIpv6,
+        ChromiumHttpProxyAssist = s.ChromiumHttpProxyAssist,
         DnsThroughProxy = s.DnsThroughProxy,
         SecureShareEnabled = s.SecureShareEnabled,
         ShareBindPort = s.ShareBindPort,

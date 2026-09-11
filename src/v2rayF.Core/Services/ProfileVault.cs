@@ -128,6 +128,7 @@ public sealed class ProfileVault
         SelectedServerId = s.SelectedServerId,
         KillSwitchEnabled = s.KillSwitchEnabled,
         BlockIpv6 = s.BlockIpv6,
+        ChromiumHttpProxyAssist = s.ChromiumHttpProxyAssist,
         DnsThroughProxy = s.DnsThroughProxy,
         EnablePacketFragment = s.EnablePacketFragment,
         AdaptiveSurviveEnabled = s.AdaptiveSurviveEnabled,

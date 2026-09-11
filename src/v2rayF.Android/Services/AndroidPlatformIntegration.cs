@@ -45,15 +45,18 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default,
-        bool forceRebind = false) =>
+        bool forceRebind = false,
+        bool chromiumHttpProxyAssist = false) =>
         AndroidUiThread.InvokeAsync(() =>
-            EstablishVpnOnUiThreadAsync(bypassPackages, blockIpv6, cancellationToken, forceRebind));
+            EstablishVpnOnUiThreadAsync(
+                bypassPackages, blockIpv6, cancellationToken, forceRebind, chromiumHttpProxyAssist));
 
     private async Task<int?> EstablishVpnOnUiThreadAsync(
         IReadOnlyList<string>? bypassPackages,
         bool blockIpv6,
         CancellationToken cancellationToken,
-        bool forceRebind)
+        bool forceRebind,
+        bool chromiumHttpProxyAssist)
     {
         LastEstablishError = null;
         LastHttpProxyWarning = null;
@@ -73,7 +76,12 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
 
         var context = activity.ApplicationContext ?? activity;
         return await V2rayVpnService.EstablishAsync(
-                context, bypassPackages, blockIpv6, cancellationToken, forceRebind)
+                context,
+                bypassPackages,
+                blockIpv6,
+                cancellationToken,
+                forceRebind,
+                chromiumHttpProxyAssist)
             .ConfigureAwait(false);
     }
 
@@ -98,8 +106,11 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
             return Task.CompletedTask;
         });
 
-    public bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) =>
-        V2rayVpnService.NeedsReestablish(bypassPackages, blockIpv6);
+    public bool NeedsVpnReestablish(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        bool chromiumHttpProxyAssist = false) =>
+        V2rayVpnService.NeedsReestablish(bypassPackages, blockIpv6, chromiumHttpProxyAssist);
 
     public Task EnableProxyAsync(CancellationToken cancellationToken = default)
     {
@@ -180,4 +191,32 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         IReadOnlyList<string> ids,
         CancellationToken cancellationToken = default) =>
         _appNetwork.GetAppTrafficAsync(ids, cancellationToken);
+
+    public Task<string?> TryGetClipboardTextAsync(CancellationToken cancellationToken = default) =>
+        AndroidUiThread.InvokeAsync(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var context = Application.Context;
+                if (context is null)
+                    return Task.FromResult<string?>(null);
+
+                var cm = context.GetSystemService(Context.ClipboardService) as ClipboardManager;
+                if (cm?.HasPrimaryClip != true)
+                    return Task.FromResult<string?>(null);
+
+                var clip = cm.PrimaryClip;
+                if (clip is null || clip.ItemCount < 1)
+                    return Task.FromResult<string?>(null);
+
+                var item = clip.GetItemAt(0);
+                var text = item?.CoerceToText(context)?.ToString();
+                return Task.FromResult(string.IsNullOrWhiteSpace(text) ? null : text);
+            }
+            catch
+            {
+                return Task.FromResult<string?>(null);
+            }
+        });
 }

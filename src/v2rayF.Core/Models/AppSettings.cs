@@ -39,6 +39,12 @@ public sealed class AppSettings
 
     public bool BlockIpv6 { get; set; } = true;
 
+    /// <summary>
+    /// Android: VpnService SetHttpProxy(10809) + Google UDP/443 block for Chromium Play/Translate.
+    /// Default off — V2Box-shaped full TUN so Unity/games HTTPS is not forced through HTTP CONNECT.
+    /// </summary>
+    public bool ChromiumHttpProxyAssist { get; set; }
+
     public bool DnsThroughProxy { get; set; } = true;
 
     public bool SecureShareEnabled { get; set; }

@@ -97,6 +97,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _blockIpv6 = true;
 
     [ObservableProperty]
+    private bool _chromiumHttpProxyAssist;
+
+    [ObservableProperty]
     private bool _dnsThroughProxy = true;
 
     [ObservableProperty]
@@ -170,12 +173,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _tunStatus = "";
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowPathTruth))]
-    private string _pathTruthText = "";
-
-    public bool ShowPathTruth => !string.IsNullOrWhiteSpace(PathTruthText);
 
     [ObservableProperty]
     private bool _updateAvailable;
@@ -619,7 +616,8 @@ public partial class MainWindowViewModel : ViewModelBase
                             bypass,
                             settings.BlockIpv6,
                             CancellationToken.None,
-                            forceRebind: true)
+                            forceRebind: true,
+                            chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist)
                         .ConfigureAwait(true);
                     if (rebuilt is null)
                     {
@@ -808,7 +806,8 @@ public partial class MainWindowViewModel : ViewModelBase
                             bypass,
                             connectSettings.BlockIpv6,
                             CancellationToken.None,
-                            forceRebind: false)
+                            forceRebind: false,
+                            chromiumHttpProxyAssist: connectSettings.ChromiumHttpProxyAssist)
                         .ConfigureAwait(true);
                     if (rebuilt is null)
                     {
@@ -1084,6 +1083,7 @@ public partial class MainWindowViewModel : ViewModelBase
         SmartMultipathEnabled = settings.SmartMultipathEnabled;
         KillSwitchEnabled = settings.KillSwitchEnabled;
         BlockIpv6 = settings.BlockIpv6;
+        ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
         DnsThroughProxy = settings.DnsThroughProxy;
         SecureShareEnabled = settings.SecureShareEnabled;
         EnablePacketFragment = settings.EnablePacketFragment;
@@ -1116,6 +1116,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.SelectedServerId = SelectedServer?.Id.ToString() ?? _settings.SelectedServerId;
         _settings.KillSwitchEnabled = KillSwitchEnabled;
         _settings.BlockIpv6 = BlockIpv6;
+        _settings.ChromiumHttpProxyAssist = ChromiumHttpProxyAssist;
         _settings.DnsThroughProxy = DnsThroughProxy;
         _settings.SecureShareEnabled = SecureShareEnabled;
         _settings.ShareListenAllInterfaces = ShareListenAllInterfaces;
@@ -1176,6 +1177,7 @@ public partial class MainWindowViewModel : ViewModelBase
         KillSwitchEnabled = draft.KillSwitchEnabled;
         DnsThroughProxy = draft.DnsThroughProxy;
         BlockIpv6 = draft.BlockIpv6;
+        ChromiumHttpProxyAssist = draft.ChromiumHttpProxyAssist;
         if (!IsMobile)
             EnableTunMode = draft.EnableTunMode && AppServices.Platform.CanUseTunMode;
         else
@@ -1247,42 +1249,6 @@ public partial class MainWindowViewModel : ViewModelBase
         TunStatus = AppServices.Platform.CanUseTunMode
             ? IsMobile ? "VPN mode — routes all device traffic" : "TUN ready — full-device capture via virtual adapter"
             : AppServices.Platform.TunRequirementMessage;
-    }
-
-    /// <summary>PLAN early Phase 4 — show how traffic is captured (TUN vs HTTP proxy vs Direct).</summary>
-    private void RefreshPathTruth(AppSettings? settings = null)
-    {
-        settings ??= _settings;
-        if (!IsConnected && ConnectionState != ConnectionState.Connected)
-        {
-            PathTruthText = "";
-            return;
-        }
-
-        var parts = new List<string>();
-        if (IsMobile || settings.EnableTunMode)
-            parts.Add("path: TUN");
-        else if (settings.EnableSystemProxy)
-            parts.Add($"path: system proxy ({AppServices.Platform.LastProxyMethod ?? "HTTP"})");
-        else
-            parts.Add("path: manual SOCKS/HTTP localhost");
-
-        if (IsMobile)
-            parts.Add("HTTP assist :10809 (Chromium); MQTT Meta hosts bypass CONNECT");
-
-        var directCount = AppNetworkPolicy.GetDirectIds(settings, IsMobile).Count;
-        if (directCount > 0)
-            parts.Add($"App Network Direct×{directCount}");
-
-        if (settings.BlockIpv6)
-            parts.Add("IPv6 blocked");
-
-        var dns = settings.DnsThroughProxy
-            ? (IsMobile || settings.EnableTunMode ? "DNS: UDP via proxy" : "DNS: DoH via proxy")
-            : "DNS: clearnet UDP";
-        parts.Add(dns);
-
-        PathTruthText = string.Join(" · ", parts);
     }
 
     private void UpdateSecureShareEndpoint()
@@ -1371,14 +1337,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // Android: rebuild VPN interface when bypass/IPv6 hash differs, then soft-refresh core.
         if (IsMobile &&
-            AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6) &&
+            AppServices.Platform.NeedsVpnReestablish(
+                bypass, settings.BlockIpv6, settings.ChromiumHttpProxyAssist) &&
             _proxyCore.IsRunning)
         {
             StatusText = "Applying App Network…";
             try
             {
                 var tunFd = await AppServices.Platform.EstablishVpnAsync(
-                        bypass, settings.BlockIpv6, CancellationToken.None)
+                        bypass,
+                        settings.BlockIpv6,
+                        CancellationToken.None,
+                        chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist)
                     .ConfigureAwait(true);
                 if (tunFd is not null)
                 {
@@ -1477,10 +1447,15 @@ public partial class MainWindowViewModel : ViewModelBase
             if (IsMobile)
             {
                 var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
-                if (AppServices.Platform.NeedsVpnReestablish(bypass, settings.BlockIpv6))
+                if (AppServices.Platform.NeedsVpnReestablish(
+                        bypass, settings.BlockIpv6, settings.ChromiumHttpProxyAssist))
                 {
                     var tunFd = await AppServices.Platform
-                        .EstablishVpnAsync(bypass, settings.BlockIpv6, CancellationToken.None)
+                        .EstablishVpnAsync(
+                            bypass,
+                            settings.BlockIpv6,
+                            CancellationToken.None,
+                            chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist)
                         .ConfigureAwait(true);
                     if (tunFd is null)
                         throw new InvalidOperationException("VPN re-establish returned null.");
@@ -1533,6 +1508,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly record struct RuntimeSettingsSnapshot(
         bool DnsThroughProxy,
         bool BlockIpv6,
+        bool ChromiumHttpProxyAssist,
         bool AllowDesktopNotificationRouting,
         RoutingMode RoutingMode,
         string CustomDirectRules,
@@ -1549,6 +1525,7 @@ public partial class MainWindowViewModel : ViewModelBase
         new(
             s.DnsThroughProxy,
             s.BlockIpv6,
+            s.ChromiumHttpProxyAssist,
             s.AllowDesktopNotificationRouting,
             s.RoutingMode,
             s.CustomDirectRules ?? "",
@@ -1564,6 +1541,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private static bool SoftRuntimeSettingsChanged(RuntimeSettingsSnapshot a, RuntimeSettingsSnapshot b) =>
         a.DnsThroughProxy != b.DnsThroughProxy ||
         a.BlockIpv6 != b.BlockIpv6 ||
+        a.ChromiumHttpProxyAssist != b.ChromiumHttpProxyAssist ||
         a.AllowDesktopNotificationRouting != b.AllowDesktopNotificationRouting ||
         a.RoutingMode != b.RoutingMode ||
         !string.Equals(a.CustomDirectRules, b.CustomDirectRules, StringComparison.Ordinal) ||
@@ -1734,6 +1712,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _settings.SmartMultipathEnabled = payload.Settings.SmartMultipathEnabled;
                 _settings.KillSwitchEnabled = payload.Settings.KillSwitchEnabled;
                 _settings.BlockIpv6 = payload.Settings.BlockIpv6;
+                _settings.ChromiumHttpProxyAssist = payload.Settings.ChromiumHttpProxyAssist;
                 _settings.DnsThroughProxy = payload.Settings.DnsThroughProxy;
                 _settings.EnablePacketFragment = payload.Settings.EnablePacketFragment;
                 _settings.AdaptiveSurviveEnabled = payload.Settings.AdaptiveSurviveEnabled;
@@ -1845,17 +1824,19 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task ImportFromClipboardAsync()
     {
+        string? text = null;
         var clipboard = GetClipboard();
-        if (clipboard is null)
-        {
-            StatusText = "Clipboard unavailable.";
-            return;
-        }
+        if (clipboard is not null)
+            text = await clipboard.TryGetTextAsync();
 
-        var text = await clipboard.TryGetTextAsync();
+        if (string.IsNullOrWhiteSpace(text))
+            text = await AppServices.Platform.TryGetClipboardTextAsync().ConfigureAwait(true);
+
         if (string.IsNullOrWhiteSpace(text))
         {
-            StatusText = "Clipboard is empty.";
+            StatusText = clipboard is null
+                ? "Clipboard unavailable — paste into the box and tap Add."
+                : "Clipboard is empty — paste into the box and tap Add.";
             return;
         }
 
@@ -2317,7 +2298,8 @@ public partial class MainWindowViewModel : ViewModelBase
             tunFd = await AppServices.Platform.EstablishVpnAsync(
                 bypassPackages: null,
                 blockIpv6: settings.BlockIpv6,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist).ConfigureAwait(false);
 
         await ResumeOnUiAsync().ConfigureAwait(true);
 
@@ -2360,7 +2342,6 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             StatusText = status;
             IsConnected = true;
-            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
 
@@ -2372,7 +2353,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         await SetOnUiAsync(() => StatusText = "Starting VPN…").ConfigureAwait(true);
         var bypass = AppNetworkPolicy.GetDirectIds(settings, mobile: true);
-        var tunFd = await AppServices.Platform.EstablishVpnAsync(bypass, settings.BlockIpv6, cancellationToken)
+        var tunFd = await AppServices.Platform.EstablishVpnAsync(
+                bypass,
+                settings.BlockIpv6,
+                cancellationToken,
+                chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist)
             .ConfigureAwait(false);
 
         // AndroidUiThread resumes on the thread pool — hop back to Avalonia before any UI touch.
@@ -2406,7 +2391,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
         var status =
-            $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi}). Tip: force-stop Instagram once for Direct.";
+            $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi})";
         if (_proxyCore.LastConnectHttpWeak)
             status += " · HTTP assist weak (Play Store/Translate may need reconnect)";
         var httpWarn = AppServices.Platform.LastHttpProxyWarning;
@@ -2420,7 +2405,6 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             StatusText = status;
             IsConnected = true;
-            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
 
@@ -2630,7 +2614,6 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 ConnectionState = ConnectionState.Idle;
                 StatusText = "Disconnected";
-                PathTruthText = "";
                 _autoReconnectAttempts = 0;
             }).ConfigureAwait(true);
         }

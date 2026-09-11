@@ -24,6 +24,7 @@ public class V2rayVpnService : VpnService
     private const string ActionDisconnect = "com.drmikecrypto.v2rayf.action.DISCONNECT";
     private const string ActionStopAndExit = "com.drmikecrypto.v2rayf.action.STOP_AND_EXIT";
     private const string ExtraBlockIpv6 = "block_ipv6";
+    private const string ExtraChromiumHttpProxyAssist = "chromium_http_proxy_assist";
     private const string ExtraBypassPackages = "bypass_packages";
     private const string ExtraStopAndExit = "stop_and_exit";
 
@@ -41,18 +42,27 @@ public class V2rayVpnService : VpnService
 
     public static int? GetActiveTunFd() => _tunFd >= 0 ? _tunFd : null;
 
-    public static bool NeedsReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6) =>
+    public static bool NeedsReestablish(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        bool chromiumHttpProxyAssist = false) =>
         _tunFd >= 0 &&
-        !string.Equals(_establishConfigHash, ComputeEstablishHash(bypassPackages, blockIpv6), StringComparison.Ordinal);
+        !string.Equals(
+            _establishConfigHash,
+            ComputeEstablishHash(bypassPackages, blockIpv6, chromiumHttpProxyAssist),
+            StringComparison.Ordinal);
 
-    private static string ComputeEstablishHash(IReadOnlyList<string>? bypassPackages, bool blockIpv6)
+    private static string ComputeEstablishHash(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        bool chromiumHttpProxyAssist)
     {
         var parts = bypassPackages?
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => p.Trim())
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
-        return $"{blockIpv6}|{string.Join("\0", parts)}";
+        return $"{blockIpv6}|{chromiumHttpProxyAssist}|{string.Join("\0", parts)}";
     }
 
     public static Task<int?> EstablishAsync(
@@ -60,9 +70,10 @@ public class V2rayVpnService : VpnService
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default,
-        bool forceRebind = false)
+        bool forceRebind = false,
+        bool chromiumHttpProxyAssist = false)
     {
-        var hash = ComputeEstablishHash(bypassPackages, blockIpv6);
+        var hash = ComputeEstablishHash(bypassPackages, blockIpv6, chromiumHttpProxyAssist);
         if (!forceRebind &&
             _tunFd >= 0 &&
             string.Equals(_establishConfigHash, hash, StringComparison.Ordinal))
@@ -78,6 +89,7 @@ public class V2rayVpnService : VpnService
         var intent = new Intent(context, typeof(V2rayVpnService));
         intent.SetAction(ActionEstablish);
         intent.PutExtra(ExtraBlockIpv6, blockIpv6);
+        intent.PutExtra(ExtraChromiumHttpProxyAssist, chromiumHttpProxyAssist);
         if (bypassPackages is { Count: > 0 })
             intent.PutStringArrayListExtra(ExtraBypassPackages, bypassPackages.ToList());
 
@@ -116,6 +128,8 @@ public class V2rayVpnService : VpnService
             TearDownInterface();
 
             var blockIpv6 = intent?.GetBooleanExtra(ExtraBlockIpv6, true) ?? true;
+            var chromiumHttpProxyAssist =
+                intent?.GetBooleanExtra(ExtraChromiumHttpProxyAssist, false) ?? false;
             var bypass = intent?.GetStringArrayListExtra(ExtraBypassPackages);
 
             var builder = new Builder(this);
@@ -126,9 +140,9 @@ public class V2rayVpnService : VpnService
             // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
             builder.AddDnsServer("172.19.0.1");
 
-            // Chromium (Play Store / Translate / IG feed) needs VPN HTTP proxy.
-            // MQTT/realtime hosts bypass CONNECT → TUN (Instagram Direct); see GetMetaHttpProxyExclusions.
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.Q)
+            // Optional Chromium assist (Play/Translate). Default off — Unity/games stay on raw TUN
+            // (V2Box-shaped); MQTT exclusions only matter when CONNECT is enabled.
+            if (chromiumHttpProxyAssist && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {
                 try
                 {
@@ -211,7 +225,7 @@ public class V2rayVpnService : VpnService
 
             _tunFd = fd;
             IReadOnlyList<string>? bypassList = bypass is null ? null : bypass.ToList();
-            _establishConfigHash = ComputeEstablishHash(bypassList, blockIpv6);
+            _establishConfigHash = ComputeEstablishHash(bypassList, blockIpv6, chromiumHttpProxyAssist);
             _establishTcs?.TrySetResult(fd);
 
             // Session-survival callbacks are best-effort — never tear down a good TUN.

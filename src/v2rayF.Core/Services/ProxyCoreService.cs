@@ -613,6 +613,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             SmartMultipathEnabled = settings.SmartMultipathEnabled,
             KillSwitchEnabled = settings.KillSwitchEnabled,
             BlockIpv6 = settings.BlockIpv6,
+            ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist,
             DnsThroughProxy = true,
             SecureShareEnabled = settings.SecureShareEnabled,
             ShareBindPort = settings.ShareBindPort,

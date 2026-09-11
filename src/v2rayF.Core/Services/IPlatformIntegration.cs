@@ -21,14 +21,15 @@ public interface IPlatformIntegration
     string? LastHttpProxyWarning { get; }
 
     /// <summary>
-    /// Establish VPN/TUN. Optional Android per-app bypass package names and IPv6 block flag.
-    /// When <paramref name="forceRebind"/> is true, tear down and rebuild even if bypass/IPv6 hash matches.
+    /// Establish VPN/TUN. Optional Android per-app bypass, IPv6 block, and Chromium HTTP proxy assist.
+    /// When <paramref name="forceRebind"/> is true, tear down and rebuild even if establish hash matches.
     /// </summary>
     Task<int?> EstablishVpnAsync(
         IReadOnlyList<string>? bypassPackages = null,
         bool blockIpv6 = true,
         CancellationToken cancellationToken = default,
-        bool forceRebind = false);
+        bool forceRebind = false,
+        bool chromiumHttpProxyAssist = false);
 
     Task EnableProxyAsync(CancellationToken cancellationToken = default);
 
@@ -54,10 +55,13 @@ public interface IPlatformIntegration
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// True when the live VPN interface was built with different bypass/IPv6 settings
+    /// True when the live VPN interface was built with different bypass/IPv6/HTTP-assist settings
     /// than the ones about to apply (Android). Desktop always false.
     /// </summary>
-    bool NeedsVpnReestablish(IReadOnlyList<string>? bypassPackages, bool blockIpv6);
+    bool NeedsVpnReestablish(
+        IReadOnlyList<string>? bypassPackages,
+        bool blockIpv6,
+        bool chromiumHttpProxyAssist = false);
 
     /// <summary>
     /// True when Private DNS (Android) or equivalent OS DNS override conflicts with VPN DNS hijack.
@@ -81,4 +85,10 @@ public interface IPlatformIntegration
     Task<IReadOnlyDictionary<string, AppTrafficSnapshot>> GetAppTrafficAsync(
         IReadOnlyList<string> ids,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Native clipboard text when Avalonia TopLevel.Clipboard is unavailable (Android).
+    /// Desktop returns null — callers use Avalonia clipboard.
+    /// </summary>
+    Task<string?> TryGetClipboardTextAsync(CancellationToken cancellationToken = default);
 }
