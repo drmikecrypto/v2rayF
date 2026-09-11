@@ -20,7 +20,7 @@ Direct wins over Block for the same app.
 
 ## Games / Unity (Android)
 
-Do **not** put international games on **Direct** from Iran (clearnet cannot reach them). Keep them on **VPN**. Prefer Settings → **Chromium HTTP proxy assist** **off** (default in 2.6.2.20+) so HTTPS stays on raw TUN like V2Box — not VPN HTTP CONNECT `10809`.
+Do **not** put international games on **Direct** from Iran (clearnet cannot reach them). Keep them on **VPN**. **Chromium HTTP proxy assist** stays **on** by default (Play Store / Translate). Turning it **off** may help some Unity titles but recreates the known Play break — reconnect after changing.
 
 ## Apply
 

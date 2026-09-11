@@ -8,6 +8,12 @@
 6. Use **Iran** / **China** / **Sentinel** presets in Settings for one-tap CN/IR-oriented routing (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
+## v2.6.2.21 — Chromium assist on again
+
+- Default **on** (Play Store / Translate like v2.6.2.19); Upgrade migrates assist off → on once
+- Toggle still available; **off** breaks Play (same as 2.3.1) — reconnect after changing
+- Narco/V2Box full parity not claimed yet (gVisor vs system stack is separate)
+
 ## v2.6.2.20 — Chromium HTTP assist off by default
 
 - Default: full TUN (no `SetHttpProxy`) — Unity/games like Narco Empire stay off HTTP CONNECT
@@ -15,6 +21,7 @@
 - Reconnect after toggling
 - Connected status is clean (no Instagram force-stop tip; no path-truth line)
 - **Paste** uses Android system clipboard when Avalonia clipboard fails — or paste into the box and tap **Add**
+- **Superseded for Google:** use **2.6.2.21+** (assist default on)
 
 ## v2.6.2.19 — Xray Test All
 

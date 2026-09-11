@@ -64,7 +64,7 @@
             <CheckBox Content="Chromium HTTP proxy assist (10809)"
                       IsChecked="{Binding ChromiumHttpProxyAssist}"
                       IsVisible="{Binding ShowAndroidBypass}"/>
-            <TextBlock Text="Off (default): full TUN like V2Box — better for games/Unity. On: Play Store / Translate via VPN HTTP CONNECT."
+            <TextBlock Text="On (default): Play Store / Translate via VPN HTTP CONNECT. Off: full TUN — may help some games but breaks Play (same as 2.3.1)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowAndroidBypass}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>

@@ -41,9 +41,9 @@ public sealed class AppSettings
 
     /// <summary>
     /// Android: VpnService SetHttpProxy(10809) + Google UDP/443 block for Chromium Play/Translate.
-    /// Default off — V2Box-shaped full TUN so Unity/games HTTPS is not forced through HTTP CONNECT.
+    /// Default on (v2.6.2.19 / 2.3.2 path). Off may help some Unity games but breaks Play Store.
     /// </summary>
-    public bool ChromiumHttpProxyAssist { get; set; }
+    public bool ChromiumHttpProxyAssist { get; set; } = true;
 
     public bool DnsThroughProxy { get; set; } = true;
 

@@ -282,8 +282,8 @@ public static class SingBoxConfigBuilder
                     ["outbound"] = "proxy"
                 });
 
-                // Only with Chromium HTTP proxy assist: force Translate/Play off QUIC → TCP → 10809.
-                // Default off (V2Box-shaped TUN) — CONNECT path lagged Unity games (Narco Empire Web Access).
+                // Default on: force Chromium Translate/Play off QUIC → TCP → VPN HTTP proxy 10809.
+                // Assist off omits this (games experiment); known Play Store break without CONNECT (2.3.1 / 2.6.2.20).
                 if (settings.ChromiumHttpProxyAssist)
                 {
                     var googleUdpBlock = new JsonArray();

@@ -42,11 +42,24 @@ public sealed class SettingsStore
             var hadLegacyPlaintext = HasUnprotectedSecrets(settings);
             UnprotectSensitive(settings);
 
+            var migrated = false;
             if (settings.StorageVersion < 2 || hadLegacyPlaintext)
             {
                 settings.StorageVersion = 2;
-                await WriteUnlockedAsync(settings, cancellationToken).ConfigureAwait(false);
+                migrated = true;
             }
+
+            // v2.6.2.20 defaulted Chromium assist off and broke Play/Translate (2.3.1 regression).
+            // Force assist on once when upgrading past storage v2.
+            if (settings.StorageVersion < 3)
+            {
+                settings.ChromiumHttpProxyAssist = true;
+                settings.StorageVersion = 3;
+                migrated = true;
+            }
+
+            if (migrated)
+                await WriteUnlockedAsync(settings, cancellationToken).ConfigureAwait(false);
 
             return settings;
         }
@@ -61,7 +74,8 @@ public sealed class SettingsStore
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            settings.StorageVersion = 2;
+            if (settings.StorageVersion < 3)
+                settings.StorageVersion = 3;
             await WriteUnlockedAsync(settings, cancellationToken).ConfigureAwait(false);
         }
         finally

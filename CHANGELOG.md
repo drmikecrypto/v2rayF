@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.2.21] - 2026-09-11
+
+### Fixed
+
+- Play Store / Google Translate broken after 2.6.2.20 — Chromium HTTP proxy assist is **on by default** again (v2.6.2.19 / 2.3.2 path)
+- One-time settings migration forces assist on for upgrades that saved assist off from 2.6.2.20
+
+### Changed
+
+- Iran / China / Sentinel profiles set Chromium HTTP proxy assist on
+- Assist toggle remains for game experiments; off still breaks Play (documented)
+
 ## [2.6.2.20] - 2026-09-10
 
 ### Fixed

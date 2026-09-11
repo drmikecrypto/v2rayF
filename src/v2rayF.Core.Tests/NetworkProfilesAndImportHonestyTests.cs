@@ -15,6 +15,7 @@ public class NetworkProfilesAndImportHonestyTests
         Assert.True(s.BlockIpv6);
         Assert.True(s.KillSwitchEnabled);
         Assert.True(s.EnableTunMode);
+        Assert.True(s.ChromiumHttpProxyAssist);
     }
 
     [Fact]
@@ -25,6 +26,7 @@ public class NetworkProfilesAndImportHonestyTests
         Assert.Equal(RoutingMode.BypassChina, s.RoutingMode);
         Assert.True(s.DnsThroughProxy);
         Assert.True(s.BlockIpv6);
+        Assert.True(s.ChromiumHttpProxyAssist);
     }
 
     [Fact]

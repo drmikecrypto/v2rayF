@@ -129,7 +129,7 @@ public class V2rayVpnService : VpnService
 
             var blockIpv6 = intent?.GetBooleanExtra(ExtraBlockIpv6, true) ?? true;
             var chromiumHttpProxyAssist =
-                intent?.GetBooleanExtra(ExtraChromiumHttpProxyAssist, false) ?? false;
+                intent?.GetBooleanExtra(ExtraChromiumHttpProxyAssist, true) ?? true;
             var bypass = intent?.GetStringArrayListExtra(ExtraBypassPackages);
 
             var builder = new Builder(this);
@@ -140,8 +140,8 @@ public class V2rayVpnService : VpnService
             // Tunnel DNS so Xray UseIPv4 applies (WhatsApp / other raw-socket apps).
             builder.AddDnsServer("172.19.0.1");
 
-            // Optional Chromium assist (Play/Translate). Default off — Unity/games stay on raw TUN
-            // (V2Box-shaped); MQTT exclusions only matter when CONNECT is enabled.
+            // Chromium assist (default on): Play/Translate via HTTP CONNECT 10809.
+            // MQTT exclusions keep Instagram Direct on TUN when CONNECT is enabled.
             if (chromiumHttpProxyAssist && Build.VERSION.SdkInt >= BuildVersionCodes.Q)
             {
                 try

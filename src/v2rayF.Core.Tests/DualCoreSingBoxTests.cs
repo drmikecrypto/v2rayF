@@ -446,17 +446,47 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
-    public void AndroidTunFd_DefaultOmitsGoogleUdp443Block()
+    public void AndroidTunFd_DefaultBlocksGoogleUdp443ForTranslateTcpFallback()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        Assert.True(new AppSettings().ChromiumHttpProxyAssist);
         var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(server, new AppSettings(), tunFd: 3))!
+            ["route"]!["rules"]!.AsArray();
+
+        var block = Assert.Single(rules, r =>
+            r?["network"]?.GetValue<string>() == "udp" &&
+            r["port"]?.GetValue<int>() == 443 &&
+            r["outbound"]?.GetValue<string>() == "block");
+        var suffixes = block!["domain_suffix"]!.AsArray().Select(s => s!.GetValue<string>()).ToHashSet();
+        Assert.Contains("play.google.com", suffixes);
+        Assert.Contains("gstatic.com", suffixes);
+        Assert.DoesNotContain("google.com", suffixes);
+        Assert.DoesNotContain("googleapis.com", suffixes);
+        Assert.DoesNotContain("android.com", suffixes);
+
+        // Desktop auto_route must not get Google UDP block (Android VpnService HTTP proxy path only).
+        var desktopRules = JsonNode.Parse(SingBoxConfigBuilder.Build(
+            server,
+            new AppSettings { EnableTunMode = true },
+            tunFd: null))!["route"]!["rules"]!.AsArray();
+        Assert.DoesNotContain(desktopRules, r =>
+            r?["network"]?.GetValue<string>() == "udp" &&
+            r["port"]?.GetValue<int>() == 443 &&
+            r["outbound"]?.GetValue<string>() == "block");
+    }
+
+    [Fact]
+    public void AndroidTunFd_AssistOffOmitsGoogleUdp443Block()
+    {
+        var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
+        var rules = JsonNode.Parse(SingBoxConfigBuilder.Build(
+                server, new AppSettings { ChromiumHttpProxyAssist = false }, tunFd: 3))!
             ["route"]!["rules"]!.AsArray();
 
         Assert.DoesNotContain(rules, r =>
             r?["network"]?.GetValue<string>() == "udp" &&
             r["port"]?.GetValue<int>() == 443 &&
             r["outbound"]?.GetValue<string>() == "block");
-        Assert.False(new AppSettings().ChromiumHttpProxyAssist);
     }
 
     [Fact]

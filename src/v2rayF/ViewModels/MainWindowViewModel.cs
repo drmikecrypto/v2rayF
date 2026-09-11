@@ -97,7 +97,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _blockIpv6 = true;
 
     [ObservableProperty]
-    private bool _chromiumHttpProxyAssist;
+    private bool _chromiumHttpProxyAssist = true;
 
     [ObservableProperty]
     private bool _dnsThroughProxy = true;

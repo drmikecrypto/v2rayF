@@ -20,6 +20,7 @@ public static class NetworkProfiles
         settings.KillSwitchEnabled = true;
         settings.EnableTunMode = true;
         settings.EnableSystemProxy = false;
+        settings.ChromiumHttpProxyAssist = true;
     }
 
     /// <summary>CN sites/IPs direct via sing-box/Xray geosite; rest proxied.</summary>
@@ -32,6 +33,7 @@ public static class NetworkProfiles
         settings.KillSwitchEnabled = true;
         settings.EnableTunMode = true;
         settings.EnableSystemProxy = false;
+        settings.ChromiumHttpProxyAssist = true;
     }
 
     /// <summary>Legacy Sentinel = Global fail-closed (same lean posture as Iran).</summary>
