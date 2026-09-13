@@ -2393,8 +2393,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await ResumeOnUiAsync().ConfigureAwait(true);
 
-        // Start core first; arm kill switch only with TUN (system-proxy mode must not blackhole apps).
-        await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Start core first; arm kill switch only with TUN (system-proxy mode must not blackhole apps).
+            await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (
+            settings.EnableTunMode && ProxyCoreService.IsTunPathNoInternetFailure(ex))
+        {
+            // Desktop cannot rebind VpnService fd — tear KS/TUN rather than stay Connected blackholed.
+            await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+            throw;
+        }
+
         await ResumeOnUiAsync().ConfigureAwait(true);
 
         if (settings.KillSwitchEnabled && settings.EnableTunMode)
@@ -2464,7 +2476,44 @@ public partial class MainWindowViewModel : ViewModelBase
         await SetOnUiAsync(() =>
             StatusText = $"Starting proxy for {StatusSanitizer.Scrub(server.Name)}…").ConfigureAwait(true);
 
-        await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ProxyCoreService.IsTunPathNoInternetFailure(ex))
+        {
+            // One force-rebind: SOCKS was OK but TUN dead — avoid permanent VpnService blackhole.
+            await SetOnUiAsync(() => StatusText = "TUN weak — rebinding VPN…").ConfigureAwait(true);
+            _proxyCore.ClearActiveTunFd();
+            var rebuilt = await AppServices.Platform.EstablishVpnAsync(
+                    bypass,
+                    settings.BlockIpv6,
+                    cancellationToken,
+                    forceRebind: true,
+                    chromiumHttpProxyAssist: settings.ChromiumHttpProxyAssist)
+                .ConfigureAwait(false);
+            await ResumeOnUiAsync().ConfigureAwait(true);
+            if (rebuilt is null)
+            {
+                await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+                throw new InvalidOperationException(ProxyCoreService.TunPathNoInternetMessage);
+            }
+
+            tunFd = rebuilt;
+            _lastTunRebindUtc = DateTimeOffset.UtcNow;
+            try
+            {
+                await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                await SafeTeardownAsync(releaseKillSwitch: true).ConfigureAwait(false);
+                throw;
+            }
+        }
+
         await ResumeOnUiAsync().ConfigureAwait(true);
         await AppServices.Platform.NotifyVpnReadyAsync(cancellationToken).ConfigureAwait(false);
 

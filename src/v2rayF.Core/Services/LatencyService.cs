@@ -44,6 +44,8 @@ public sealed class LatencyService
     public const int ConnectHealthTimedProbeCount = 1;
     /// <summary>TUN default-route probe budget (app traffic path, not localhost SOCKS).</summary>
     public const int TunAppPathProbeMs = 8000;
+    /// <summary>TUN probe after SOCKS warmup on Vision/REALITY (cold dial).</summary>
+    public const int TunAppPathProbeVisionMs = 12000;
     public const int DesktopSpeedtestWorkers = 3;
     public const int MobileSpeedtestWorkers = 2;
 
@@ -69,6 +71,9 @@ public sealed class LatencyService
 
     public static int GetConnectHealthProbeMs(ProxyServer server) =>
         IsVisionOrReality(server) ? ConnectHealthProbeVisionMs : ConnectHealthProbeMs;
+
+    public static int GetTunAppPathProbeMs(ProxyServer server) =>
+        IsVisionOrReality(server) ? TunAppPathProbeVisionMs : TunAppPathProbeMs;
 
     public static int GetRankProbeTimeoutMs(ProxyServer server)
     {

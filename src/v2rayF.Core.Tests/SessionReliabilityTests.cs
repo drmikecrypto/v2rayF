@@ -55,9 +55,20 @@ public class SessionReliabilityTests
         useSingBox && tunFd is int fd && fd >= 0;
 
     [Fact]
-    public void TunAppPathProbe_ConstantDefined()
+    public void TunAppPathProbe_BudgetsIncludeVision()
     {
         Assert.Equal(8000, LatencyService.TunAppPathProbeMs);
+        Assert.Equal(12000, LatencyService.TunAppPathProbeVisionMs);
+        var vision = new ProxyServer
+        {
+            Protocol = ProxyProtocol.VLESS,
+            Security = "reality",
+            Flow = "xtls-rprx-vision",
+            PublicKey = "pk"
+        };
+        Assert.Equal(12000, LatencyService.GetTunAppPathProbeMs(vision));
+        Assert.Equal(8000, LatencyService.GetTunAppPathProbeMs(
+            new ProxyServer { Address = "1.1.1.1", Port = 443, Protocol = ProxyProtocol.VLESS }));
         Assert.Equal(90, ProxyCoreService.ActivePathHealthIntervalMs / 1000);
         Assert.Equal(6, ProxyCoreService.TunOnlyFailThreshold);
         Assert.Equal(3, ProxyCoreService.LocalhostHealthyResetThreshold);
@@ -75,22 +86,36 @@ public class SessionReliabilityTests
     }
 
     [Fact]
-    public void ConnectGate_IgnoresHttpAndTunOnlyFailure()
+    public void ConnectGate_SocksMsStillIgnoresHttpMiss()
     {
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, 40, httpRequired: true));
         Assert.Null(ProxyCoreService.EvaluateConnectGateMs(null, 40, httpRequired: true));
         Assert.Equal(-1, ProxyCoreService.EvaluateConnectGateMs(-1, 40, httpRequired: true));
-        // HTTP 10809 advisory — SOCKS OK keeps Connect green (v2.6.2.18).
+        // HTTP 10809 advisory — SOCKS OK keeps ConnectGateMs green (v2.6.2.18).
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, -1, httpRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(50, null, httpRequired: false));
 
-        // TUN remains advisory at Connect — SOCKS green even when TUN probe fails.
+        // EvaluateConnectGateMs remains SOCKS-only; fail-closed is ShouldFailClosedOnWeakTun.
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, -1, httpRequired: true, tunRequired: true));
         Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
             50, 40, 60, httpRequired: true, tunRequired: true));
-        Assert.Equal(50, ProxyCoreService.EvaluateConnectGateMs(
-            50, -1, -1, httpRequired: true, tunRequired: true));
+    }
+
+    [Fact]
+    public void FailClosed_WhenTunWeakAfterSocksOk()
+    {
+        Assert.True(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunOk: false, tunRequired: true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunOk: true, tunRequired: true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunOk: false, tunRequired: false));
+        Assert.Equal(
+            ProxyCoreService.TunPathNoInternetMessage,
+            ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: false, tunRequired: true));
+        Assert.True(ProxyCoreService.IsTunPathNoInternetFailure(
+            new InvalidOperationException(ProxyCoreService.TunPathNoInternetMessage)));
     }
 
     [Fact]
@@ -137,15 +162,11 @@ public class SessionReliabilityTests
         Assert.Contains(
             "SOCKS 10808",
             ProxyCoreService.DescribeConnectGateFailure(-1, 10, 10, httpRequired: true, tunRequired: true));
-        // HTTP miss is advisory — Describe only names SOCKS/TUN hard fails.
         Assert.DoesNotContain(
             "HTTP proxy 10809",
             ProxyCoreService.DescribeConnectGateFailure(10, -1, 10, httpRequired: true, tunRequired: true));
-        Assert.Contains(
-            "TUN app-path",
-            ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: true, tunRequired: true));
-        Assert.DoesNotContain(
-            "HTTP proxy 10809",
+        Assert.Equal(
+            ProxyCoreService.TunPathNoInternetMessage,
             ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: true, tunRequired: true));
     }
 

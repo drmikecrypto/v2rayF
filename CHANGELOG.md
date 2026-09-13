@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.1] - 2026-09-13
+
+### Fixed
+
+- Connected with no system internet: fail-closed when TUN app-path is dead after SOCKS OK (VpnService blackhole). Android force-rebinds VPN once, then tears down instead of staying Connected.
+- `VerifyLivePath` requires TUN OK when TUN is active (soft recovery no longer “succeeds” on localhost SOCKS alone).
+
+### Changed
+
+- Connect critical path skips advisory HTTP 10809 probe; core ready waits on SOCKS accept only (faster Connect).
+- Vision/REALITY TUN probe budget 12s after SOCKS warmup.
+
 ## [2.6.3.0] - 2026-09-13
 
 ### Added

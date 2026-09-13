@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <ApplicationId>com.drmikecrypto.v2rayf</ApplicationId>
     <!-- versionCode = major*10000 + minor*100 + patch*10 + revision (four-part semver) -->
-    <ApplicationVersion>20630</ApplicationVersion>
+    <ApplicationVersion>20631</ApplicationVersion>
     <ApplicationDisplayVersion>$(V2rayFVersion)</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
     <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>

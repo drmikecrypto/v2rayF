@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.0** Daily/Gaming modes + path diagnostics + D12 honesty).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.1** TUN fail-closed / no Connected blackhole).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -17,9 +17,10 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 Connect may show Connected when:
 
 1. Core process is alive, and
-2. Local SOCKS probe passes.
+2. Local SOCKS probe passes, and
+3. When TUN/VPN is active: TUN app-path probe passes (gen204/FCM via VpnService Network).
 
-On Android sing-box TUN: HTTP proxy `10809` and TUN gen204/FCM are **advisory** at Connect (soft retry / status tip if weak). Hard-requiring HTTP or TUN at Connect caused false timeouts on cold REALITY/Vision (HTTP: v2.6.2.17→18; TUN: v2.6.2.14→15).
+If SOCKS works but TUN fails after one VPN rebind, Connect **fails** and tears down VPN (v2.6.3.1) — never leave the device blackholed. Android HTTP proxy `10809` remains advisory (status tip when weak).
 
 ## Golden app matrix
 

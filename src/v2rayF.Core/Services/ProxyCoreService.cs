@@ -135,6 +135,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
             ResetPathHealthState();
     }
 
+    /// <summary>
+    /// Fail-closed when VpnService/WinTun holds the default route but TUN cannot carry traffic.
+    /// Leaving Connected in that state blackholes the whole device while localhost SOCKS still works.
+    /// </summary>
+    public const string TunPathNoInternetMessage =
+        "TUN path failed — system traffic has no internet";
+
     /// <summary>True when consecutive SOCKS probe misses should declare the tunnel dead.</summary>
     public static bool ShouldRaiseOnSocksFails(int consecutiveFails) =>
         consecutiveFails >= HealthSocksFailThreshold;
@@ -176,7 +183,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         PathHealthOk?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS+HTTP; TUN advisory).</summary>
+    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS + TUN when required).</summary>
     public async Task<bool> VerifyLivePathAsync(CancellationToken cancellationToken = default)
     {
         if (ActiveServer is null || !IsRunning)
@@ -189,17 +196,30 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 _activeTunFd,
                 budget,
                 enableTunMode: null,
-                cancellationToken)
+                cancellationToken,
+                probeHttp: false)
             .ConfigureAwait(false);
 
-        if (result.ConnectGateMs is >= 0)
+        // SOCKS-only success with a dead TUN keeps VpnService blackhole up — require TunOk.
+        if (result.SocksOk && result.TunOk)
         {
+            LastConnectHttpWeak = false;
+            LastConnectTunWeak = false;
             ResetPathHealthState();
             return true;
         }
 
+        LastConnectTunWeak = IsTunOnlyAdvisory(result.LocalhostOk, result.TunOk, result.TunRequired);
         return false;
     }
+
+    /// <summary>True when Connect must tear down rather than stay Connected with a dead TUN.</summary>
+    public static bool ShouldFailClosedOnWeakTun(bool localhostOk, bool tunOk, bool tunRequired) =>
+        IsTunOnlyAdvisory(localhostOk, tunOk, tunRequired);
+
+    public static bool IsTunPathNoInternetFailure(Exception? ex) =>
+        ex is InvalidOperationException ioe &&
+        ioe.Message.Contains(TunPathNoInternetMessage, StringComparison.Ordinal);
 
     public static bool IsTrafficFlat(TrafficStatsHub.LiveTraffic traffic) =>
         traffic.UplinkBps + traffic.DownlinkBps <= 0;
@@ -259,8 +279,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         await WaitForCoreReadyAsync(server, useSingBox, tunFd, readyTimeout.Token).ConfigureAwait(false);
 
-        // Gate Connected on SOCKS. Android HTTP 10809 is advisory (same as TUN) — hard-fail
-        // tore down working tunnels after cold REALITY/Vision (false TIMEOUT vs other clients).
+        // Gate Connected on SOCKS first. HTTP 10809 is advisory (not on critical path).
+        // TUN is fail-closed after SOCKS when VpnService/WinTun holds the default route —
+        // otherwise the device blackholes while localhost probes still look green.
         LastConnectProbeMs = null;
         LastConnectHttpWeak = false;
         LastConnectTunWeak = false;
@@ -308,6 +329,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
         LastConnectHttpWeak = IsHttpOnlyAdvisory(gateResult);
         LastConnectTunWeak = IsTunOnlyAdvisory(
             gateResult.LocalhostOk, gateResult.TunOk, gateResult.TunRequired);
+
+        if (ShouldFailClosedOnWeakTun(gateResult.LocalhostOk, gateResult.TunOk, gateResult.TunRequired))
+        {
+            await StopAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(TunPathNoInternetMessage);
+        }
 
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -362,7 +389,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         if (!result.SocksOk)
             return "Proxy path failed after connect (SOCKS 10808 probe timed out). The tunnel is not usable.";
         if (result.TunRequired && !result.TunOk)
-            return "Proxy path failed after connect (TUN app-path probe failed (gen204/FCM)).";
+            return TunPathNoInternetMessage;
         return "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.";
     }
 
@@ -403,15 +430,17 @@ public sealed class ProxyCoreService : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var result = await ProbePathComponentsAsync(
-                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken)
+                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken,
+                probeHttp: false)
             .ConfigureAwait(false);
-        if (result.ConnectGateMs is >= 0)
+        if (result.ConnectGateMs is >= 0 && result.TunOk)
             return result;
 
-        // Listen≠path-ready race on cold Reality/Vision.
+        // Listen≠path-ready race on cold Reality/Vision — one short retry after SOCKS warmup.
         await Task.Delay(500, cancellationToken).ConfigureAwait(false);
         return await ProbePathComponentsAsync(
-                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken)
+                server, useSingBox, tunFd, healthBudget: null, enableTunMode, cancellationToken,
+                probeHttp: false)
             .ConfigureAwait(false);
     }
 
@@ -424,7 +453,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var result = await ProbePathComponentsAsync(
-                server, useSingBox, tunFd, healthBudget, enableTunMode, cancellationToken)
+                server, useSingBox, tunFd, healthBudget, enableTunMode, cancellationToken,
+                probeHttp: false)
             .ConfigureAwait(false);
         return result.CombinedMs;
     }
@@ -435,19 +465,21 @@ public sealed class ProxyCoreService : IAsyncDisposable
         int? tunFd,
         int? healthBudget,
         bool? enableTunMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool probeHttp = false)
     {
         var budget = healthBudget ?? LatencyService.GetConnectHealthProbeMs(server);
         using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         probeCts.CancelAfter(budget);
 
-        var httpProbed = RequiresAndroidTunHttpProbe(useSingBox, tunFd);
+        var httpProbed = probeHttp && RequiresAndroidTunHttpProbe(useSingBox, tunFd);
         var tunRequired = RequiresTunAppPath(enableTunMode, tunFd);
         var singleUrl = LatencyService.IsVisionOrReality(server);
+        var tunBudget = LatencyService.GetTunAppPathProbeMs(server);
 
         try
         {
-            // SOCKS first (warmup) so HTTP CONNECT is not racing a cold outbound.
+            // SOCKS first (warmup). HTTP is skipped on Connect critical path (advisory elsewhere).
             // Do not start TUN in parallel — a slow TUN probe must not cancel a healthy SOCKS path.
             var socksMs = await _latency
                 .MeasureConnectHealthViaSocksAsync(
@@ -460,7 +492,6 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 if (socksMs is null or < 0)
                     return new PathProbeResult(socksMs, -1, null, true, tunRequired);
 
-                // Fresh HTTP budget after SOCKS — cold REALITY must not drain shared CTS into 10809 fail.
                 using var httpCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 httpCts.CancelAfter(budget);
                 httpMs = await _latency
@@ -473,16 +504,15 @@ public sealed class ProxyCoreService : IAsyncDisposable
                     .ConfigureAwait(false);
             }
 
-            // TUN advisory after SOCKS OK (HTTP miss must not skip TUN probe).
             int? tunAppMs = null;
             if (tunRequired)
             {
                 if (socksMs is >= 0)
                 {
                     using var tunCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    tunCts.CancelAfter(LatencyService.TunAppPathProbeMs);
+                    tunCts.CancelAfter(tunBudget);
                     tunAppMs = await AppServices.Platform
-                        .ProbeTunAppPathAsync(tunCts.Token, LatencyService.TunAppPathProbeMs)
+                        .ProbeTunAppPathAsync(tunCts.Token, tunBudget)
                         .ConfigureAwait(false);
                 }
                 else
@@ -587,6 +617,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
         LastConnectHttpWeak = IsHttpOnlyAdvisory(probeMs);
         LastConnectTunWeak = IsTunOnlyAdvisory(
             probeMs.LocalhostOk, probeMs.TunOk, probeMs.TunRequired);
+
+        if (ShouldFailClosedOnWeakTun(probeMs.LocalhostOk, probeMs.TunOk, probeMs.TunRequired))
+        {
+            await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException(TunPathNoInternetMessage);
+        }
+
         Interlocked.Exchange(ref _unexpectedHandled, 0);
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -748,7 +785,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
                                     _activeTunFd,
                                     healthBudget: GetPathHealthProbeMs(ActiveServer),
                                     enableTunMode: null,
-                                    cancellationToken)
+                                    cancellationToken,
+                                    probeHttp: true)
                                 .ConfigureAwait(false);
                         }
                         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -760,6 +798,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
                                 _activeUseSingBox && _activeTunFd is >= 0,
                                 RequiresTunAppPath());
                         }
+
+                        if (probeResult.HttpProbed)
+                            LastConnectHttpWeak = IsHttpOnlyAdvisory(probeResult);
 
                         if (!probeResult.LocalhostOk)
                         {
@@ -939,16 +980,11 @@ public sealed class ProxyCoreService : IAsyncDisposable
         int? tunFd,
         CancellationToken cancellationToken)
     {
-        if (!await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
-                .ConfigureAwait(false))
-            return false;
-
-        if (RequiresAndroidTunHttpProbe(useSingBox, tunFd) &&
-            !await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.HttpPort, cancellationToken)
-                .ConfigureAwait(false))
-            return false;
-
-        return true;
+        // SOCKS accept is enough for ready — HTTP 10809 is advisory and must not stall Connect.
+        _ = useSingBox;
+        _ = tunFd;
+        return await IsPortOpenAsync("127.0.0.1", XrayConfigBuilder.SocksPort, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<bool> IsPortOpenAsync(string host, int port, CancellationToken cancellationToken)
