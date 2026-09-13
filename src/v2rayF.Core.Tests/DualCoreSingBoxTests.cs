@@ -350,6 +350,15 @@ public class DualCoreSingBoxTests
     }
 
     [Fact]
+    public void MetaChromiumUdpBlockSuffixes_AreFeedCdnOnly()
+    {
+        Assert.Contains("cdninstagram.com", SingBoxConfigBuilder.MetaChromiumUdpBlockSuffixes);
+        Assert.Contains("fbcdn.net", SingBoxConfigBuilder.MetaChromiumUdpBlockSuffixes);
+        Assert.Contains("instagram.com", SingBoxConfigBuilder.MetaChromiumUdpBlockSuffixes);
+        Assert.DoesNotContain("facebook.com", SingBoxConfigBuilder.MetaChromiumUdpBlockSuffixes);
+    }
+
+    [Fact]
     public void AndroidTunFd_MetaSuffixRoutesViaProxy()
     {
         var server = ShareLinkParser.Parse("vless://aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee@x.com:443?type=tcp#v")!;
@@ -460,6 +469,10 @@ public class DualCoreSingBoxTests
         var suffixes = block!["domain_suffix"]!.AsArray().Select(s => s!.GetValue<string>()).ToHashSet();
         Assert.Contains("play.google.com", suffixes);
         Assert.Contains("gstatic.com", suffixes);
+        Assert.Contains("cdninstagram.com", suffixes);
+        Assert.Contains("fbcdn.net", suffixes);
+        Assert.Contains("instagram.com", suffixes);
+        Assert.DoesNotContain("facebook.com", suffixes);
         Assert.DoesNotContain("google.com", suffixes);
         Assert.DoesNotContain("googleapis.com", suffixes);
         Assert.DoesNotContain("android.com", suffixes);
@@ -504,6 +517,9 @@ public class DualCoreSingBoxTests
         var suffixes = block!["domain_suffix"]!.AsArray().Select(s => s!.GetValue<string>()).ToHashSet();
         Assert.Contains("play.google.com", suffixes);
         Assert.Contains("gstatic.com", suffixes);
+        Assert.Contains("instagram.com", suffixes);
+        Assert.Contains("cdninstagram.com", suffixes);
+        Assert.DoesNotContain("facebook.com", suffixes);
         Assert.DoesNotContain("google.com", suffixes);
         Assert.DoesNotContain("googleapis.com", suffixes);
         Assert.DoesNotContain("android.com", suffixes);

@@ -70,6 +70,17 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
+    /// UDP/443 block for Instagram feed/CDN when HTTP assist is on — force QUIC→TCP→10809.
+    /// Not facebook.com (FBNS/MQTT UDP). MQTT hosts stay CONNECT-excluded → TUN TCP.
+    /// </summary>
+    public static readonly string[] MetaChromiumUdpBlockSuffixes =
+    [
+        "cdninstagram.com",
+        "fbcdn.net",
+        "instagram.com"
+    ];
+
+    /// <summary>
     /// Android VpnService HTTP proxy exclusion list — MQTT/realtime hosts only.
     /// Full Meta suffixes blackholed Instagram on gVisor (pre-2.5.0.2); empty list trapped Direct in CONNECT.
     /// </summary>
@@ -297,16 +308,18 @@ public static class SingBoxConfigBuilder
                     ["outbound"] = "proxy"
                 });
 
-                // Default on: force Chromium Translate/Play off QUIC → TCP → VPN HTTP proxy 10809.
+                // Default on: force Chromium Play/Translate + Instagram feed/CDN off QUIC → TCP → VPN HTTP proxy 10809.
                 // Assist off omits this (games experiment); known Play Store break without CONNECT (2.3.1 / 2.6.2.20).
                 if (settings.ChromiumHttpProxyAssist)
                 {
-                    var googleUdpBlock = new JsonArray();
+                    var assistUdpBlock = new JsonArray();
                     foreach (var suffix in GoogleChromiumUdpBlockSuffixes)
-                        googleUdpBlock.Add(suffix);
+                        assistUdpBlock.Add(suffix);
+                    foreach (var suffix in MetaChromiumUdpBlockSuffixes)
+                        assistUdpBlock.Add(suffix);
                     rules.Add(new JsonObject
                     {
-                        ["domain_suffix"] = googleUdpBlock,
+                        ["domain_suffix"] = assistUdpBlock,
                         ["port"] = 443,
                         ["network"] = "udp",
                         ["outbound"] = "block"

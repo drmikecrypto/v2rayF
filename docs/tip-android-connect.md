@@ -1,11 +1,11 @@
 # Tip: Android Connect troubleshooting
 
-## Current defaults (2.6.3.2+)
+## Current defaults (2.6.3.3+)
 
-- **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`
+- **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`; Meta feed/CDN QUIC shoved to TCP→10809
 - **Gaming mode**: assist **off** — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md))
 - **Sentinel / Iran / China**: leak-oriented presets; assist **on**
-- Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play.
+- Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed.
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
 - Android TUN stack = **gvisor** (do not enable experimental system/mixed without sandbox flags)
 
@@ -13,9 +13,14 @@
 2. Tap **Connect** and allow the **VPN** permission when prompted.
 3. If connect fails with **TUN path failed**, the VPN Network was missing after start — try again or reinstall the release APK. A weak-TUN tip while Connected is advisory (not a hard fail).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
-5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale (manual; Connect no longer auto-tips this).
+5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if Direct feed pull-to-refresh stalls (Connected status tips this once).
 6. Use **Daily** / **Gaming** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
+
+## v2.6.3.3 — Instagram feed stall (send/likes OK)
+
+- Meta feed/CDN UDP/443 block when assist on; MQTT exclusions unchanged
+- Async 10809 advisory tip + one-shot force-stop Instagram tip
 
 ## v2.6.3.2 — Connect false-negative fix
 

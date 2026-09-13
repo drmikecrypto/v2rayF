@@ -46,6 +46,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private int _softRecoveryInFlight;
     private bool _activeUseSingBox;
     private bool _activeEnableTunMode;
+    private bool _activeChromiumHttpProxyAssist;
     private int? _activeTunFd;
     private volatile int _consecutivePathFails;
     private volatile int _consecutiveSocksFails;
@@ -117,6 +118,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     /// <summary>Raised when a soft path probe succeeds (reset AutoReconnect budget after sustained greens).</summary>
     public event EventHandler? PathHealthOk;
+
+    /// <summary>Raised after async post-connect HTTP 10809 advisory probe updates LastConnectHttpWeak.</summary>
+    public event EventHandler? HttpAssistAdvisoryChanged;
 
     /// <summary>Raised when TUN app-path probe fails repeatedly (advisory soft refresh; never hard stop).</summary>
     public event EventHandler? TunPathFailed;
@@ -357,6 +361,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
         _activeEnableTunMode = settings.EnableTunMode;
+        _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
         _activeTunFd = tunFd;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
@@ -367,6 +372,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
+        ScheduleHttpAssistAdvisoryProbe(server);
     }
 
     private readonly record struct PathProbeResult(
@@ -547,6 +553,53 @@ public sealed class ProxyCoreService : IAsyncDisposable
         }
     }
 
+    private void ScheduleHttpAssistAdvisoryProbe(ProxyServer server)
+    {
+        if (!_activeChromiumHttpProxyAssist || !RequiresAndroidTunHttpProbe(_activeUseSingBox, _activeTunFd))
+            return;
+
+        _ = ProbeHttpAssistAdvisoryAsync(server);
+    }
+
+    /// <summary>
+    /// Async post-connect 10809 probe (advisory). Does not fail Connect — surfaces LastConnectHttpWeak
+    /// for Instagram feed/CDN + Play when SetHttpProxy is enabled.
+    /// </summary>
+    public async Task ProbeHttpAssistAdvisoryAsync(ProxyServer? server = null, CancellationToken cancellationToken = default)
+    {
+        server ??= ActiveServer;
+        if (server is null || !IsRunning)
+            return;
+        if (!_activeChromiumHttpProxyAssist || !RequiresAndroidTunHttpProbe(_activeUseSingBox, _activeTunFd))
+            return;
+
+        try
+        {
+            var budget = LatencyService.GetConnectHealthProbeMs(server);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(budget);
+            var httpMs = await _latency
+                .MeasureConnectHealthViaHttpAsync(
+                    XrayConfigBuilder.HttpPort,
+                    cts.Token,
+                    budget,
+                    warmThenMeasure: true,
+                    singlePingUrl: LatencyService.IsVisionOrReality(server))
+                .ConfigureAwait(false);
+            LastConnectHttpWeak = httpMs is null or < 0;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            LastConnectHttpWeak = true;
+        }
+        catch
+        {
+            LastConnectHttpWeak = true;
+        }
+
+        HttpAssistAdvisoryChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private bool RequiresTunAppPath(bool? enableTunMode = null, int? tunFd = null) =>
         (enableTunMode ?? _activeEnableTunMode) ||
         (tunFd ?? _activeTunFd) is int fd && fd >= 0;
@@ -646,6 +699,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
         _activeEnableTunMode = settings.EnableTunMode;
+        _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
         _activeTunFd = tunFd;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
@@ -656,6 +710,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
+        ScheduleHttpAssistAdvisoryProbe(server);
     }
 
     private static AppSettings CloneSettingsWithDoH(AppSettings settings)
@@ -712,6 +767,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         ActiveServer = null;
         _activeTunFd = null;
         _activeEnableTunMode = false;
+        _activeChromiumHttpProxyAssist = false;
         RunningStateChanged?.Invoke(this, false);
     }
 

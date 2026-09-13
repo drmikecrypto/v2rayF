@@ -41,6 +41,8 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>0=none, 1=Resume, 2=TunFail (TunFail wins if both queued).</summary>
     private int _pendingSoftRecovery;
     private int _consecutiveSoftRecoveryWeak;
+    /// <summary>One-shot Connected tip: force-stop Instagram after TUN establish/rebind.</summary>
+    private bool _instagramForceStopTipPending;
 
     public bool IsMobile => AppServices.Platform?.IsMobile ?? false;
 
@@ -398,6 +400,7 @@ public partial class MainWindowViewModel : ViewModelBase
         };
 
         _proxyCore.TunPathFailed += (_, _) => _ = OnTunPathFailedRecoveryAsync();
+        _proxyCore.HttpAssistAdvisoryChanged += (_, _) => _ = OnHttpAssistAdvisoryChangedAsync();
 
         if (IsMobile)
             AppServices.EmergencyDisconnectAsync = EmergencyDisconnectAsync;
@@ -668,6 +671,8 @@ public partial class MainWindowViewModel : ViewModelBase
                         // Best-effort.
                     }
 
+                    if (IsMobile)
+                        _instagramForceStopTipPending = true;
                     await SetOnUiAsync(() =>
                     {
                         StatusText = FormatConnectedStatus(server, IsMobile ? "VPN" : "session");
@@ -1331,13 +1336,31 @@ public partial class MainWindowViewModel : ViewModelBase
         var multi = multipathSuffix ?? "";
         var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({modeLabel}{multi})";
         if (_proxyCore.LastConnectHttpWeak)
-            status += " · HTTP assist weak (Play Store/Translate may need reconnect)";
+            status += " · HTTP assist weak (Instagram feed/CDN + Play may need reconnect)";
         if (_proxyCore.LastConnectTunWeak)
             status += " · TUN weak (messengers may need force-stop)";
+        if (_instagramForceStopTipPending)
+        {
+            status += " · force-stop Instagram once if Direct feed stuck";
+            _instagramForceStopTipPending = false;
+        }
         var httpWarn = AppServices.Platform.LastHttpProxyWarning;
         if (!string.IsNullOrWhiteSpace(httpWarn))
             status += $" · {StatusSanitizer.Scrub(httpWarn)}";
         return status;
+    }
+
+    private async Task OnHttpAssistAdvisoryChangedAsync()
+    {
+        if (ConnectionState != ConnectionState.Connected || SelectedServer is null)
+            return;
+
+        var server = SelectedServer;
+        await SetOnUiAsync(() =>
+        {
+            StatusText = FormatConnectedStatus(server, IsMobile ? "VPN" : "session");
+            RefreshPathTruth();
+        }).ConfigureAwait(true);
     }
 
     private void UpdateSecureShareEndpoint()
@@ -2549,6 +2572,7 @@ public partial class MainWindowViewModel : ViewModelBase
         await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
+        _instagramForceStopTipPending = true;
         var status = FormatConnectedStatus(server, "VPN", multi);
 
         await SetOnUiAsync(() =>

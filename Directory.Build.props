@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Single source of truth for product version (D22). Android versionCode =
          major*10000 + minor*100 + patch*10 + revision via package-android-release.ps1 -->
-    <V2rayFVersion>2.6.3.2</V2rayFVersion>
+    <V2rayFVersion>2.6.3.3</V2rayFVersion>
     <Version>$(V2rayFVersion)</Version>
     <FileVersion>$(V2rayFVersion)</FileVersion>
     <InformationalVersion>$(V2rayFVersion)</InformationalVersion>

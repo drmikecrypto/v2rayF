@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.3] - 2026-09-14
+
+### Fixed
+
+- Instagram Direct: send/likes OK but pull-to-refresh stalled — when Chromium HTTP assist is on, block Meta feed/CDN UDP/443 (`instagram.com`, `cdninstagram.com`, `fbcdn.net`) so QUIC falls back to TCP → `10809` (same pattern as Play/Translate). MQTT exclusions unchanged.
+- Async post-connect `10809` advisory probe restores Connected tip when HTTP assist is weak (Instagram feed/CDN + Play).
+- One-shot Connected tip to force-stop Instagram after Android Connect / TUN rebind.
+
+### Changed
+
+- Product version **2.6.3.3** (Android versionCode 20633)
+
 ## [2.6.3.2] - 2026-09-13
 
 ### Fixed
