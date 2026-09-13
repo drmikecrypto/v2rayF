@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.0] - 2026-09-13
+
+### Added
+
+- Android **Daily** / **Gaming** network modes (assist on/off with explicit tips); Sentinel/Iran/China keep assist on
+- Optional **Show path diagnostics while Connected** (default off) — TUN / HTTP assist / App Network Direct
+- Dual-core Connect/Test All regression tests (D13 footgun guard) + experimental Android TUN stack gate (gvisor default)
+- Private game vs V2Box scorecard template: `docs/tips/game-v2box-scorecard.md`
+- `Directory.Build.props` single version; `scripts/clean-artifacts.ps1`
+
+### Fixed
+
+- D12: Connected status always surfaces weak HTTP/TUN and OEM `SetHttpProxy` failure (not one-shot)
+- D15: StatusSanitizer redacts hy2/tuic/anytls/wg/wireguard links and collapses logcat dumps
+- D16/D17/D20/D21: tip threshold docs, renamed defaults test, SECURITY 2.6.x, refreshed `llms.txt`
+
+### Changed
+
+- Product version **2.6.3.0** (Android versionCode 20630)
+
 ## [2.6.2.21] - 2026-09-11
 
 ### Fixed

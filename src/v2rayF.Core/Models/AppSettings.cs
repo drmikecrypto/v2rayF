@@ -42,8 +42,26 @@ public sealed class AppSettings
     /// <summary>
     /// Android: VpnService SetHttpProxy(10809) + Google UDP/443 block for Chromium Play/Translate.
     /// Default on (v2.6.2.19 / 2.3.2 path). Off may help some Unity games but breaks Play Store.
+    /// Prefer Daily / Gaming / Sentinel presets over flipping this alone.
     /// </summary>
     public bool ChromiumHttpProxyAssist { get; set; } = true;
+
+    /// <summary>
+    /// When true, show TUN / HTTP assist / App Network Direct counts under Connected status.
+    /// Default off — Connected chrome stays clean (v2.6.2.20+).
+    /// </summary>
+    public bool ShowPathTruthDiagnostics { get; set; }
+
+    /// <summary>
+    /// Sideload-only / lab: Android TUN stack override. Empty = gvisor (shipping default).
+    /// "system" / "mixed" blackholed VpnService in 2.4.1 — requires AllowExperimentalAndroidTunStack.
+    /// </summary>
+    public string ExperimentalAndroidTunStack { get; set; } = "";
+
+    /// <summary>
+    /// Gate for ExperimentalAndroidTunStack. Default false — never retry system/mixed without explicit opt-in.
+    /// </summary>
+    public bool AllowExperimentalAndroidTunStack { get; set; }
 
     public bool DnsThroughProxy { get; set; } = true;
 

@@ -14,11 +14,14 @@ $Project = Join-Path $Root "src\v2rayF.Android\v2rayF.Android.csproj"
 $Dist = Join-Path $Root "dist"
 $PublishDir = Join-Path $Dist "v2rayF-android-arm64\publish"
 
-function Get-ProjectVersion([string]$csproj) {
-    [xml]$xml = Get-Content -LiteralPath $csproj
-    $ver = $xml.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-    if (-not $ver) { throw "Version not found in $csproj" }
-    return [string]$ver
+function Get-ProjectVersion([string]$unused = "") {
+    $propsPath = Join-Path $Root "Directory.Build.props"
+    if (-not (Test-Path -LiteralPath $propsPath)) { throw "Directory.Build.props not found" }
+    $raw = Get-Content -LiteralPath $propsPath -Raw
+    if ($raw -notmatch '<V2rayFVersion>([^<]+)</V2rayFVersion>') {
+        throw "V2rayFVersion not found in Directory.Build.props"
+    }
+    return [string]$Matches[1]
 }
 
 function Get-VersionCode([string]$semver) {

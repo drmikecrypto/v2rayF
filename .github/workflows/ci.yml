@@ -25,6 +25,17 @@ jobs:
       - name: Test core
         run: dotnet test src/v2rayF.Core.Tests/v2rayF.Core.Tests.csproj -c Release --no-restore --verbosity normal
 
+      - name: Assert single product version (D22)
+        shell: pwsh
+        run: |
+          $props = Get-Content Directory.Build.props -Raw
+          if ($props -notmatch '<V2rayFVersion>([^<]+)</V2rayFVersion>') { throw 'V2rayFVersion missing' }
+          $ver = $Matches[1]
+          $hits = Get-ChildItem -Path src -Recurse -Filter *.csproj |
+            Select-String -Pattern '<Version>' -SimpleMatch
+          if ($hits) { throw "csproj still sets <Version>: $($hits.Path -join ', ')" }
+          Write-Host "Version OK: $ver"
+
   build-android:
     runs-on: ubuntu-latest
     steps:

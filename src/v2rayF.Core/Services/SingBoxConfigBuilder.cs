@@ -145,7 +145,8 @@ public static class SingBoxConfigBuilder
                 ["auto_route"] = false,
                 ["strict_route"] = false,
                 // Full gVisor: VpnService inherited fd — system/mixed drops TUN traffic (v2.4.1 regression).
-                ["stack"] = "gvisor",
+                // Experimental stacks only when AllowExperimentalAndroidTunStack is explicitly on.
+                ["stack"] = ResolveAndroidTunStack(settings),
                 ["sniff"] = true,
                 // Real DNS (2.6.2.8+): do not rewrite dial targets from sniffed SNI (stiffens Reality/Vision TLS).
                 ["sniff_override_destination"] = false,
@@ -186,6 +187,20 @@ public static class SingBoxConfigBuilder
         };
 
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Shipping Android TUN is always gvisor. system/mixed only when both experimental
+    /// flags are set (2.4.1 blackholed VpnService — lab/sideload only).
+    /// </summary>
+    public static string ResolveAndroidTunStack(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!settings.AllowExperimentalAndroidTunStack)
+            return "gvisor";
+
+        var stack = (settings.ExperimentalAndroidTunStack ?? "").Trim().ToLowerInvariant();
+        return stack is "system" or "mixed" ? stack : "gvisor";
     }
 
     /// <summary>

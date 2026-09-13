@@ -70,6 +70,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
     /// <summary>True when Connect/rank left SOCKS green but Android HTTP 10809 was weak (advisory).</summary>
     public bool LastConnectHttpWeak { get; private set; }
 
+    /// <summary>True when Connect left SOCKS green but TUN app-path was weak (advisory).</summary>
+    public bool LastConnectTunWeak { get; private set; }
+
     public bool IsRunning => ProcessHost.IsRunning;
 
     public ProxyServer? ActiveServer { get; private set; }
@@ -260,6 +263,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         // tore down working tunnels after cold REALITY/Vision (false TIMEOUT vs other clients).
         LastConnectProbeMs = null;
         LastConnectHttpWeak = false;
+        LastConnectTunWeak = false;
         var gateResult = await ProbeConnectGateWithRetryAsync(
                 server, useSingBox, tunFd, settings.EnableTunMode, cancellationToken)
             .ConfigureAwait(false);
@@ -302,6 +306,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         LastConnectProbeMs = probeMs;
         LastConnectHttpWeak = IsHttpOnlyAdvisory(gateResult);
+        LastConnectTunWeak = IsTunOnlyAdvisory(
+            gateResult.LocalhostOk, gateResult.TunOk, gateResult.TunRequired);
 
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -579,6 +585,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         LastConnectProbeMs = gateMs;
         LastConnectHttpWeak = IsHttpOnlyAdvisory(probeMs);
+        LastConnectTunWeak = IsTunOnlyAdvisory(
+            probeMs.LocalhostOk, probeMs.TunOk, probeMs.TunRequired);
         Interlocked.Exchange(ref _unexpectedHandled, 0);
         ActiveServer = server;
         _activeUseSingBox = useSingBox;
@@ -614,6 +622,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
             KillSwitchEnabled = settings.KillSwitchEnabled,
             BlockIpv6 = settings.BlockIpv6,
             ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist,
+            ShowPathTruthDiagnostics = settings.ShowPathTruthDiagnostics,
+            ExperimentalAndroidTunStack = settings.ExperimentalAndroidTunStack,
+            AllowExperimentalAndroidTunStack = settings.AllowExperimentalAndroidTunStack,
             DnsThroughProxy = true,
             SecureShareEnabled = settings.SecureShareEnabled,
             ShareBindPort = settings.ShareBindPort,
@@ -640,6 +651,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         StopHealthMonitor();
         LastConnectProbeMs = null;
         LastConnectHttpWeak = false;
+        LastConnectTunWeak = false;
         Interlocked.Exchange(ref _softRecoveryInFlight, 0);
         await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
         ActiveServer = null;

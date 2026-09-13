@@ -19,6 +19,25 @@ public class NetworkProfilesAndImportHonestyTests
     }
 
     [Fact]
+    public void DailyMode_EnablesAssistWithoutForcingGlobal()
+    {
+        var s = new AppSettings { RoutingMode = RoutingMode.BypassLan, ChromiumHttpProxyAssist = false };
+        NetworkProfiles.ApplyDaily(s);
+        Assert.Equal(RoutingMode.BypassLan, s.RoutingMode);
+        Assert.True(s.ChromiumHttpProxyAssist);
+        Assert.True(s.EnableTunMode);
+    }
+
+    [Fact]
+    public void GamingMode_DisablesAssist()
+    {
+        var s = new AppSettings();
+        NetworkProfiles.ApplyGaming(s);
+        Assert.False(s.ChromiumHttpProxyAssist);
+        Assert.True(s.EnableTunMode);
+    }
+
+    [Fact]
     public void ChinaProfile_UsesBypassChina()
     {
         var s = new AppSettings();

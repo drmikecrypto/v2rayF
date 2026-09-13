@@ -19,7 +19,7 @@
 
 ## v2.6.2.1 — VPN-bound probe + messenger push parity
 
-**2.6.2.1** probes health through the system TUN route (not clearnet on desktop). Desktop push routing adds Signal, Slack, and Apple push suffixes. Tun-only failures need two consecutive misses before auto-recovery (fewer false reconnects).
+**2.6.2.1** probes health through the system TUN route (not clearnet on desktop). Desktop push routing adds Signal, Slack, and Apple push suffixes. Tun-only soft recovery uses **`TunOnlyFailThreshold = 6`** consecutive misses (code constant; raised from 2 → 4 → 6 across 2.6.2.x).
 
 ## v2.6.2.0 — push notifications + messenger toasts
 

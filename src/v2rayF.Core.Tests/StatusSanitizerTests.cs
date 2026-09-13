@@ -14,4 +14,24 @@ public class StatusSanitizerTests
         Assert.Contains("vless://[redacted]", scrubbed);
         Assert.DoesNotContain("abc@host", scrubbed);
     }
+
+    [Fact]
+    public void Scrub_RedactsModernSchemes()
+    {
+        foreach (var scheme in new[] { "hy2", "tuic", "anytls", "wg", "wireguard" })
+        {
+            var scrubbed = StatusSanitizer.Scrub($"{scheme}://secret@host:443#n");
+            Assert.Contains($"{scheme}://[redacted]", scrubbed, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("secret@", scrubbed);
+        }
+    }
+
+    [Fact]
+    public void Scrub_CollapsesLogcatDumps()
+    {
+        var dump = "error\n--------- beginning of main\n09-13 12:00:00.000  1234/v2rayF  E  leak\nmore";
+        var scrubbed = StatusSanitizer.Scrub(dump);
+        Assert.Contains("[logcat]", scrubbed);
+        Assert.DoesNotContain("beginning of main", scrubbed);
+    }
 }

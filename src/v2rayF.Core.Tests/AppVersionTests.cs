@@ -32,4 +32,14 @@ public class AppVersionTests
     {
         Assert.Equal("1.4.3", AppVersion.Normalize("v1.4.3-beta+git"));
     }
+
+    [Fact]
+    public void ProductVersion_FromDirectoryBuildProps_IsFourPart()
+    {
+        // Assembly informational version comes from Directory.Build.props (D22).
+        var ver = typeof(AppVersion).Assembly.GetName().Version;
+        Assert.NotNull(ver);
+        Assert.True(ver!.Major >= 2);
+        Assert.True(ver.Minor >= 6);
+    }
 }

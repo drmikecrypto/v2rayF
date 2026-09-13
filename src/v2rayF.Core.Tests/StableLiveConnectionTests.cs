@@ -56,7 +56,7 @@ public class StableLiveConnectionTests
     }
 
     [Fact]
-    public void Defaults_SurviveAndDoH_Off()
+    public void Defaults_SurviveOff_DoHOn()
     {
         var s = new AppSettings();
         Assert.False(s.AdaptiveSurviveEnabled);

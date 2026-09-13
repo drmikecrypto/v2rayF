@@ -4,9 +4,10 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.4.x   | :white_check_mark: |
-| 1.3.x   | :white_check_mark: |
-| 1.0.x   | :x:                |
+| 2.6.x   | :white_check_mark: |
+| 2.5.x   | :white_check_mark: |
+| 2.4.x   | :x:                |
+| 1.4.x   | :x:                |
 
 ## Reporting a vulnerability
 
@@ -31,7 +32,7 @@ We aim to acknowledge reports within **72 hours** and provide a fix or mitigatio
 - v2rayF application code in this repository
 - Build and release workflows in `.github/`
 
-Out of scope: vulnerabilities in [Xray-core](https://github.com/XTLS/Xray-core) itself (report upstream).
+Out of scope: vulnerabilities in [Xray-core](https://github.com/XTLS/Xray-core) or [sing-box](https://github.com/SagerNet/sing-box) themselves (report upstream).
 
 ## Safe use
 

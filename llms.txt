@@ -1,6 +1,6 @@
 # v2rayF
 
-> Cross-platform V2Ray / Xray proxy and TUN VPN client for Windows, macOS, Linux, and Android.
+> Cross-platform V2Ray / Xray / sing-box proxy and TUN VPN client for Windows, macOS, Linux, and Android.
 
 This file helps LLMs and automated agents understand the project quickly. Humans should start with [README.md](README.md) and [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
@@ -11,46 +11,57 @@ This file helps LLMs and automated agents understand the project quickly. Humans
 - **Repo:** https://github.com/drmikecrypto/v2rayF
 - **License:** MIT
 - **UI:** Avalonia (.NET 10)
-- **Data plane:** Xray-core (bundled in release zips; not committed to git)
-- **Platforms:** Windows (x64/arm64), macOS (x64/arm64), Linux (x64/arm64), Android (arm64). No iOS product.
-- **Protocols:** VMess, VLESS (REALITY / Vision / Vision+TLS), Shadowsocks, Trojan, SOCKS — transports TCP/WS/gRPC/H2/HTTPUpgrade/xHTTP/mKCP/QUIC
+- **Data plane:** Dual-core — **Xray-core** (desktop classic) + **sing-box** (Android classic TUN, Hy2/TUIC/WG/anytls). Cores ship in release zips; not committed to git.
+- **Platforms:** Windows (x64/arm64), macOS (x64/arm64), Linux (x64/arm64), Android (arm64). No iOS product yet.
+- **Protocols:** VMess, VLESS (REALITY / Vision), Shadowsocks, Trojan, SOCKS, Hysteria2, TUIC, WireGuard, anytls
 - **Latest downloads:** https://github.com/drmikecrypto/v2rayF/releases/latest
-- **1.4 highlights:** encrypted secrets at rest, `.v2rayf` vault export/import, Adaptive Survive, hardened updater (host allowlist + SHA256 + Zip-Slip), Secure Share LAN bind + vault-gated copy, agile Smart Connect probes, broad share-link/stream matrix
+- **North star:** [`docs/PLAN.md`](docs/PLAN.md) — trusted tunnel; Android-first for CN/IR
+- **Version:** single source in [`Directory.Build.props`](Directory.Build.props)
 
 ## What it is for
 
-Privacy and anti-censorship proxy use: import `vless://` / `vmess://` / `ss://` / `trojan://` links or HTTPS subscriptions, connect via system proxy or TUN/VPN, with optional Smart Connect, Adaptive Survive, multipath balancing, DNS-through-proxy, IPv6 block, kill switch (Windows Firewall + Android VpnService hold), Secure Share (LAN SOCKS/HTTP), and encrypted profile vault.
+Privacy and anti-censorship proxy use: import share links or HTTPS subscriptions, connect via system proxy or TUN/VPN, with Smart Connect, Adaptive Survive (opt-in), multipath, DNS-through-proxy, IPv6 block, kill switch, Secure Share, App Network, Daily/Gaming/Sentinel presets, and encrypted profile vault.
+
+## Dual-core rules (do not regress)
+
+- Desktop classic VLESS/VMess/Trojan/SS → **Xray**
+- Android classic live Connect → **sing-box** TUN (`stack: gvisor`)
+- Classic **Test All / rank** → **Xray** (`UseSingBoxForSpeedtest` = `RequiresSingBox` only — D13 footgun)
+- Hy2/TUIC/WG/anytls → **sing-box** for live and speedtest
+- Android Chromium assist (`SetHttpProxy` 10809) **default on** (Daily mode); Gaming mode turns it off
 
 ## Key paths
 
 | Path | Role |
 |------|------|
-| `src/v2rayF.Core/` | Models, Xray config builder, latency, stores, orchestration services |
+| `src/v2rayF.Core/` | Models, Xray/sing-box builders, latency, stores, orchestration |
 | `src/v2rayF/` | Shared Avalonia UI and ViewModels |
 | `src/v2rayF.Desktop/` | Desktop host, system proxy, Windows kill switch |
-| `src/v2rayF.Android/` | Android VpnService, Java ProcessBuilder Xray host |
+| `src/v2rayF.Android/` | VpnService + patched libsingbox TUN fd |
 | `scripts/package-all.ps1` | Desktop release packaging |
 | `scripts/package-android-release.ps1` | Android APK zip packaging |
-| `docs/` | User-facing tips (routing, Secure Share, Sentinel QA) |
+| `docs/PLAN.md` | Product direction |
 
 ## Important commands
 
 ```bash
 dotnet run --project src/v2rayF.Desktop/v2rayF.Desktop.csproj
+dotnet test src/v2rayF.Core.Tests/v2rayF.Core.Tests.csproj -c Release
 pwsh -File scripts/package-all.ps1
 pwsh -File scripts/package-android-release.ps1
+pwsh -File scripts/clean-artifacts.ps1
 ```
 
 ## Docs for deeper reading
 
 - [README.md](README.md) — overview, diagrams, FAQ, downloads
+- [docs/PLAN.md](docs/PLAN.md) — trusted tunnel roadmap
 - [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — install and connect
-- [docs/tips/routing-rules.md](docs/tips/routing-rules.md) — routing presets
-- [docs/tips/secure-share.md](docs/tips/secure-share.md) — LAN gateway / hotspot notes
-- [docs/tips/sentinel-qa.md](docs/tips/sentinel-qa.md) — leak / lifecycle checklist
+- [docs/tip-android-connect.md](docs/tip-android-connect.md) — Android connect tips
+- [docs/tips/game-v2box-scorecard.md](docs/tips/game-v2box-scorecard.md) — private game vs V2Box lab template
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 
 ## Optional
 
-- [docs/llms-full.txt](docs/llms-full.txt) — longer machine-oriented feature map
+- [docs/llms-full.txt](docs/llms-full.txt) — longer machine-oriented feature map (may lag; prefer this file + PLAN)

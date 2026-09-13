@@ -100,6 +100,15 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _chromiumHttpProxyAssist = true;
 
     [ObservableProperty]
+    private bool _showPathTruthDiagnostics;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPathTruth))]
+    private string _pathTruthText = "";
+
+    public bool ShowPathTruth => !string.IsNullOrWhiteSpace(PathTruthText);
+
+    [ObservableProperty]
     private bool _dnsThroughProxy = true;
 
     [ObservableProperty]
@@ -352,7 +361,11 @@ public partial class MainWindowViewModel : ViewModelBase
                 if (running)
                 {
                     ConnectionState = ConnectionState.Connected;
-                    StatusText = $"Connected — {StatusSanitizer.Scrub(_proxyCore.ActiveServer?.Name ?? "server")}";
+                    var active = _proxyCore.ActiveServer;
+                    StatusText = active is null
+                        ? "Connected"
+                        : FormatConnectedStatus(active, IsMobile ? "VPN" : "session");
+                    RefreshPathTruth();
                 }
                 else if (ConnectionState is ConnectionState.Connected or ConnectionState.Failed)
                 {
@@ -364,6 +377,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     ConnectionState = ConnectionState.Idle;
                     StatusText = "Disconnected";
+                    PathTruthText = "";
                 }
 
                 OnPropertyChanged(nameof(ConnectButtonText));
@@ -656,7 +670,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
                     await SetOnUiAsync(() =>
                     {
-                        StatusText = $"Connected — {StatusSanitizer.Scrub(server.Name)}";
+                        StatusText = FormatConnectedStatus(server, IsMobile ? "VPN" : "session");
+                        RefreshPathTruth();
                     }).ConfigureAwait(true);
                 }
                 else
@@ -669,7 +684,12 @@ public partial class MainWindowViewModel : ViewModelBase
                     {
                         await SetOnUiAsync(() =>
                         {
-                            StatusText = "Connected — TUN weak";
+                            var text = "Connected — TUN weak";
+                            var httpWarn = AppServices.Platform.LastHttpProxyWarning;
+                            if (!string.IsNullOrWhiteSpace(httpWarn))
+                                text += $" · {StatusSanitizer.Scrub(httpWarn)}";
+                            StatusText = text;
+                            RefreshPathTruth();
                         }).ConfigureAwait(true);
                     }
                 }
@@ -685,7 +705,12 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     await SetOnUiAsync(() =>
                     {
-                        StatusText = "Connected — TUN weak";
+                        var text = "Connected — TUN weak";
+                        var httpWarn = AppServices.Platform.LastHttpProxyWarning;
+                        if (!string.IsNullOrWhiteSpace(httpWarn))
+                            text += $" · {StatusSanitizer.Scrub(httpWarn)}";
+                        StatusText = text;
+                        RefreshPathTruth();
                     }).ConfigureAwait(true);
                 }
             }
@@ -1084,6 +1109,7 @@ public partial class MainWindowViewModel : ViewModelBase
         KillSwitchEnabled = settings.KillSwitchEnabled;
         BlockIpv6 = settings.BlockIpv6;
         ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
+        ShowPathTruthDiagnostics = settings.ShowPathTruthDiagnostics;
         DnsThroughProxy = settings.DnsThroughProxy;
         SecureShareEnabled = settings.SecureShareEnabled;
         EnablePacketFragment = settings.EnablePacketFragment;
@@ -1117,6 +1143,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.KillSwitchEnabled = KillSwitchEnabled;
         _settings.BlockIpv6 = BlockIpv6;
         _settings.ChromiumHttpProxyAssist = ChromiumHttpProxyAssist;
+        _settings.ShowPathTruthDiagnostics = ShowPathTruthDiagnostics;
         _settings.DnsThroughProxy = DnsThroughProxy;
         _settings.SecureShareEnabled = SecureShareEnabled;
         _settings.ShareListenAllInterfaces = ShareListenAllInterfaces;
@@ -1150,6 +1177,12 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void ApplyDailyMode() => ApplyNetworkProfile(NetworkProfiles.DailyId);
+
+    [RelayCommand]
+    private void ApplyGamingMode() => ApplyNetworkProfile(NetworkProfiles.GamingId);
+
+    [RelayCommand]
     private void ApplySentinelProfile() => ApplyNetworkProfile(NetworkProfiles.SentinelId);
 
     [RelayCommand]
@@ -1163,6 +1196,12 @@ public partial class MainWindowViewModel : ViewModelBase
         var draft = CollectSettings();
         switch (profileId)
         {
+            case NetworkProfiles.DailyId:
+                NetworkProfiles.ApplyDaily(draft);
+                break;
+            case NetworkProfiles.GamingId:
+                NetworkProfiles.ApplyGaming(draft);
+                break;
             case NetworkProfiles.ChinaId:
                 NetworkProfiles.ApplyChina(draft);
                 break;
@@ -1184,12 +1223,8 @@ public partial class MainWindowViewModel : ViewModelBase
             EnableTunMode = true;
         EnableSystemProxy = !EnableTunMode && !IsMobile;
 
-        StatusText = profileId switch
-        {
-            NetworkProfiles.ChinaId => "China profile applied — Save settings to persist.",
-            NetworkProfiles.IranId => "Iran profile applied — Save settings to persist.",
-            _ => "Sentinel profile applied — Save settings to persist."
-        };
+        StatusText = NetworkProfiles.StatusHint(profileId);
+        RefreshPathTruth(draft);
     }
 
     partial void OnEnableTunModeChanged(bool value)
@@ -1249,6 +1284,60 @@ public partial class MainWindowViewModel : ViewModelBase
         TunStatus = AppServices.Platform.CanUseTunMode
             ? IsMobile ? "VPN mode — routes all device traffic" : "TUN ready — full-device capture via virtual adapter"
             : AppServices.Platform.TunRequirementMessage;
+    }
+
+    /// <summary>Optional diagnostics: TUN / HTTP assist / App Network Direct counts.</summary>
+    private void RefreshPathTruth(AppSettings? settings = null)
+    {
+        settings ??= CollectSettings();
+        if (!ShowPathTruthDiagnostics ||
+            (!IsConnected && ConnectionState != ConnectionState.Connected))
+        {
+            PathTruthText = "";
+            return;
+        }
+
+        var parts = new List<string>();
+        if (IsMobile || settings.EnableTunMode)
+            parts.Add("path: TUN");
+        else if (settings.EnableSystemProxy)
+            parts.Add($"path: system proxy ({AppServices.Platform.LastProxyMethod ?? "HTTP"})");
+        else
+            parts.Add("path: manual SOCKS/HTTP localhost");
+
+        if (IsMobile)
+        {
+            parts.Add(settings.ChromiumHttpProxyAssist
+                ? "HTTP assist :10809 on"
+                : "HTTP assist off (full TUN)");
+        }
+
+        var directCount = AppNetworkPolicy.GetDirectIds(settings, IsMobile).Count;
+        if (directCount > 0)
+            parts.Add($"App Network Direct×{directCount}");
+
+        if (settings.BlockIpv6)
+            parts.Add("IPv6 blocked");
+
+        parts.Add(settings.DnsThroughProxy ? "DoH" : "UDP DNS");
+        PathTruthText = string.Join(" · ", parts);
+    }
+
+    partial void OnShowPathTruthDiagnosticsChanged(bool value) => RefreshPathTruth();
+
+    /// <summary>Connected status with D12 honesty: weak HTTP/TUN + OEM SetHttpProxy failure.</summary>
+    private string FormatConnectedStatus(ProxyServer server, string modeLabel, string? multipathSuffix = null)
+    {
+        var multi = multipathSuffix ?? "";
+        var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({modeLabel}{multi})";
+        if (_proxyCore.LastConnectHttpWeak)
+            status += " · HTTP assist weak (Play Store/Translate may need reconnect)";
+        if (_proxyCore.LastConnectTunWeak)
+            status += " · TUN weak (messengers may need force-stop)";
+        var httpWarn = AppServices.Platform.LastHttpProxyWarning;
+        if (!string.IsNullOrWhiteSpace(httpWarn))
+            status += $" · {StatusSanitizer.Scrub(httpWarn)}";
+        return status;
     }
 
     private void UpdateSecureShareEndpoint()
@@ -1713,6 +1802,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _settings.KillSwitchEnabled = payload.Settings.KillSwitchEnabled;
                 _settings.BlockIpv6 = payload.Settings.BlockIpv6;
                 _settings.ChromiumHttpProxyAssist = payload.Settings.ChromiumHttpProxyAssist;
+                _settings.ShowPathTruthDiagnostics = payload.Settings.ShowPathTruthDiagnostics;
                 _settings.DnsThroughProxy = payload.Settings.DnsThroughProxy;
                 _settings.EnablePacketFragment = payload.Settings.EnablePacketFragment;
                 _settings.AdaptiveSurviveEnabled = payload.Settings.AdaptiveSurviveEnabled;
@@ -2330,7 +2420,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 : "manual 127.0.0.1:10809";
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
-        var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({mode}{multi})";
+        var status = FormatConnectedStatus(server, mode, multi);
         if (settings.KillSwitchEnabled && settings.EnableTunMode &&
             !string.IsNullOrWhiteSpace(AppServices.KillSwitch.LastError) &&
             !AppServices.KillSwitch.IsArmed)
@@ -2342,6 +2432,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             StatusText = status;
             IsConnected = true;
+            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
 
@@ -2390,25 +2481,15 @@ public partial class MainWindowViewModel : ViewModelBase
         await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(false);
 
         var multi = multipath is { Count: > 1 } ? $" · multipath×{multipath.Count}" : "";
-        var status =
-            $"Connected — {StatusSanitizer.Scrub(server.Name)} (VPN{multi})";
-        if (_proxyCore.LastConnectHttpWeak)
-            status += " · HTTP assist weak (Play Store/Translate may need reconnect)";
-        var httpWarn = AppServices.Platform.LastHttpProxyWarning;
-        if (!string.IsNullOrWhiteSpace(httpWarn) && !_httpProxyWarningShown)
-        {
-            _httpProxyWarningShown = true;
-            status += $" · {StatusSanitizer.Scrub(httpWarn)}";
-        }
+        var status = FormatConnectedStatus(server, "VPN", multi);
 
         await SetOnUiAsync(() =>
         {
             StatusText = status;
             IsConnected = true;
+            RefreshPathTruth(settings);
         }).ConfigureAwait(true);
     }
-
-    private bool _httpProxyWarningShown;
 
     private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
     private DateTimeOffset _lastSessionResumeUtc = DateTimeOffset.MinValue;
@@ -2614,6 +2695,7 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 ConnectionState = ConnectionState.Idle;
                 StatusText = "Disconnected";
+                PathTruthText = "";
                 _autoReconnectAttempts = 0;
             }).ConfigureAwait(true);
         }
