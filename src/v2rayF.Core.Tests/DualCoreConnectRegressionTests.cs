@@ -105,7 +105,10 @@ public class DualCoreConnectRegressionTests
         Assert.True(ProxyCoreService.IsTunOnlyAdvisory(localhostOk: true, tunOk: false, tunRequired: true));
         Assert.False(ProxyCoreService.IsTunOnlyAdvisory(localhostOk: true, tunOk: true, tunRequired: true));
         Assert.False(ProxyCoreService.IsTunOnlyAdvisory(localhostOk: false, tunOk: false, tunRequired: true));
-        Assert.True(ProxyCoreService.ShouldFailClosedOnWeakTun(true, false, true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(true, false, true));
+        Assert.True(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            true, LatencyService.TunVpnMissingMs, true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(true, -1, true));
     }
 
     private sealed class MobilePlatform : IPlatformIntegration

@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.1** TUN fail-closed / no Connected blackhole).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.2** Connect false-negative TUN fix).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -20,7 +20,7 @@ Connect may show Connected when:
 2. Local SOCKS probe passes, and
 3. When TUN/VPN is active: TUN app-path probe passes (gen204/FCM via VpnService Network).
 
-If SOCKS works but TUN fails after one VPN rebind, Connect **fails** and tears down VPN (v2.6.3.1) — never leave the device blackholed. Android HTTP proxy `10809` remains advisory (status tip when weak).
+If SOCKS works but gen204/FCM through TUN fails, Connect still succeeds with a weak-TUN tip (v2.6.3.2) — fail-closed only when VpnService Network is missing. Soft recovery rebinds a flaky TUN; never leave a silent blackhole forever. Android HTTP proxy `10809` remains advisory (status tip when weak).
 
 ## Golden app matrix
 

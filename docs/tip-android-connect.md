@@ -1,25 +1,29 @@
 # Tip: Android Connect troubleshooting
 
-## Current defaults (2.6.3.1+)
+## Current defaults (2.6.3.2+)
 
 - **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`
 - **Gaming mode**: assist **off** — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md))
 - **Sentinel / Iran / China**: leak-oriented presets; assist **on**
-- Connect green requires SOCKS **and** TUN app-path when VPN is up — otherwise Connect fails (no silent blackhole). HTTP `10809` remains advisory for Play.
+- Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play.
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
 - Android TUN stack = **gvisor** (do not enable experimental system/mixed without sandbox flags)
 
 1. Prefer the in-app **Update** button when a new GitHub release is available — it downloads the signed APK, verifies SHA256, and installs over the existing app (native cores refresh automatically).
 2. Tap **Connect** and allow the **VPN** permission when prompted.
-3. If connect fails, read the status message — the app tears down VPN so normal internet keeps working. If you see **TUN path failed — system traffic has no internet**, the outbound may be OK (ping works) but the VPN tunnel did not carry app traffic — try another server or reinstall the release APK.
+3. If connect fails with **TUN path failed**, the VPN Network was missing after start — try again or reinstall the release APK. A weak-TUN tip while Connected is advisory (not a hard fail).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, force-stop Instagram/WhatsApp once if sockets were stale (manual; Connect no longer auto-tips this).
 6. Use **Daily** / **Gaming** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
+## v2.6.3.2 — Connect false-negative fix
+
+- gen204/FCM miss no longer blocks Connect; fail-closed only when VPN Network is missing
+
 ## v2.6.3.1 — fail-closed TUN (no blackhole Connected)
 
-- SOCKS OK + TUN dead → rebind once, then fail Connect (tears VPN)
+- SOCKS OK + TUN dead → rebind once, then fail Connect (tears VPN) — **over-corrected** in 2.6.3.2 for HTTPS flap
 - Faster Connect (no HTTP 10809 on critical path)
 
 ## v2.6.3.0 — Daily / Gaming modes + optional path truth

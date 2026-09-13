@@ -12,7 +12,8 @@ namespace v2rayF.Android.Services;
 
 /// <summary>
 /// Health probe through the active VPN Network (v2rayF is VPN-disallowed — default HttpClient uses clearnet).
-/// Advisory: gen204 OR a push host (not both) — dual-required caused false disconnect loops.
+/// Returns <see cref="LatencyService.TunVpnMissingMs"/> when no VPN Network exists (hard fail).
+/// HTTPS miss is advisory (-1): gen204/FCM flap must not block Connect (2.6.3.1 false-negative).
 /// </summary>
 internal static class VpnTunPathProbe
 {
@@ -29,9 +30,12 @@ internal static class VpnTunPathProbe
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Captive / Chrome validation — call before HTTPS so the VPN Network is usable.
+        V2rayVpnService.ReportVpnReady();
+
         var context = Application.Context;
         if (context?.GetSystemService(Context.ConnectivityService) is not ConnectivityManager cm)
-            return -1;
+            return LatencyService.TunVpnMissingMs;
 
         Network? vpnNetwork = null;
         var networks = cm.GetAllNetworks();
@@ -49,43 +53,43 @@ internal static class VpnTunPathProbe
         }
 
         if (vpnNetwork is null)
-            return -1;
+            return LatencyService.TunVpnMissingMs;
 
-        int? gen204Ms = null;
+        var deadline = Stopwatch.StartNew();
         foreach (var url in LatencyService.PingUrls)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var ms = ProbeUrl(vpnNetwork, url, timeoutMs, headOnly: false);
-            if (ms is >= 0)
-            {
-                gen204Ms = ms;
+            var remaining = RemainingMs(timeoutMs, deadline);
+            if (remaining <= 0)
                 break;
-            }
+            var ms = ProbeUrl(vpnNetwork, url, remaining, headOnly: false);
+            if (ms is >= 0)
+                return ms;
         }
 
-        int? pushMs = null;
         foreach (var url in PushProbeUrls)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var ms = ProbeUrl(vpnNetwork, url, timeoutMs, headOnly: true);
-            if (ms is >= 0)
-            {
-                pushMs = ms;
+            var remaining = RemainingMs(timeoutMs, deadline);
+            if (remaining <= 0)
                 break;
-            }
+            var ms = ProbeUrl(vpnNetwork, url, remaining, headOnly: true);
+            if (ms is >= 0)
+                return ms;
         }
 
-        if (gen204Ms is >= 0 && pushMs is >= 0)
-            return Math.Max(gen204Ms.Value, pushMs.Value);
-        if (gen204Ms is >= 0)
-            return gen204Ms;
-        if (pushMs is >= 0)
-            return pushMs;
+        // VPN present — probe URLs failed (censorship / cold dial / DNS). Advisory only.
         return -1;
     }
 
+    private static int RemainingMs(int timeoutMs, Stopwatch deadline) =>
+        Math.Max(0, timeoutMs - (int)deadline.ElapsedMilliseconds);
+
     private static int? ProbeUrl(Network network, string url, int timeoutMs, bool headOnly)
     {
+        if (timeoutMs <= 0)
+            return -1;
+
         HttpURLConnection? conn = null;
         try
         {

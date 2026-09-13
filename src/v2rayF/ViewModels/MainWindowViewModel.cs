@@ -2476,6 +2476,16 @@ public partial class MainWindowViewModel : ViewModelBase
         await SetOnUiAsync(() =>
             StatusText = $"Starting proxy for {StatusSanitizer.Scrub(server.Name)}…").ConfigureAwait(true);
 
+        // Validate VPN Network before core probes (captive / Chrome); TUN HTTPS is advisory.
+        try
+        {
+            await AppServices.Platform.NotifyVpnReadyAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best-effort.
+        }
+
         try
         {
             await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken)
@@ -2483,8 +2493,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (Exception ex) when (ProxyCoreService.IsTunPathNoInternetFailure(ex))
         {
-            // One force-rebind: SOCKS was OK but TUN dead — avoid permanent VpnService blackhole.
-            await SetOnUiAsync(() => StatusText = "TUN weak — rebinding VPN…").ConfigureAwait(true);
+            // VpnService Network missing — one force-rebind, then fail (not gen204 flap).
+            await SetOnUiAsync(() => StatusText = "VPN missing — rebinding…").ConfigureAwait(true);
             _proxyCore.ClearActiveTunFd();
             var rebuilt = await AppServices.Platform.EstablishVpnAsync(
                     bypass,
@@ -2502,6 +2512,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
             tunFd = rebuilt;
             _lastTunRebindUtc = DateTimeOffset.UtcNow;
+            try
+            {
+                await AppServices.Platform.NotifyVpnReadyAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best-effort.
+            }
+
             try
             {
                 await _proxyCore.StartAsync(server, settings, tunFd, multipath, cancellationToken)

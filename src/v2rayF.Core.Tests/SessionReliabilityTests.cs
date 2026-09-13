@@ -103,19 +103,30 @@ public class SessionReliabilityTests
     }
 
     [Fact]
-    public void FailClosed_WhenTunWeakAfterSocksOk()
+    public void FailClosed_OnlyWhenVpnNetworkMissing()
     {
         Assert.True(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunMs: LatencyService.TunVpnMissingMs, tunRequired: true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunMs: -1, tunRequired: true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunMs: 40, tunRequired: true));
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
+            localhostOk: true, tunMs: LatencyService.TunVpnMissingMs, tunRequired: false));
+        // bool overload cannot see missing-VPN sentinel — never fail-closed.
+        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
             localhostOk: true, tunOk: false, tunRequired: true));
-        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
-            localhostOk: true, tunOk: true, tunRequired: true));
-        Assert.False(ProxyCoreService.ShouldFailClosedOnWeakTun(
-            localhostOk: true, tunOk: false, tunRequired: false));
         Assert.Equal(
+            ProxyCoreService.TunPathNoInternetMessage,
+            ProxyCoreService.DescribeConnectGateFailure(
+                10, 10, LatencyService.TunVpnMissingMs, httpRequired: false, tunRequired: true));
+        Assert.NotEqual(
             ProxyCoreService.TunPathNoInternetMessage,
             ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: false, tunRequired: true));
         Assert.True(ProxyCoreService.IsTunPathNoInternetFailure(
             new InvalidOperationException(ProxyCoreService.TunPathNoInternetMessage)));
+        Assert.True(ProxyCoreService.IsVpnNetworkMissing(LatencyService.TunVpnMissingMs, tunRequired: true));
+        Assert.False(ProxyCoreService.IsVpnNetworkMissing(-1, tunRequired: true));
     }
 
     [Fact]
@@ -166,6 +177,10 @@ public class SessionReliabilityTests
             "HTTP proxy 10809",
             ProxyCoreService.DescribeConnectGateFailure(10, -1, 10, httpRequired: true, tunRequired: true));
         Assert.Equal(
+            ProxyCoreService.TunPathNoInternetMessage,
+            ProxyCoreService.DescribeConnectGateFailure(
+                10, 10, LatencyService.TunVpnMissingMs, httpRequired: true, tunRequired: true));
+        Assert.NotEqual(
             ProxyCoreService.TunPathNoInternetMessage,
             ProxyCoreService.DescribeConnectGateFailure(10, 10, -1, httpRequired: true, tunRequired: true));
     }

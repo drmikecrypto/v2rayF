@@ -183,7 +183,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         PathHealthOk?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS + TUN when required).</summary>
+    /// <summary>Lightweight post-connect path check for wake/resume (SOCKS + VPN presence when required).</summary>
     public async Task<bool> VerifyLivePathAsync(CancellationToken cancellationToken = default)
     {
         if (ActiveServer is null || !IsRunning)
@@ -200,22 +200,40 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 probeHttp: false)
             .ConfigureAwait(false);
 
-        // SOCKS-only success with a dead TUN keeps VpnService blackhole up — require TunOk.
-        if (result.SocksOk && result.TunOk)
+        // SOCKS is the live gate. Missing VPN Network is a hard fail; gen204/FCM miss is advisory
+        // (2.6.3.1 required TunOk and false-negatived Connect / soft recovery).
+        if (!result.SocksOk)
         {
-            LastConnectHttpWeak = false;
-            LastConnectTunWeak = false;
-            ResetPathHealthState();
-            return true;
+            LastConnectTunWeak = IsTunOnlyAdvisory(result.LocalhostOk, result.TunOk, result.TunRequired);
+            return false;
         }
 
+        if (IsVpnNetworkMissing(result.TunMs, result.TunRequired))
+        {
+            LastConnectTunWeak = true;
+            return false;
+        }
+
+        LastConnectHttpWeak = false;
         LastConnectTunWeak = IsTunOnlyAdvisory(result.LocalhostOk, result.TunOk, result.TunRequired);
-        return false;
+        if (result.TunOk)
+            ResetPathHealthState();
+        return true;
     }
 
-    /// <summary>True when Connect must tear down rather than stay Connected with a dead TUN.</summary>
+    /// <summary>
+    /// Tear down only when VpnService Network is gone — not when gen204/FCM through TUN flaps
+    /// (desktop clearnet TUN probe and censored-region HTTPS misses are advisory).
+    /// </summary>
+    public static bool ShouldFailClosedOnWeakTun(bool localhostOk, int? tunMs, bool tunRequired) =>
+        localhostOk && IsVpnNetworkMissing(tunMs, tunRequired);
+
+    /// <summary>Obsolete overload — tunOk alone cannot distinguish missing VPN vs HTTPS miss.</summary>
     public static bool ShouldFailClosedOnWeakTun(bool localhostOk, bool tunOk, bool tunRequired) =>
-        IsTunOnlyAdvisory(localhostOk, tunOk, tunRequired);
+        false;
+
+    public static bool IsVpnNetworkMissing(int? tunMs, bool tunRequired) =>
+        tunRequired && tunMs == LatencyService.TunVpnMissingMs;
 
     public static bool IsTunPathNoInternetFailure(Exception? ex) =>
         ex is InvalidOperationException ioe &&
@@ -330,7 +348,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         LastConnectTunWeak = IsTunOnlyAdvisory(
             gateResult.LocalhostOk, gateResult.TunOk, gateResult.TunRequired);
 
-        if (ShouldFailClosedOnWeakTun(gateResult.LocalhostOk, gateResult.TunOk, gateResult.TunRequired))
+        if (ShouldFailClosedOnWeakTun(gateResult.LocalhostOk, gateResult.TunMs, gateResult.TunRequired))
         {
             await StopAsync(cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(TunPathNoInternetMessage);
@@ -388,7 +406,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     {
         if (!result.SocksOk)
             return "Proxy path failed after connect (SOCKS 10808 probe timed out). The tunnel is not usable.";
-        if (result.TunRequired && !result.TunOk)
+        if (IsVpnNetworkMissing(result.TunMs, result.TunRequired))
             return TunPathNoInternetMessage;
         return "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.";
     }
@@ -618,7 +636,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         LastConnectTunWeak = IsTunOnlyAdvisory(
             probeMs.LocalhostOk, probeMs.TunOk, probeMs.TunRequired);
 
-        if (ShouldFailClosedOnWeakTun(probeMs.LocalhostOk, probeMs.TunOk, probeMs.TunRequired))
+        if (ShouldFailClosedOnWeakTun(probeMs.LocalhostOk, probeMs.TunMs, probeMs.TunRequired))
         {
             await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(TunPathNoInternetMessage);

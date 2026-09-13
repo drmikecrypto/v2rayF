@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.2] - 2026-09-13
+
+### Fixed
+
+- Connect false-negative: gen204/FCM TUN probe miss no longer blocks Connect (`TUN path failed`). Fail-closed only when VpnService **Network is missing**; HTTPS miss stays advisory (tip + soft rebind), matching health-loop policy.
+- Android TUN probe: report VPN ready before HTTPS; share timeout across URLs (no sequential full-budget burns).
+
+### Changed
+
+- Product version **2.6.3.2** (Android versionCode 20632)
+
 ## [2.6.3.1] - 2026-09-13
 
 ### Fixed
