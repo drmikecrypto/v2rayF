@@ -31,4 +31,13 @@ public class AndroidTunRebindPolicyTests
             last.AddSeconds(90),
             minIntervalSeconds: 90));
     }
+
+    [Fact]
+    public void ResumePathHealthy_RequiresLiveAndNotTunWeak()
+    {
+        Assert.True(ProxyCoreService.IsResumePathHealthy(livePathOk: true, tunWeak: false));
+        Assert.False(ProxyCoreService.IsResumePathHealthy(livePathOk: true, tunWeak: true));
+        Assert.False(ProxyCoreService.IsResumePathHealthy(livePathOk: false, tunWeak: false));
+        Assert.False(ProxyCoreService.IsResumePathHealthy(livePathOk: false, tunWeak: true));
+    }
 }

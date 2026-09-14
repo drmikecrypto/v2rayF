@@ -226,6 +226,13 @@ public sealed class ProxyCoreService : IAsyncDisposable
     }
 
     /// <summary>
+    /// Wake/resume soft recovery: SOCKS+VPN-present is not enough when TUN app-path is weak
+    /// (lock/unlock blackhole). Connect still uses <see cref="VerifyLivePathAsync"/> alone.
+    /// </summary>
+    public static bool IsResumePathHealthy(bool livePathOk, bool tunWeak) =>
+        livePathOk && !tunWeak;
+
+    /// <summary>
     /// Tear down only when VpnService Network is gone — not when gen204/FCM through TUN flaps
     /// (desktop clearnet TUN probe and censored-region HTTPS misses are advisory).
     /// </summary>

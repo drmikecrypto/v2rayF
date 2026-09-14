@@ -34,6 +34,7 @@ public class V2rayVpnService : VpnService
     private static ConnectivityManager? _connectivityManager;
     private static VpnNetworkCallback? _networkCallback;
     private static UnderlyingNetworkCallback? _underlyingCallback;
+    private static ScreenUnlockReceiver? _screenUnlockReceiver;
     private static string? _establishConfigHash;
     private static DateTimeOffset _lastNetworkRecoveryUtc = DateTimeOffset.MinValue;
     private const int NetworkRecoveryThrottleMs = 5000;
@@ -232,6 +233,7 @@ public class V2rayVpnService : VpnService
             try
             {
                 RegisterNetworkCallback(this);
+                RegisterScreenUnlockReceiver(this);
             }
             catch
             {
@@ -372,6 +374,7 @@ public class V2rayVpnService : VpnService
     private static void TearDownInterface()
     {
         UnregisterNetworkCallback();
+        UnregisterScreenUnlockReceiver();
 
         if (_tunFd >= 0)
         {
@@ -473,6 +476,56 @@ public class V2rayVpnService : VpnService
         _underlyingCallback = null;
     }
 
+    /// <summary>
+    /// Unlock without opening v2rayF — soft session recovery (5s NotifySessionRecovery throttle).
+    /// </summary>
+    private static void RegisterScreenUnlockReceiver(Context context)
+    {
+        try
+        {
+            UnregisterScreenUnlockReceiver();
+            _screenUnlockReceiver = new ScreenUnlockReceiver();
+            var filter = new IntentFilter();
+            filter.AddAction(Intent.ActionUserPresent);
+            filter.AddAction(Intent.ActionScreenOn);
+            if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu)
+                context.RegisterReceiver(_screenUnlockReceiver, filter, ReceiverFlags.NotExported);
+            else
+#pragma warning disable CA1422
+                context.RegisterReceiver(_screenUnlockReceiver, filter);
+#pragma warning restore CA1422
+        }
+        catch
+        {
+            try
+            {
+                UnregisterScreenUnlockReceiver();
+            }
+            catch
+            {
+                // Best effort.
+            }
+        }
+    }
+
+    private static void UnregisterScreenUnlockReceiver()
+    {
+        if (_screenUnlockReceiver is null)
+            return;
+
+        try
+        {
+            var ctx = Application.Context;
+            ctx?.UnregisterReceiver(_screenUnlockReceiver);
+        }
+        catch
+        {
+            // Best effort.
+        }
+
+        _screenUnlockReceiver = null;
+    }
+
     private static void NotifySessionRecovery()
     {
         var now = DateTimeOffset.UtcNow;
@@ -482,6 +535,17 @@ public class V2rayVpnService : VpnService
         _lastNetworkRecoveryUtc = now;
         ReportVpnReady();
         AppServices.OnSessionResumed?.Invoke();
+    }
+
+    private sealed class ScreenUnlockReceiver : BroadcastReceiver
+    {
+        public override void OnReceive(Context? context, Intent? intent)
+        {
+            var action = intent?.Action;
+            if (string.Equals(action, Intent.ActionUserPresent, StringComparison.Ordinal) ||
+                string.Equals(action, Intent.ActionScreenOn, StringComparison.Ordinal))
+                NotifySessionRecovery();
+        }
     }
 
     private sealed class VpnNetworkCallback : ConnectivityManager.NetworkCallback

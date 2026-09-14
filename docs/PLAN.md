@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.3** Instagram feed QUIC shove + HTTP tip).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.4** lock/unlock session recovery).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 

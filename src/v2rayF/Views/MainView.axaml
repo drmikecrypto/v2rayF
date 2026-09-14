@@ -32,13 +32,15 @@
                             MinWidth="96"/>
                 </Grid>
 
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="8">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                     <TextBox Grid.Column="0" PlaceholderText="Subscription URL"
                              Text="{Binding SubscriptionUrl}"/>
                     <Button Grid.Column="1" Content="Import" Command="{Binding ImportFromSubscriptionCommand}"/>
-                    <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}"
+                    <Button Grid.Column="2" Content="Free" Command="{Binding ImportPulseFreeServersCommand}"
+                            ToolTip.Tip="Pulse free servers (≤5)"/>
+                    <Button Grid.Column="3" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}"
                             IsEnabled="{Binding HasSavedSubscription}"/>
-                    <Button Grid.Column="3" Content="File" Command="{Binding ImportConfigFileCommand}"/>
+                    <Button Grid.Column="4" Content="File" Command="{Binding ImportConfigFileCommand}"/>
                 </Grid>
 
                 <TextBox AcceptsReturn="True" MinHeight="56" MaxHeight="96"

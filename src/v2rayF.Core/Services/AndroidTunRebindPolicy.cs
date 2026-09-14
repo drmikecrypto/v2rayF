@@ -12,7 +12,7 @@ public static class AndroidTunRebindPolicy
     {
         /// <summary>TunPathFailed soft recovery — always rebind (drop stale MQTT / dead fd).</summary>
         TunPathFailed,
-        /// <summary>Opportunistic session resume — throttle rebinds.</summary>
+        /// <summary>Opportunistic session resume — throttle rebinds; when allowed, force new fd (not hash no-op).</summary>
         SessionResume
     }
 

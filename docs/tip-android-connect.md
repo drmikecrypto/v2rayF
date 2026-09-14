@@ -1,11 +1,12 @@
 # Tip: Android Connect troubleshooting
 
-## Current defaults (2.6.3.3+)
+## Current defaults (2.6.3.4+)
 
 - **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`; Meta feed/CDN QUIC shoved to TCP→10809
 - **Gaming mode**: assist **off** — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md))
 - **Sentinel / Iran / China**: leak-oriented presets; assist **on**
 - Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed.
+- Lock/unlock: soft session recovery force-rebinds TUN when needed (no manual Disconnect).
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
 - Android TUN stack = **gvisor** (do not enable experimental system/mixed without sandbox flags)
 
@@ -16,6 +17,11 @@
 5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if Direct feed pull-to-refresh stalls (Connected status tips this once).
 6. Use **Daily** / **Gaming** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
+
+## v2.6.3.4 — lock/unlock Connected blackhole
+
+- Resume refuses SOCKS-only “healthy” when TUN weak; SessionResume force-rebinds (90s throttle)
+- Unlock fires session recovery without opening the app (`USER_PRESENT` / `SCREEN_ON`)
 
 ## v2.6.3.3 — Instagram feed stall (send/likes OK)
 

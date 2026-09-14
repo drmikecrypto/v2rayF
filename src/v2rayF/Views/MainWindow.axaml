@@ -57,15 +57,17 @@
                         MinWidth="100"/>
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                 <TextBox Grid.Column="0"
                          PlaceholderText="Subscription URL (https://...)"
                          Text="{Binding SubscriptionUrl}"/>
                 <Button Grid.Column="1" Content="Import URL" Command="{Binding ImportFromSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
-                <Button Grid.Column="2" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
-                <Button Grid.Column="3" Content="Clipboard" Command="{Binding ImportFromClipboardCommand}" IsEnabled="{Binding !IsBusy}"/>
-                <Button Grid.Column="4" Content="File" Command="{Binding ImportConfigFileCommand}" IsEnabled="{Binding !IsBusy}"/>
-                <Button Grid.Column="5" Content="{Binding ConnectButtonText}" Classes="accent"
+                <Button Grid.Column="2" Content="Free (Pulse)" Command="{Binding ImportPulseFreeServersCommand}" IsEnabled="{Binding !IsBusy}"
+                        ToolTip.Tip="Import up to 5 free PulseConfigs servers (Iran-aware when probes are online)"/>
+                <Button Grid.Column="3" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="4" Content="Clipboard" Command="{Binding ImportFromClipboardCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="5" Content="File" Command="{Binding ImportConfigFileCommand}" IsEnabled="{Binding !IsBusy}"/>
+                <Button Grid.Column="6" Content="{Binding ConnectButtonText}" Classes="accent"
                         Command="{Binding ToggleConnectionCommand}" IsEnabled="{Binding CanToggleConnection}" MinWidth="120"/>
             </Grid>
 

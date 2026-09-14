@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
@@ -736,7 +737,7 @@ public partial class MainWindowViewModel : ViewModelBase
             await HandleUnexpectedCoreStopAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Opportunistic resume soft path only — TunPathFailed always force-rebinds.</summary>
+    /// <summary>Opportunistic resume soft path — force-rebind when throttle allows (same as TunPathFailed once interval elapsed).</summary>
     private bool ShouldRebindAndroidTun() =>
         AndroidTunRebindPolicy.ShouldForceRebind(
             AndroidTunRebindPolicy.Reason.SessionResume,
@@ -804,7 +805,9 @@ public partial class MainWindowViewModel : ViewModelBase
         if (SelectedServer is null)
             return false;
 
-        if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+        // Resume must not treat SOCKS-green + dead TUN as healthy (lock/unlock blackhole).
+        var live = await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true);
+        if (ProxyCoreService.IsResumePathHealthy(live, _proxyCore.LastConnectTunWeak))
         {
             try
             {
@@ -836,7 +839,7 @@ public partial class MainWindowViewModel : ViewModelBase
                             bypass,
                             connectSettings.BlockIpv6,
                             CancellationToken.None,
-                            forceRebind: false,
+                            forceRebind: true,
                             chromiumHttpProxyAssist: connectSettings.ChromiumHttpProxyAssist)
                         .ConfigureAwait(true);
                     if (rebuilt is null)
@@ -869,7 +872,11 @@ public partial class MainWindowViewModel : ViewModelBase
                     await RearmKillSwitchIfNeededAsync(server, connectSettings, CancellationToken.None)
                         .ConfigureAwait(true);
 
-                    if (await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true))
+                    var restored = await _proxyCore.VerifyLivePathAsync(CancellationToken.None)
+                        .ConfigureAwait(true);
+                    // After RefreshRuntime (+ optional force rebind), SOCKS+VPN-present is enough —
+                    // do not full-reconnect solely because gen204/FCM is still advisory-weak.
+                    if (restored)
                     {
                         try
                         {
@@ -1986,6 +1993,80 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task ImportFromSubscriptionAsync()
     {
         await TryImportSubscriptionAsync();
+    }
+
+    /// <summary>Import ≤5 free PulseConfigs servers (Iran-aware top5 when published).</summary>
+    [RelayCommand]
+    private async Task ImportPulseFreeServersAsync()
+    {
+        try
+        {
+            IsBusy = true;
+            StatusText = "Fetching Pulse free servers…";
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
+            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "v2rayF-PulseFree/1.0");
+
+            var top5Url = await PulseFreeServers.ResolveTop5UrlAsync(http).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(top5Url))
+            {
+                StatusText = "Pulse free servers URL unavailable.";
+                return;
+            }
+
+            // Prefer Worker / mirrors via SubscriptionService path
+            SubscriptionUrl = top5Url;
+            var viaProxy = SubscriptionViaProxy && IsConnected;
+            var fetched = await _subscriptionService.FetchDetailedAsync(top5Url, viaProxy).ConfigureAwait(true);
+            if (fetched.Servers.Count == 0)
+            {
+                // Fallback candidates
+                foreach (var alt in PulseFreeServers.BuildTop5Candidates())
+                {
+                    if (string.Equals(alt, top5Url, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    try
+                    {
+                        fetched = await _subscriptionService.FetchDetailedAsync(alt, viaProxy).ConfigureAwait(true);
+                        if (fetched.Servers.Count > 0)
+                        {
+                            SubscriptionUrl = alt;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // try next
+                    }
+                }
+            }
+
+            if (fetched.Servers.Count == 0)
+            {
+                StatusText =
+                    "Pulse free servers empty or unreachable. See docs/tips/pulse-free-servers.md — " +
+                    "try Worker mirror, enable Subscription via proxy, or import top5.txt manually.";
+                return;
+            }
+
+            // Cap at 5 for Free button contract
+            var capped = fetched.Servers.Count > 5
+                ? fetched.Servers.Take(5).ToList()
+                : fetched.Servers;
+            await MergeImportedAsync(capped).ConfigureAwait(true);
+            await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(true);
+            var note = fetched.MirrorNote;
+            StatusText = string.IsNullOrEmpty(note)
+                ? $"Imported {capped.Count} free Pulse server(s). Untrusted public nodes — see Security tip."
+                : $"Imported {capped.Count} free Pulse server(s) ({note}). Untrusted public nodes.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Pulse free servers failed: {StatusSanitizer.Scrub(ex.Message)}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.4] - 2026-09-14
+
+### Fixed
+
+- Lock/unlock while Connected: resume no longer treats SOCKS-green + weak TUN as healthy (only `ReportVpnReady`). Soft recovery force-rebinds Android VPN when the 90s throttle allows, then `RefreshRuntime`.
+- Unlock without opening the app: `USER_PRESENT` / `SCREEN_ON` triggers session recovery while VpnService is up.
+
+### Added
+
+- **Free** button: import up to 5 PulseConfigs free servers (Worker → raw → jsDelivr); tip in `docs/tips/pulse-free-servers.md`.
+
+### Changed
+
+- Product version **2.6.3.4** (Android versionCode 20634)
+
 ## [2.6.3.3] - 2026-09-14
 
 ### Fixed
