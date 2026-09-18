@@ -1,9 +1,15 @@
 # Tip: Desktop Connect troubleshooting
 
 1. Prefer the in-app **Update** button when a new GitHub release is available.
-2. Enable **TUN mode** for full-device VPN (Sentinel profile does this automatically).
-3. **Connect** — status should reach Connected within a few seconds.
+2. Enable **TUN mode** for full-device VPN (Sentinel profile does this automatically). **Run as Administrator** on Windows.
+3. **Connect** — status should reach Connected within a few seconds. While TUN is on, `Get-NetAdapter -Name v2rayF` should show the adapter.
 4. If browsing works but toasts do not, see **Windows notifications** below.
+
+## v2.6.3.5 — Windows TUN honesty
+
+Missing WinTun adapter while TUN mode is enabled is a **hard Connect fail** (same sentinel as Android VpnService Network missing). Kill switch will not arm if the adapter never appears. Soft recovery refreshes the core; if the adapter is still gone, the session tears down instead of staying Connected with a blackhole.
+
+Soak checklist: [golden-matrix-2.6.3.4.md](tips/golden-matrix-2.6.3.4.md).
 
 ## v2.6.2.4 — kill switch + App Network on sing-box TUN
 

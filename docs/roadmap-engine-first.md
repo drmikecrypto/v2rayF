@@ -7,4 +7,4 @@ Shipped through v2.2.2 (kept):
 - Phase A: default DoH for Connect + DoH retry. Speedtest DNS stays UDP.
 - Phase B: Android classic on sing-box TUN; desktop classic on Xray; Hy2/TUIC/WG on sing-box.
 
-Former “Phase C” (UX / multipath / diagnostics) stays deferred until single-link engine + golden app matrix meet [`PLAN.md`](PLAN.md) exit gates.
+Windows TUN fail-closed (missing `v2rayF` adapter) landed with the Phase 4 reliability bar. Former “Phase C” (UX / multipath / diagnostics) stays deferred until golden-matrix soak of v2.6.3.4 meets [`PLAN.md`](PLAN.md) exit gates — see [`tips/golden-matrix-2.6.3.4.md`](tips/golden-matrix-2.6.3.4.md).

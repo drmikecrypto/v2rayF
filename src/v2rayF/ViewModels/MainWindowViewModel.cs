@@ -659,6 +659,13 @@ public partial class MainWindowViewModel : ViewModelBase
                     .ConfigureAwait(true);
 
                 var ok = await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true);
+                // Desktop: missing WinTun after refresh = hard fail (same as Android VpnService missing).
+                var winTunMissing = !IsMobile &&
+                                    settings.EnableTunMode &&
+                                    !DesktopTunInterface.IsPresent();
+                if (winTunMissing)
+                    ok = false;
+
                 _proxyCore.EndSoftRecovery(success: ok);
                 if (ok)
                 {
@@ -684,7 +691,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 {
                     _proxyCore.BackoffTunOnlyFails();
                     _consecutiveSoftRecoveryWeak++;
-                    if (_consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold)
+                    if (winTunMissing ||
+                        _consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold)
                         escalateZombie = true;
                     else
                     {
@@ -706,7 +714,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 _proxyCore.BackoffTunOnlyFails();
                 _consecutiveSoftRecoveryWeak++;
                 escalateZombie = !_proxyCore.IsRunning ||
-                                 _consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold;
+                                 _consecutiveSoftRecoveryWeak >= SoftRecoveryWeakEscalateThreshold ||
+                                 (!IsMobile && settings.EnableTunMode && !DesktopTunInterface.IsPresent());
                 if (!escalateZombie)
                 {
                     await SetOnUiAsync(() =>
@@ -876,7 +885,9 @@ public partial class MainWindowViewModel : ViewModelBase
                         .ConfigureAwait(true);
                     // After RefreshRuntime (+ optional force rebind), SOCKS+VPN-present is enough —
                     // do not full-reconnect solely because gen204/FCM is still advisory-weak.
-                    if (restored)
+                    // Desktop: missing WinTun after refresh is still a hard miss (Connected blackhole).
+                    if (restored &&
+                        (IsMobile || !connectSettings.EnableTunMode || DesktopTunInterface.IsPresent()))
                     {
                         try
                         {

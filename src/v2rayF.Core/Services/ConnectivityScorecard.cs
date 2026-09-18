@@ -16,7 +16,10 @@ public static class ConnectivityScorecard
         "YouTube playback",
         "Maps load/search",
         "Play Services FCM push",
-        "UDP game or voice"
+        "UDP game or voice",
+        "Lock unlock Chrome without app",
+        "Windows TUN adapter present",
+        "Windows no Connected blackhole"
     ];
 
     public static string ExportMarkdown(

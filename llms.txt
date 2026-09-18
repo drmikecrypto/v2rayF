@@ -59,6 +59,7 @@ pwsh -File scripts/clean-artifacts.ps1
 - [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) — install and connect
 - [docs/tip-android-connect.md](docs/tip-android-connect.md) — Android connect tips
 - [docs/tips/game-v2box-scorecard.md](docs/tips/game-v2box-scorecard.md) — private game vs V2Box lab template
+- [docs/tips/golden-matrix-2.6.3.4.md](docs/tips/golden-matrix-2.6.3.4.md) — lock/unlock + Windows TUN soak
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 

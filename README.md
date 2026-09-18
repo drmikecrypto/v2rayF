@@ -130,7 +130,7 @@ LISTEN  127.0.0.1:10808   # socks
 LISTEN  127.0.0.1:10809   # http
 ```
 
-Docs worth reading once: [routing](docs/tips/routing-rules.md) · [Secure Share](docs/tips/secure-share.md) · [latency ≠ Mbps](docs/tips/latency-testing.md) · [engine roadmap](docs/roadmap-engine-first.md)
+Docs worth reading once: [routing](docs/tips/routing-rules.md) · [Secure Share](docs/tips/secure-share.md) · [latency ≠ Mbps](docs/tips/latency-testing.md) · [engine roadmap](docs/roadmap-engine-first.md) · [golden matrix 2.6.3.4](docs/tips/golden-matrix-2.6.3.4.md)
 
 ---
 

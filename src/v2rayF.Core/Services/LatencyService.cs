@@ -47,8 +47,8 @@ public sealed class LatencyService
     /// <summary>TUN probe after SOCKS warmup on Vision/REALITY (cold dial).</summary>
     public const int TunAppPathProbeVisionMs = 12000;
     /// <summary>
-    /// Android VpnTunPathProbe: no VpnService Network (hard Connect fail).
-    /// Distinct from -1 (VPN present, gen204/FCM miss — advisory only).
+    /// Android VpnTunPathProbe / desktop WinTun: no VPN Network or <c>v2rayF</c> adapter (hard Connect fail).
+    /// Distinct from -1 (VPN/adapter present, gen204/FCM miss — advisory only).
     /// </summary>
     public const int TunVpnMissingMs = -2;
     public const int DesktopSpeedtestWorkers = 3;

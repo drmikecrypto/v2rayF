@@ -140,7 +140,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Fail-closed when VpnService/WinTun holds the default route but TUN cannot carry traffic.
+    /// Fail-closed when VpnService/WinTun holds the default route but the VPN/adapter is gone.
     /// Leaving Connected in that state blackholes the whole device while localhost SOCKS still works.
     /// </summary>
     public const string TunPathNoInternetMessage =

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.5] - 2026-09-18
+
+### Fixed
+
+- Windows TUN: missing `v2rayF` adapter is fail-closed (`TunVpnMissingMs`), matching Android VpnService Network missing — no Connected blackhole when SOCKS is green but WinTun is gone.
+- Kill switch waits on `DesktopTunInterface` (no PowerShell adapter race). Soft recovery / session resume escalate when the adapter stays missing after refresh.
+
+### Added
+
+- Golden-matrix soak runbook for **v2.6.3.4** (lock/unlock + Windows TUN): `docs/tips/golden-matrix-2.6.3.4.md`.
+- Scorecard export rows for lock/unlock and Windows TUN honesty checks.
+
+### Changed
+
+- Product version **2.6.3.5** (Android versionCode 20635)
+
 ## [2.6.3.4] - 2026-09-14
 
 ### Fixed

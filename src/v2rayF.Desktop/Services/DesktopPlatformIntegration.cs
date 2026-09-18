@@ -54,12 +54,28 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
     public Task NotifyVpnReadyAsync(CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 
-    public Task<int?> ProbeTunAppPathAsync(
+    /// <summary>
+    /// Desktop analogue of Android VpnTunPathProbe: missing WinTun/sing-box adapter →
+    /// <see cref="LatencyService.TunVpnMissingMs"/> (fail-closed). HTTPS miss stays advisory (-1).
+    /// </summary>
+    public async Task<int?> ProbeTunAppPathAsync(
         CancellationToken cancellationToken = default,
         int timeoutMs = LatencyService.TunAppPathProbeMs)
     {
+        if (!DesktopTunInterface.IsPresent())
+        {
+            // Cold Connect: Xray/sing-box may need a moment to create the adapter.
+            var waitMs = Math.Min(Math.Max(timeoutMs, 0), 2500);
+            if (!await DesktopTunInterface
+                    .WaitUntilPresentAsync(waitMs, cancellationToken)
+                    .ConfigureAwait(false))
+                return LatencyService.TunVpnMissingMs;
+        }
+
         var latency = new LatencyService(AppServices.CoreEnvironment);
-        return latency.MeasureTunAppPathAsync(cancellationToken, timeoutMs);
+        return await latency
+            .MeasureTunAppPathAsync(cancellationToken, timeoutMs)
+            .ConfigureAwait(false);
     }
 
     public Task PromptBatteryOptimizationIfNeededAsync(

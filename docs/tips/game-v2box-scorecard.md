@@ -27,3 +27,5 @@ Never enable experimental stack in a public release without a sandbox gate and g
 ## After the lab
 
 Update [`PLAN.md`](../PLAN.md) exit gates only when Daily mode stays green for Chromium + messengers and Gaming mode matches V2Box on the UDP/game row.
+
+Full soak sheet (lock/unlock + Windows TUN): [`golden-matrix-2.6.3.4.md`](golden-matrix-2.6.3.4.md).

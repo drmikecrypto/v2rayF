@@ -118,20 +118,11 @@ public sealed class DesktopKillSwitch : IKillSwitch
     [SupportedOSPlatform("windows")]
     private static async Task WaitForTunInterfaceAsync(CancellationToken cancellationToken)
     {
-        var iface = TunConstants.InterfaceName.Replace("'", "''", StringComparison.Ordinal);
-        var probe =
-            $"if (Get-NetAdapter -Name '{iface}' -ErrorAction SilentlyContinue) {{ exit 0 }} else {{ exit 1 }}";
-
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var (exit, _) = await RunCaptureAsync("powershell", $"-NoProfile -Command \"{probe}\"", cancellationToken)
-                .ConfigureAwait(false);
-            if (exit == 0)
-                return;
-
-            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
-        }
+        // Same adapter check as Connect fail-closed (DesktopTunInterface) — avoid PowerShell race.
+        if (await DesktopTunInterface
+                .WaitUntilPresentAsync(timeoutMs: 5000, cancellationToken)
+                .ConfigureAwait(false))
+            return;
 
         throw new InvalidOperationException(
             $"TUN interface '{TunConstants.InterfaceName}' not found; kill switch not armed to avoid blackhole.");
