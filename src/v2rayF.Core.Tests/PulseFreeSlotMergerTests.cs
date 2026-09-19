@@ -101,6 +101,17 @@ public class PulseFreeSlotMergerTests
     }
 
     [Fact]
+    public void Accept_threshold_allows_iran_realistic_rtt()
+    {
+        var r = PulseFreeSlotMerger.Merge(
+            Array.Empty<ProxyServer>(),
+            new[] { Cand("1.2.3.4", 300), Cand("5.6.7.8", 500) },
+            maxLatencyMs: PulseFreeConstants.AcceptLatencyMs);
+        Assert.Single(r.ToAdd);
+        Assert.Equal("1.2.3.4", r.ToAdd[0].Address);
+    }
+
+    [Fact]
     public void Dedupes_against_existing_endpoints()
     {
         var existing = new List<ProxyServer> { Free("1.1.1.1", 40) };

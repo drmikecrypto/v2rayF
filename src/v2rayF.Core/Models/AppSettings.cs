@@ -118,8 +118,8 @@ public sealed class AppSettings
     /// <summary>Hint from last successful Adaptive Survive session (fragment / sentinel).</summary>
     public string LastSurviveTactic { get; set; } = "";
 
-    /// <summary>Optional Cloudflare Worker base for PulseConfigs Free shortlist / refresh.</summary>
-    public string PulseWorkerBase { get; set; } = "";
+    /// <summary>Cloudflare Worker base for PulseConfigs Free shortlist / refresh.</summary>
+    public string PulseWorkerBase { get; set; } = "https://pulseconfigs-mirror.drmikecrypto.workers.dev";
 
     /// <summary>Storage schema version (2 = encrypted sensitive fields). Default 1 = legacy plaintext.</summary>
     public int StorageVersion { get; set; } = 1;

@@ -2039,7 +2039,25 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private DateTimeOffset _lastPulseFreeTapUtc = DateTimeOffset.MinValue;
 
-    /// <summary>Import / refresh Free slots (≤5, on-device ≤150ms). Replaces slow Free only.</summary>
+    private void ApplyPulseFreeMerge(PulseFreeSlotMerger.Result merge)
+    {
+        foreach (var doomed in merge.ToRemove)
+        {
+            var match = Servers.FirstOrDefault(s => s.Id == doomed.Id);
+            if (match != null)
+                Servers.Remove(match);
+        }
+
+        foreach (var add in merge.ToAdd)
+        {
+            add.Source = PulseFreeConstants.SourceId;
+            if (string.IsNullOrWhiteSpace(add.Name) || add.Name == "Server")
+                add.Name = "Free";
+            Servers.Add(add);
+        }
+    }
+
+    /// <summary>Import / refresh Free slots (≤5, on-device ≤150ms preferred / ≤450ms fill). Replaces slow Free only.</summary>
     [RelayCommand]
     private async Task ImportPulseFreeServersAsync()
     {
@@ -2142,13 +2160,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var fragment = EnablePacketFragment;
             var gate = new SemaphoreSlim(Math.Max(1, _latencyService.WorkerCount));
+            // TCP prefilter uses AcceptLatencyMs — Iran RTT to overseas edges often exceeds 150ms.
             await Task.WhenAll(probeList.Select(async server =>
             {
                 await gate.WaitAsync().ConfigureAwait(false);
                 try
                 {
                     var tcp = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
-                    if (tcp is null or < 0 || tcp > PulseFreeConstants.MaxLatencyMs)
+                    if (tcp is null or < 0 || tcp > PulseFreeConstants.AcceptLatencyMs)
                     {
                         server.SetLatency(-1);
                         return;
@@ -2170,27 +2189,29 @@ public partial class MainWindowViewModel : ViewModelBase
             })).ConfigureAwait(true);
 
             StatusText = "Updating Free slots…";
+            // Prefer ≤150ms; if slots remain, fill up to AcceptLatencyMs (Iran-realistic).
             var merge = PulseFreeSlotMerger.Merge(Servers, probeList);
+            ApplyPulseFreeMerge(merge);
 
-            foreach (var doomed in merge.ToRemove)
+            var freeCount = Servers.Count(s => s.IsPulseFree);
+            if (freeCount < PulseFreeConstants.MaxSlots)
             {
-                var match = Servers.FirstOrDefault(s => s.Id == doomed.Id);
-                if (match != null)
-                    Servers.Remove(match);
+                var fill = PulseFreeSlotMerger.Merge(
+                    Servers, probeList, maxLatencyMs: PulseFreeConstants.AcceptLatencyMs);
+                ApplyPulseFreeMerge(fill);
+                merge = new PulseFreeSlotMerger.Result(
+                    ToRemove: merge.ToRemove.Concat(fill.ToRemove).Distinct().ToList(),
+                    ToAdd: merge.ToAdd.Concat(fill.ToAdd).ToList(),
+                    Kept: Servers.Count(s => s.IsPulseFree &&
+                        s.LatencyMs is int kms && kms >= 1 && kms <= PulseFreeConstants.MaxLatencyMs),
+                    Replaced: merge.Replaced + fill.Replaced,
+                    Added: merge.Added + fill.Added,
+                    OpenSlots: Math.Max(0, PulseFreeConstants.MaxSlots - Servers.Count(s => s.IsPulseFree)));
             }
 
-            foreach (var add in merge.ToAdd)
-            {
-                add.Source = PulseFreeConstants.SourceId;
-                if (string.IsNullOrWhiteSpace(add.Name) || add.Name == "Server")
-                    add.Name = string.IsNullOrWhiteSpace(add.Name) ? "Free" : add.Name;
-                Servers.Add(add);
-            }
-
-            // Safety: enforce max free count
+            // Safety: enforce max free count (prefer lower latency)
             var freeNow = Servers.Where(s => s.IsPulseFree)
-                .OrderByDescending(s => s.LatencyMs is int ms && ms >= 1 && ms <= PulseFreeConstants.MaxLatencyMs)
-                .ThenBy(s => s.LatencyMs is > 0 ? s.LatencyMs : int.MaxValue)
+                .OrderBy(s => s.LatencyMs is > 0 ? s.LatencyMs : int.MaxValue)
                 .ToList();
             while (freeNow.Count > PulseFreeConstants.MaxSlots)
             {
@@ -2206,17 +2227,19 @@ public partial class MainWindowViewModel : ViewModelBase
             var totalFree = Servers.Count(s => s.IsPulseFree);
             var under = Servers.Count(s =>
                 s.IsPulseFree && s.LatencyMs is int ms && ms >= 1 && ms <= PulseFreeConstants.MaxLatencyMs);
+            var accepted = Servers.Count(s =>
+                s.IsPulseFree && s.LatencyMs is int ams && ams >= 1 && ams <= PulseFreeConstants.AcceptLatencyMs);
 
-            if (under == 0 && merge.Added == 0)
+            if (accepted == 0 && merge.Added == 0)
             {
                 StatusText =
-                    $"Free: no servers ≤{PulseFreeConstants.MaxLatencyMs}ms on your network right now. Try again later or another network.";
+                    $"Free: no usable servers ≤{PulseFreeConstants.AcceptLatencyMs}ms on your network right now. Try again later or another ISP path.";
                 return;
             }
 
             var note = fetched.MirrorNote;
             var core =
-                $"Free: kept {merge.Kept} · added {merge.Added} · slots {totalFree}/{PulseFreeConstants.MaxSlots} · {under} ≤{PulseFreeConstants.MaxLatencyMs}ms";
+                $"Free: kept {merge.Kept} · added {merge.Added} · slots {totalFree}/{PulseFreeConstants.MaxSlots} · {under} ≤{PulseFreeConstants.MaxLatencyMs}ms · {accepted} ≤{PulseFreeConstants.AcceptLatencyMs}ms";
             StatusText = string.IsNullOrEmpty(note) ? core : $"{core} ({note})";
         }
         catch (Exception ex)

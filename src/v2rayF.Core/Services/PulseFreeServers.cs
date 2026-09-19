@@ -31,8 +31,8 @@ public static class PulseFreeServers
     public static string RawCandidatesTxt { get; set; } =
         $"https://raw.githubusercontent.com/{DefaultOwnerRepo}/main/candidates.txt";
 
-    /// <summary>Optional Worker base, e.g. https://pulseconfigs-mirror.example.workers.dev</summary>
-    public static string? WorkerBase { get; set; }
+    /// <summary>Worker base (defaults to live PulseConfigs mirror).</summary>
+    public static string? WorkerBase { get; set; } = PulseFreeConstants.DefaultWorkerBase;
 
     public static string IndexRaw { get; set; } =
         $"https://raw.githubusercontent.com/{DefaultOwnerRepo}/main/index.json";
