@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.4.1] - 2026-09-19
+
+### Fixed
+
+- **Free** on Iran/CN paths: prefer ≤150ms, fill remaining slots up to **450ms** (overseas edge RTT); TCP prefilter uses the accept ceiling so working CDN edges are not dropped early.
+- Default `PulseWorkerBase` to `https://pulseconfigs-mirror.drmikecrypto.workers.dev` so Free can fetch `candidates.json` without raw GitHub.
+
+### Changed
+
+- Product version **2.6.4.1** (Android versionCode 20641)
+
 ## [2.6.4.0] - 2026-09-19
 
 ### Changed
