@@ -36,8 +36,9 @@
                     <TextBox Grid.Column="0" PlaceholderText="Subscription URL"
                              Text="{Binding SubscriptionUrl}"/>
                     <Button Grid.Column="1" Content="Import" Command="{Binding ImportFromSubscriptionCommand}"/>
-                    <Button Grid.Column="2" Content="Free" Command="{Binding ImportPulseFreeServersCommand}"
-                            ToolTip.Tip="Pulse free servers (≤5)"/>
+                    <Button Grid.Column="2" Content="Free" Classes="accent"
+                            Command="{Binding ImportPulseFreeServersCommand}"
+                            ToolTip.Tip="Up to 5 fast free servers for your network (≤150ms). Re-tap refreshes slow ones."/>
                     <Button Grid.Column="3" Content="Refresh" Command="{Binding RefreshSubscriptionCommand}"
                             IsEnabled="{Binding HasSavedSubscription}"/>
                     <Button Grid.Column="4" Content="File" Command="{Binding ImportConfigFileCommand}"/>
@@ -86,17 +87,22 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="models:ProxyServer">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="8">
                             <Border Padding="6,3" CornerRadius="4" Background="{DynamicResource SystemAccentColor}">
                                 <TextBlock Text="{Binding DisplayProtocol}" FontWeight="SemiBold" FontSize="11"/>
                             </Border>
-                            <StackPanel Grid.Column="1">
+                            <Border Grid.Column="1" Padding="6,3" CornerRadius="4"
+                                    Background="#2E7D32"
+                                    IsVisible="{Binding IsPulseFree}">
+                                <TextBlock Text="Free" FontWeight="SemiBold" FontSize="11" Foreground="White"/>
+                            </Border>
+                            <StackPanel Grid.Column="2">
                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
                                 <TextBlock Text="{Binding DisplayTransport}" FontSize="11" Opacity="0.85"/>
                                 <TextBlock Text="{Binding DisplayEndpoint}" FontSize="12" Opacity="0.7"/>
                             </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="3"
+                            <TextBlock Grid.Column="3" Text="{Binding DisplayLatency}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="4"
                                     Content="×"
                                     ToolTip.Tip="Remove this server"
                                     Padding="10,4"

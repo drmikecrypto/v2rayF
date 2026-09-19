@@ -109,6 +109,17 @@ public sealed class ServerStore
         Cipher = s.Cipher,
         AllowInsecure = s.AllowInsecure,
         RawLink = s.RawLink,
+        Source = s.Source ?? "",
+        Extra = s.Extra,
+        UpMbps = s.UpMbps,
+        DownMbps = s.DownMbps,
+        UdpRelayMode = s.UdpRelayMode,
+        Mtu = s.Mtu,
+        QuicSecurity = s.QuicSecurity,
+        QuicKey = s.QuicKey,
+        MaxEarlyData = s.MaxEarlyData,
+        EarlyDataHeaderName = s.EarlyDataHeaderName,
+        PacketEncoding = s.PacketEncoding,
         AddedAt = s.AddedAt,
         LatencyMs = s.LatencyMs
     };

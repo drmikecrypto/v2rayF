@@ -23,4 +23,31 @@ public class PulseFreeServersTests
         Assert.Equal(2, list.Count);
         Assert.Contains("raw.githubusercontent.com", list[0]);
     }
+
+    [Fact]
+    public void BuildShortlistCandidates_PrefersCandidatesJson()
+    {
+        PulseFreeServers.WorkerBase = null;
+        var list = PulseFreeServers.BuildShortlistCandidates("https://pulse.example.workers.dev");
+        Assert.Contains(list, u => u.EndsWith("/candidates.json"));
+        Assert.Equal("https://pulse.example.workers.dev/candidates.json", list[0]);
+    }
+
+    [Fact]
+    public void NormalizeSubscriptionBody_ExtractsRawLinks()
+    {
+        var json = """
+            {"candidates":[{"raw":"vless://a@1.1.1.1:443","fingerprint":"x"},{"raw":"trojan://b@2.2.2.2:443"}]}
+            """;
+        var body = PulseFreeServers.NormalizeSubscriptionBody(json);
+        Assert.Contains("vless://a@1.1.1.1:443", body);
+        Assert.Contains("trojan://b@2.2.2.2:443", body);
+    }
+
+    [Fact]
+    public void NormalizeSubscriptionBody_PassthroughPlainText()
+    {
+        const string plain = "vless://a@1.1.1.1:443\n";
+        Assert.Equal(plain, PulseFreeServers.NormalizeSubscriptionBody(plain));
+    }
 }

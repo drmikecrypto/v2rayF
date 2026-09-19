@@ -24,7 +24,8 @@ public sealed class SubscriptionService
     public async Task<SubscriptionFetchResult> FetchDetailedAsync(
         string url,
         bool viaLocalProxy = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, string>? bodyTransform = null)
     {
         if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
             throw new ArgumentException("Subscription URL must be http or https.");
@@ -38,6 +39,8 @@ public sealed class SubscriptionService
             {
                 var body = await DownloadBodyAsync(candidate, viaLocalProxy, cancellationToken)
                     .ConfigureAwait(false);
+                if (bodyTransform != null)
+                    body = bodyTransform(body);
                 var servers = ConfigImportParser.Parse(body);
                 var mirrorNote = !string.Equals(candidate.ToString(), uri.ToString(), StringComparison.Ordinal)
                     ? $"Used mirror: {candidate.Host}"

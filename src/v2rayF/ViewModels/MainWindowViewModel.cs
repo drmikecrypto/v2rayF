@@ -1149,6 +1149,8 @@ public partial class MainWindowViewModel : ViewModelBase
         DesktopDirectProcesses = settings.DesktopDirectProcesses;
         DesktopBlockProcesses = settings.DesktopBlockProcesses;
         VaultUnlocked = _vault.IsUnlocked;
+        if (!string.IsNullOrWhiteSpace(settings.PulseWorkerBase))
+            PulseFreeServers.WorkerBase = settings.PulseWorkerBase.Trim().TrimEnd('/');
         UpdateTunStatus();
         UpdateSecureShareEndpoint();
     }
@@ -1183,6 +1185,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.AndroidBlockPackages = AndroidBlockPackages;
         _settings.DesktopDirectProcesses = DesktopDirectProcesses;
         _settings.DesktopBlockProcesses = DesktopBlockProcesses;
+        // PulseWorkerBase is settings-only (no UI field); keep whatever was loaded / set.
         return _settings;
     }
 
@@ -2034,77 +2037,217 @@ public partial class MainWindowViewModel : ViewModelBase
         await TryImportSubscriptionAsync();
     }
 
-    /// <summary>Import ≤5 free PulseConfigs servers (Iran-aware top5 when published).</summary>
+    private DateTimeOffset _lastPulseFreeTapUtc = DateTimeOffset.MinValue;
+
+    /// <summary>Import / refresh Free slots (≤5, on-device ≤150ms). Replaces slow Free only.</summary>
     [RelayCommand]
     private async Task ImportPulseFreeServersAsync()
     {
         try
         {
-            IsBusy = true;
-            StatusText = "Fetching Pulse free servers…";
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
-            http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "v2rayF-PulseFree/1.0");
-
-            var top5Url = await PulseFreeServers.ResolveTop5UrlAsync(http).ConfigureAwait(true);
-            if (string.IsNullOrWhiteSpace(top5Url))
+            var now = DateTimeOffset.UtcNow;
+            if ((now - _lastPulseFreeTapUtc).TotalSeconds < PulseFreeConstants.CooldownSeconds)
             {
-                StatusText = "Pulse free servers URL unavailable.";
+                var wait = PulseFreeConstants.CooldownSeconds -
+                           (int)(now - _lastPulseFreeTapUtc).TotalSeconds;
+                StatusText = $"Free cooldown — try again in {Math.Max(1, wait)}s.";
                 return;
             }
 
-            // Prefer Worker / mirrors via SubscriptionService path
-            SubscriptionUrl = top5Url;
-            var viaProxy = SubscriptionViaProxy && IsConnected;
-            var fetched = await _subscriptionService.FetchDetailedAsync(top5Url, viaProxy).ConfigureAwait(true);
-            if (fetched.Servers.Count == 0)
+            IsBusy = true;
+            _lastPulseFreeTapUtc = now;
+
+            // If all 5 Free slots are already fast, soft-refresh pool only.
+            var existingFree = Servers.Where(s => s.IsPulseFree).ToList();
+            var goodFree = existingFree
+                .Where(s => s.LatencyMs is int ms && ms >= 1 && ms <= PulseFreeConstants.MaxLatencyMs)
+                .ToList();
+            if (goodFree.Count >= PulseFreeConstants.MaxSlots)
             {
-                // Fallback candidates
-                foreach (var alt in PulseFreeServers.BuildTop5Candidates())
+                StatusText = "Refreshing pool…";
+                using var httpQuiet = CreatePulseHttp();
+                _ = PulseFreeServers.TryRequestPoolRefreshAsync(httpQuiet);
+                StatusText =
+                    $"Free: already have {PulseFreeConstants.MaxSlots} servers ≤{PulseFreeConstants.MaxLatencyMs}ms — pool refresh requested.";
+                return;
+            }
+
+            StatusText = "Refreshing pool…";
+            using var http = CreatePulseHttp();
+            if (!string.IsNullOrWhiteSpace(_settings.PulseWorkerBase))
+                PulseFreeServers.WorkerBase = _settings.PulseWorkerBase.Trim().TrimEnd('/');
+
+            _ = PulseFreeServers.TryRequestPoolRefreshAsync(http);
+
+            StatusText = "Fetching Free shortlist…";
+            var viaProxy = SubscriptionViaProxy && IsConnected;
+            var shortlistUrl = await PulseFreeServers.ResolveShortlistUrlAsync(http).ConfigureAwait(true);
+            SubscriptionFetchResult? fetched = null;
+            string? usedUrl = shortlistUrl;
+
+            async Task<SubscriptionFetchResult?> TryFetch(string? url)
+            {
+                if (string.IsNullOrWhiteSpace(url))
+                    return null;
+                try
                 {
-                    if (string.Equals(alt, top5Url, StringComparison.OrdinalIgnoreCase))
+                    return await _subscriptionService
+                        .FetchDetailedAsync(url, viaProxy, bodyTransform: PulseFreeServers.NormalizeSubscriptionBody)
+                        .ConfigureAwait(true);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            fetched = await TryFetch(shortlistUrl).ConfigureAwait(true);
+            if (fetched is null || fetched.Servers.Count == 0)
+            {
+                foreach (var alt in PulseFreeServers.BuildShortlistCandidates())
+                {
+                    if (string.Equals(alt, usedUrl, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    try
+                    fetched = await TryFetch(alt).ConfigureAwait(true);
+                    if (fetched is { Servers.Count: > 0 })
                     {
-                        fetched = await _subscriptionService.FetchDetailedAsync(alt, viaProxy).ConfigureAwait(true);
-                        if (fetched.Servers.Count > 0)
-                        {
-                            SubscriptionUrl = alt;
-                            break;
-                        }
-                    }
-                    catch
-                    {
-                        // try next
+                        usedUrl = alt;
+                        break;
                     }
                 }
             }
 
-            if (fetched.Servers.Count == 0)
+            if (fetched is null || fetched.Servers.Count == 0)
             {
                 StatusText =
-                    "Pulse free servers empty or unreachable. See docs/tips/pulse-free-servers.md — " +
-                    "try Worker mirror, enable Subscription via proxy, or import top5.txt manually.";
+                    "Free shortlist unreachable. Check network, enable Subscription via proxy while Connected, or see tips/pulse-free-servers.md.";
                 return;
             }
 
-            // Cap at 5 for Free button contract
-            var capped = fetched.Servers.Count > 5
-                ? fetched.Servers.Take(5).ToList()
-                : fetched.Servers;
-            await MergeImportedAsync(capped).ConfigureAwait(true);
+            // Deduplicate parse results and cap probe set
+            var probeList = new List<ProxyServer>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var s in fetched.Servers)
+            {
+                var key = PulseFreeSlotMerger.EndpointKey(s);
+                if (!seen.Add(key))
+                    continue;
+                probeList.Add(s);
+                if (probeList.Count >= PulseFreeConstants.ProbeCap)
+                    break;
+            }
+
+            StatusText = $"Testing on your network… ({probeList.Count})";
+            await EnsureCoreForFreeProbeAsync().ConfigureAwait(true);
+
+            var fragment = EnablePacketFragment;
+            var gate = new SemaphoreSlim(Math.Max(1, _latencyService.WorkerCount));
+            await Task.WhenAll(probeList.Select(async server =>
+            {
+                await gate.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    var tcp = await _latencyService.MeasureTcpOnlyAsync(server).ConfigureAwait(false);
+                    if (tcp is null or < 0 || tcp > PulseFreeConstants.MaxLatencyMs)
+                    {
+                        server.SetLatency(-1);
+                        return;
+                    }
+
+                    var proxyMs = await _latencyService
+                        .MeasureProxyPathAsync(server, default, fragment)
+                        .ConfigureAwait(false);
+                    server.SetLatency(proxyMs is >= 0 ? proxyMs : -1);
+                }
+                catch
+                {
+                    server.SetLatency(-1);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            })).ConfigureAwait(true);
+
+            StatusText = "Updating Free slots…";
+            var merge = PulseFreeSlotMerger.Merge(Servers, probeList);
+
+            foreach (var doomed in merge.ToRemove)
+            {
+                var match = Servers.FirstOrDefault(s => s.Id == doomed.Id);
+                if (match != null)
+                    Servers.Remove(match);
+            }
+
+            foreach (var add in merge.ToAdd)
+            {
+                add.Source = PulseFreeConstants.SourceId;
+                if (string.IsNullOrWhiteSpace(add.Name) || add.Name == "Server")
+                    add.Name = string.IsNullOrWhiteSpace(add.Name) ? "Free" : add.Name;
+                Servers.Add(add);
+            }
+
+            // Safety: enforce max free count
+            var freeNow = Servers.Where(s => s.IsPulseFree)
+                .OrderByDescending(s => s.LatencyMs is int ms && ms >= 1 && ms <= PulseFreeConstants.MaxLatencyMs)
+                .ThenBy(s => s.LatencyMs is > 0 ? s.LatencyMs : int.MaxValue)
+                .ToList();
+            while (freeNow.Count > PulseFreeConstants.MaxSlots)
+            {
+                var drop = freeNow[^1];
+                freeNow.RemoveAt(freeNow.Count - 1);
+                Servers.Remove(drop);
+            }
+
+            ReorderServersByLatency();
+            await _serverStore.SaveAsync(Servers).ConfigureAwait(true);
             await _settingsStore.SaveAsync(CollectSettings()).ConfigureAwait(true);
+
+            var totalFree = Servers.Count(s => s.IsPulseFree);
+            var under = Servers.Count(s =>
+                s.IsPulseFree && s.LatencyMs is int ms && ms >= 1 && ms <= PulseFreeConstants.MaxLatencyMs);
+
+            if (under == 0 && merge.Added == 0)
+            {
+                StatusText =
+                    $"Free: no servers ≤{PulseFreeConstants.MaxLatencyMs}ms on your network right now. Try again later or another network.";
+                return;
+            }
+
             var note = fetched.MirrorNote;
-            StatusText = string.IsNullOrEmpty(note)
-                ? $"Imported {capped.Count} free Pulse server(s). Untrusted public nodes — see Security tip."
-                : $"Imported {capped.Count} free Pulse server(s) ({note}). Untrusted public nodes.";
+            var core =
+                $"Free: kept {merge.Kept} · added {merge.Added} · slots {totalFree}/{PulseFreeConstants.MaxSlots} · {under} ≤{PulseFreeConstants.MaxLatencyMs}ms";
+            StatusText = string.IsNullOrEmpty(note) ? core : $"{core} ({note})";
         }
         catch (Exception ex)
         {
-            StatusText = $"Pulse free servers failed: {StatusSanitizer.Scrub(ex.Message)}";
+            StatusText = $"Free failed: {StatusSanitizer.Scrub(ex.Message)}";
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private static HttpClient CreatePulseHttp()
+    {
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
+        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "v2rayF-PulseFree/1.0");
+        return http;
+    }
+
+    private async Task EnsureCoreForFreeProbeAsync()
+    {
+        if (_proxyCore.IsAnyCoreAvailable())
+            return;
+        try
+        {
+            await AppServices.CoreEnvironment.EnsureCoreAsync().ConfigureAwait(true);
+            UpdateCoreStatus();
+        }
+        catch
+        {
+            // TCP-only may still run; proxy path will fail gracefully.
         }
     }
 

@@ -98,9 +98,19 @@ public partial class ProxyServer : ObservableObject
 
     public string RawLink { get; set; } = "";
 
+    /// <summary>
+    /// Provenance tag. <c>pulse-free</c> marks Free-button slots (max 5, client latency-gated).
+    /// Empty for user-imported servers.
+    /// </summary>
+    public string Source { get; set; } = "";
+
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 
     public int? LatencyMs { get; set; }
+
+    [JsonIgnore]
+    public bool IsPulseFree =>
+        string.Equals(Source, PulseFreeConstants.SourceId, StringComparison.OrdinalIgnoreCase);
 
     [JsonIgnore]
     public string DisplayProtocol => Protocol switch

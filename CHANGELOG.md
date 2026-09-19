@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.4.0] - 2026-09-19
+
+### Changed
+
+- **Free** button: on-device ≤150ms gate, max 5 `pulse-free` slots; re-tap keeps fast Free nodes and replaces slow ones only (user imports untouched). Soft pool refresh + `candidates.json` shortlist. Tip: `docs/tips/pulse-free-servers.md`.
+- Free badge in server list; 60s Free cooldown; optional `PulseWorkerBase` setting.
+- Product version **2.6.4.0** (Android versionCode 20640)
+
+### Added
+
+- `PulseFreeSlotMerger`, `PulseFreeConstants`, shortlist normalize / Worker refresh helpers; regression tests.
+
 ## [2.6.3.6] - 2026-09-19
 
 ### Added

@@ -133,6 +133,7 @@ public sealed class SettingsStore
         BatteryOptimizationPromptShown = s.BatteryOptimizationPromptShown,
         LastBatteryPromptUtc = s.LastBatteryPromptUtc,
         LastSurviveTactic = s.LastSurviveTactic,
+        PulseWorkerBase = s.PulseWorkerBase,
         StorageVersion = s.StorageVersion
     };
 
