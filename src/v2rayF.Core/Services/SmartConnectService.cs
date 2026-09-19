@@ -10,6 +10,12 @@ namespace v2rayF.Services;
 
 public sealed class SmartConnectService
 {
+    public enum RankProfile
+    {
+        Default = 0,
+        Gaming = 1
+    }
+
     public const int MaxFailoverCandidates = 5;
     public const int MaxMultipathCandidates = 3;
     public const int TcpPrefilterLimit = 8;
@@ -21,6 +27,14 @@ public sealed class SmartConnectService
     public const int MaxProxyPathProbes = 6;
     /// <summary>Raised probe cap for deep_fix-sized subscriptions (≥10 servers).</summary>
     public const int MaxProxyPathProbesLargeList = 10;
+    /// <summary>Gaming Boost: slightly deeper proxy-path probes on large lists.</summary>
+    public const int MaxProxyPathProbesLargeListGaming = 12;
+    /// <summary>Gaming: score penalty when Vision/REALITY wins over a nearby UDP-native peer.</summary>
+    public const int GamingVisionVsUdpPenalty = 40;
+    /// <summary>Gaming: TCP slack (ms) for considering a UDP peer "nearby" vs Vision/REALITY.</summary>
+    public const int GamingUdpNearbyTcpSlackMs = 30;
+    /// <summary>Gaming: score bonus (lower is better) for Hy2/TUIC/WG/anytls.</summary>
+    public const int GamingUdpNativeBonus = 25;
 
     private readonly LatencyService _latency;
 
@@ -48,7 +62,8 @@ public sealed class SmartConnectService
         IReadOnlyList<ProxyServer> servers,
         CancellationToken cancellationToken = default,
         bool enableFragment = false,
-        ProxyServer? preferred = null)
+        ProxyServer? preferred = null,
+        RankProfile profile = RankProfile.Default)
     {
         if (servers.Count == 0)
             return [];
@@ -67,7 +82,9 @@ public sealed class SmartConnectService
             .ToList();
 
         var shortlist = BuildShortlist(tcpResults, reachable, preferred);
-        var maxProbes = servers.Count >= 10 ? MaxProxyPathProbesLargeList : MaxProxyPathProbes;
+        var maxProbes = servers.Count >= 10
+            ? (profile == RankProfile.Gaming ? MaxProxyPathProbesLargeListGaming : MaxProxyPathProbesLargeList)
+            : MaxProxyPathProbes;
         var toProbe = shortlist.Take(maxProbes).ToList();
 
         // Preferred / last-good is already index 0 — first parallel wave includes it.
@@ -153,12 +170,68 @@ public sealed class SmartConnectService
             ranked.Add(new RankedServer(server, int.MaxValue - 1, tcpMs == int.MaxValue ? -1 : tcpMs, false));
         }
 
-        return ranked
+        var ordered = ranked
+            .OrderBy(r => r.ProxyPathOk ? 0 : 1)
+            .ThenBy(r => r.Score)
+            .ThenBy(r => r.Server.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (profile == RankProfile.Gaming)
+            ordered = ApplyGamingScoreAdjustments(ordered);
+
+        return ordered;
+    }
+
+    /// <summary>
+    /// Prefer UDP-native peers (Hy2/TUIC/WG); penalize Vision/REALITY when a nearby UDP peer works.
+    /// </summary>
+    public static List<RankedServer> ApplyGamingScoreAdjustments(IReadOnlyList<RankedServer> ranked)
+    {
+        var ok = ranked.Where(r => r.ProxyPathOk).ToList();
+        var udpOk = ok.Where(r => CoreRuntime.RequiresSingBox(r.Server)).ToList();
+        var bestUdpTcp = udpOk
+            .Where(r => r.TcpMs > 0)
+            .Select(r => r.TcpMs)
+            .DefaultIfEmpty(int.MaxValue)
+            .Min();
+
+        var adjusted = new List<RankedServer>(ranked.Count);
+        foreach (var r in ranked)
+        {
+            if (!r.ProxyPathOk)
+            {
+                adjusted.Add(r);
+                continue;
+            }
+
+            var score = r.Score;
+            if (CoreRuntime.RequiresSingBox(r.Server))
+                score = Math.Max(0, score - GamingUdpNativeBonus);
+            else if (IsVisionOrReality(r.Server) &&
+                     udpOk.Count > 0 &&
+                     r.TcpMs > 0 &&
+                     bestUdpTcp < int.MaxValue &&
+                     r.TcpMs <= bestUdpTcp + GamingUdpNearbyTcpSlackMs)
+            {
+                score = Math.Min(int.MaxValue - 2, score + GamingVisionVsUdpPenalty);
+            }
+
+            adjusted.Add(new RankedServer(r.Server, score, r.LatencyMs, r.ProxyPathOk, r.TcpMs));
+        }
+
+        return adjusted
             .OrderBy(r => r.ProxyPathOk ? 0 : 1)
             .ThenBy(r => r.Score)
             .ThenBy(r => r.Server.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    public static bool IsVisionOrReality(ProxyServer server) =>
+        ShareLinkParser.IsVisionFlow(server) ||
+        string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase);
+
+    public static RankProfile ResolveRankProfile(AppSettings? settings) =>
+        settings?.GamingBoostActive == true ? RankProfile.Gaming : RankProfile.Default;
 
     /// <summary>
     /// Transport-diverse shortlist: best TCP per protocol/network/security family, Reality reserve,

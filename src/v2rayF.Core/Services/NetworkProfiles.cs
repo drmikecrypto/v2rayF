@@ -19,27 +19,35 @@ public static class NetworkProfiles
     public static void ApplyDaily(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.GamingBoostActive = false;
         settings.ChromiumHttpProxyAssist = true;
         settings.EnableTunMode = true;
         settings.EnableSystemProxy = false;
     }
 
     /// <summary>
-    /// Full TUN without SetHttpProxy(10809) — closer to V2Box for Unity/raw-socket games.
-    /// Expect Play Store / Translate to fail (same as 2.3.1).
+    /// Gaming Boost: full TUN, no Chromium assist, no fragment/Survive, multipath + Smart Connect.
+    /// Optimizes the user's exit for UDP games — not a private GearUP-style backbone.
+    /// Expect Play Store / Translate to fail (same as assist-off / V2Box lab).
     /// </summary>
     public static void ApplyGaming(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.GamingBoostActive = true;
         settings.ChromiumHttpProxyAssist = false;
         settings.EnableTunMode = true;
         settings.EnableSystemProxy = false;
+        settings.EnablePacketFragment = false;
+        settings.AdaptiveSurviveEnabled = false;
+        settings.SmartMultipathEnabled = true;
+        settings.SmartConnectEnabled = true;
     }
 
     /// <summary>Full proxy + DoH + IPv6 block — typical Iran / heavy DPI.</summary>
     public static void ApplyIran(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.GamingBoostActive = false;
         settings.RoutingMode = RoutingMode.Global;
         settings.DnsThroughProxy = true;
         settings.BlockIpv6 = true;
@@ -53,6 +61,7 @@ public static class NetworkProfiles
     public static void ApplyChina(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        settings.GamingBoostActive = false;
         settings.RoutingMode = RoutingMode.BypassChina;
         settings.DnsThroughProxy = true;
         settings.BlockIpv6 = true;
@@ -68,7 +77,8 @@ public static class NetworkProfiles
     public static string StatusHint(string profileId) => profileId switch
     {
         DailyId => "Daily mode applied — Chromium assist on (Play/Translate). Save settings to persist.",
-        GamingId => "Gaming mode applied — assist off (Play Store may break). Save settings to persist.",
+        GamingId =>
+            "Gaming Boost — full TUN, assist/fragment/Survive off, multipath on. Optimizes your exit for UDP games (not a private booster backbone). Save settings to persist.",
         ChinaId => "China profile applied — Save settings to persist.",
         IranId => "Iran profile applied — Save settings to persist.",
         _ => "Sentinel profile applied — Save settings to persist."

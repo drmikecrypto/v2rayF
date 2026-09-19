@@ -40,11 +40,15 @@ public sealed class AppSettings
     public bool BlockIpv6 { get; set; } = true;
 
     /// <summary>
-    /// Android: VpnService SetHttpProxy(10809) + Google UDP/443 block for Chromium Play/Translate.
-    /// Default on (v2.6.2.19 / 2.3.2 path). Off may help some Unity games but breaks Play Store.
-    /// Prefer Daily / Gaming / Sentinel presets over flipping this alone.
+    /// Prefer Daily / Gaming Boost presets over flipping Chromium assist alone.
     /// </summary>
     public bool ChromiumHttpProxyAssist { get; set; } = true;
+
+    /// <summary>
+    /// Gaming Boost posture active (UDP-friendly ranking, multipath, fragment/Survive off).
+    /// Cleared by Daily / Iran / China / Sentinel presets.
+    /// </summary>
+    public bool GamingBoostActive { get; set; }
 
     /// <summary>
     /// When true, show TUN / HTTP assist / App Network Direct counts under Connected status.

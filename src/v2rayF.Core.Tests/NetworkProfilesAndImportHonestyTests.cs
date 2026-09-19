@@ -35,6 +35,11 @@ public class NetworkProfilesAndImportHonestyTests
         NetworkProfiles.ApplyGaming(s);
         Assert.False(s.ChromiumHttpProxyAssist);
         Assert.True(s.EnableTunMode);
+        Assert.True(s.GamingBoostActive);
+        Assert.False(s.EnablePacketFragment);
+        Assert.False(s.AdaptiveSurviveEnabled);
+        Assert.True(s.SmartMultipathEnabled);
+        Assert.True(s.SmartConnectEnabled);
     }
 
     [Fact]

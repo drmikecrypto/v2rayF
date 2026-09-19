@@ -6,14 +6,16 @@
     <ScrollViewer>
         <StackPanel Spacing="12" Margin="4">
             <TextBlock Text="Connect" FontWeight="SemiBold" FontSize="15"/>
-            <TextBlock Text="Android modes (assist posture)" FontSize="12" Opacity="0.8"
-                       IsVisible="{Binding ShowAndroidBypass}"/>
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding ShowAndroidBypass}">
+            <TextBlock Text="Network modes" FontSize="12" Opacity="0.8"/>
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                 <Button Grid.Column="0" Content="Daily mode" Command="{Binding ApplyDailyModeCommand}"
-                        HorizontalAlignment="Stretch"/>
-                <Button Grid.Column="1" Content="Gaming mode" Command="{Binding ApplyGamingModeCommand}"
+                        HorizontalAlignment="Stretch"
+                        IsVisible="{Binding ShowAndroidBypass}"/>
+                <Button Grid.Column="1" Content="Gaming Boost" Command="{Binding ApplyGamingModeCommand}"
                         HorizontalAlignment="Stretch"/>
             </Grid>
+            <TextBlock Text="Gaming Boost: full TUN, assist/fragment/Survive off, multipath on. Optimizes your exit for UDP — not a private booster backbone."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"
                     HorizontalAlignment="Stretch"/>
             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
@@ -24,6 +26,13 @@
             </Grid>
             <Button Content="Copy scorecard template" Command="{Binding ExportScorecardTemplateCommand}"
                     HorizontalAlignment="Stretch"/>
+            <Button Content="Apply game catalog → App Network Direct"
+                    Command="{Binding ApplyGameCatalogDirectCommand}"
+                    HorizontalAlignment="Stretch"
+                    IsVisible="{Binding ShowAppNetwork}"/>
+            <TextBlock Text="Optional: merge Discord/Steam/PUBG/etc. packages into App Network Direct (downloads clearnet). Gaming Boost itself keeps full tunnel."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                       IsVisible="{Binding ShowAppNetwork}"/>
             <CheckBox Content="Smart Connect" IsChecked="{Binding SmartConnectEnabled}"/>
             <CheckBox Content="Rank servers on startup" IsChecked="{Binding StartupRankServersEnabled}"/>
             <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"
@@ -76,7 +85,7 @@
             <CheckBox Content="Chromium HTTP proxy assist (10809)"
                       IsChecked="{Binding ChromiumHttpProxyAssist}"
                       IsVisible="{Binding ShowAndroidBypass}"/>
-            <TextBlock Text="Prefer Daily / Gaming modes above. On: Play/Translate via CONNECT. Off: full TUN — breaks Play (2.3.1)."
+            <TextBlock Text="Prefer Daily / Gaming Boost presets above. On: Play/Translate via CONNECT. Off: full TUN — breaks Play (2.3.1)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowAndroidBypass}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>

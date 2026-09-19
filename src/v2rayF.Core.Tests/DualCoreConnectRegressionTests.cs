@@ -91,6 +91,7 @@ public class DualCoreConnectRegressionTests
         var gaming = new AppSettings();
         NetworkProfiles.ApplyGaming(gaming);
         Assert.False(gaming.ChromiumHttpProxyAssist);
+        Assert.True(gaming.GamingBoostActive);
     }
 
     [Fact]

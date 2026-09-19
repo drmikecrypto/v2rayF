@@ -129,6 +129,7 @@ public sealed class ProfileVault
         KillSwitchEnabled = s.KillSwitchEnabled,
         BlockIpv6 = s.BlockIpv6,
         ChromiumHttpProxyAssist = s.ChromiumHttpProxyAssist,
+        GamingBoostActive = s.GamingBoostActive,
         ShowPathTruthDiagnostics = s.ShowPathTruthDiagnostics,
         ExperimentalAndroidTunStack = s.ExperimentalAndroidTunStack,
         AllowExperimentalAndroidTunStack = s.AllowExperimentalAndroidTunStack,

@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "discord",
+      "name": "Discord",
+      "androidPackages": ["com.discord"],
+      "desktopProcesses": ["Discord", "Discord.exe"],
+      "domainSuffixes": ["discord.com", "discord.gg", "discordapp.com"]
+    },
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "androidPackages": ["org.telegram.messenger", "org.telegram.messenger.web"],
+      "desktopProcesses": ["Telegram", "Telegram.exe"],
+      "domainSuffixes": ["telegram.org", "t.me"]
+    },
+    {
+      "id": "pubg-mobile",
+      "name": "PUBG Mobile",
+      "androidPackages": ["com.tencent.ig", "com.pubg.krmobile", "com.vng.pubgmobile"],
+      "desktopProcesses": [],
+      "domainSuffixes": []
+    },
+    {
+      "id": "cod-mobile",
+      "name": "Call of Duty Mobile",
+      "androidPackages": ["com.activision.callofduty.shooter", "com.garena.game.codm"],
+      "desktopProcesses": [],
+      "domainSuffixes": []
+    },
+    {
+      "id": "steam",
+      "name": "Steam",
+      "androidPackages": ["com.valvesoftware.android.steam.community"],
+      "desktopProcesses": ["steam", "steam.exe", "steamwebhelper", "steamwebhelper.exe"],
+      "domainSuffixes": ["steampowered.com", "steamcommunity.com", "steamgames.com"]
+    },
+    {
+      "id": "riot",
+      "name": "Riot (Valorant / LoL)",
+      "androidPackages": ["com.riotgames.league.wildrift"],
+      "desktopProcesses": ["VALORANT", "VALORANT-Win64-Shipping.exe", "LeagueClient", "LeagueClient.exe", "RiotClientServices.exe"],
+      "domainSuffixes": ["riotgames.com"]
+    },
+    {
+      "id": "epic",
+      "name": "Epic Games / Fortnite",
+      "androidPackages": ["com.epicgames.fortnite"],
+      "desktopProcesses": ["FortniteClient-Win64-Shipping.exe", "EpicGamesLauncher.exe"],
+      "domainSuffixes": ["epicgames.com"]
+    },
+    {
+      "id": "minecraft",
+      "name": "Minecraft",
+      "androidPackages": ["com.mojang.minecraftpe"],
+      "desktopProcesses": ["Minecraft", "Minecraft.exe", "javaw"],
+      "domainSuffixes": ["minecraft.net"]
+    },
+    {
+      "id": "genshin",
+      "name": "Genshin Impact",
+      "androidPackages": ["com.miHoYo.GenshinImpact", "com.miHoYo.Yuanshen"],
+      "desktopProcesses": ["GenshinImpact.exe", "YuanShen.exe"],
+      "domainSuffixes": []
+    },
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp",
+      "androidPackages": ["com.whatsapp", "com.whatsapp.w4b"],
+      "desktopProcesses": ["WhatsApp", "WhatsApp.exe"],
+      "domainSuffixes": ["whatsapp.com", "whatsapp.net"]
+    }
+  ]
+}

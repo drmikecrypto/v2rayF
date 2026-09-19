@@ -255,7 +255,7 @@ public static class XrayConfigBuilder
                 ["pingConfig"] = new JsonObject
                 {
                     ["destination"] = GooglePingUrl,
-                    ["interval"] = "1m",
+                    ["interval"] = ResolveObservatoryInterval(settings),
                     ["sampling"] = 2,
                     ["timeout"] = "5s"
                 }
@@ -333,6 +333,10 @@ public static class XrayConfigBuilder
 
         return list;
     }
+
+    /// <summary>Gaming Boost + multipath: hotter leastPing sampling (15s). Otherwise 1m.</summary>
+    public static string ResolveObservatoryInterval(AppSettings settings) =>
+        settings.GamingBoostActive && settings.SmartMultipathEnabled ? "15s" : "1m";
 
     private static JsonObject BuildDns(AppSettings settings, IReadOnlyList<string> outboundDomainHosts)
     {

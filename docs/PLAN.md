@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.5** Windows TUN fail-closed release).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.3.6** Gaming Boost release).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -77,7 +77,7 @@ Same subscription, clean install, Private DNS **Off**. Mark pass/fail (not Mbps 
 - [x] Scorecard template export (Settings)
 - [x] Desktop TUN / kill-switch honesty on macOS/Linux (`TunRequirementMessage`)
 - [x] Windows TUN reliability bar — missing `v2rayF` WinTun adapter → `TunVpnMissingMs` fail-closed (same gate as Android VpnService Network); kill switch waits on `DesktopTunInterface`; soft recovery escalates when adapter stays gone (`DesktopPlatformIntegration.ProbeTunAppPathAsync`)
-- [ ] Former Phase C (UX / multipath / richer diagnostics) — **deferred** until golden-matrix soak of **v2.6.3.4** ([`tips/golden-matrix-2.6.3.4.md`](tips/golden-matrix-2.6.3.4.md)) passes Android lock/unlock + Windows TUN rows
+- [ ] Former Phase C (UX / multipath polish / richer diagnostics) — **deferred**; Gaming Boost (UDP-aware rank + hotter leastPing) is the first honest multipath/gaming slice — see [`tips/gaming-boost.md`](tips/gaming-boost.md). Full Phase C still waits on golden-matrix soak ([`tips/golden-matrix-2.6.3.4.md`](tips/golden-matrix-2.6.3.4.md)).
 
 ### Phase 5 — Distribution for CN/IR
 

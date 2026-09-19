@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.3.6] - 2026-09-19
+
+### Added
+
+- **Gaming Boost** preset: full TUN, Chromium assist / fragment / Survive off, Smart Multipath + Smart Connect on; UDP-aware ranking; 15s Xray observatory when multipath; tighter path-health probes. Tip: `docs/tips/gaming-boost.md`.
+- Bundled `game-catalog.json` + Settings **Apply game catalog → App Network Direct** (optional split; default Gaming stays full tunnel).
+
+### Changed
+
+- Product version **2.6.3.6** (Android versionCode 20636)
+
 ## [2.6.3.5] - 2026-09-18
 
 ### Fixed

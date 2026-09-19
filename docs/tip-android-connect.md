@@ -1,9 +1,9 @@
 # Tip: Android Connect troubleshooting
 
-## Current defaults (2.6.3.4+)
+## Current defaults (2.6.3.5+)
 
 - **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`; Meta feed/CDN QUIC shoved to TCP→10809
-- **Gaming mode**: assist **off** — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md))
+- **Gaming Boost**: assist **off** + fragment/Survive **off** + multipath **on** + UDP-aware Smart Connect — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md)). Details: [`tips/gaming-boost.md`](tips/gaming-boost.md)
 - **Sentinel / Iran / China**: leak-oriented presets; assist **on**
 - Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed.
 - Lock/unlock: soft session recovery force-rebinds TUN when needed (no manual Disconnect).
@@ -15,7 +15,7 @@
 3. If connect fails with **TUN path failed**, the VPN Network was missing after start — try again or reinstall the release APK. A weak-TUN tip while Connected is advisory (not a hard fail).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if Direct feed pull-to-refresh stalls (Connected status tips this once).
-6. Use **Daily** / **Gaming** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
+6. Use **Daily** / **Gaming Boost** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 7. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 
 ## v2.6.3.4 — lock/unlock Connected blackhole

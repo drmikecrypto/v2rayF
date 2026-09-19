@@ -103,6 +103,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _chromiumHttpProxyAssist = true;
 
     [ObservableProperty]
+    private bool _gamingBoostActive;
+
+    [ObservableProperty]
     private bool _showPathTruthDiagnostics;
 
     [ObservableProperty]
@@ -1132,6 +1135,7 @@ public partial class MainWindowViewModel : ViewModelBase
         KillSwitchEnabled = settings.KillSwitchEnabled;
         BlockIpv6 = settings.BlockIpv6;
         ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
+        GamingBoostActive = settings.GamingBoostActive;
         ShowPathTruthDiagnostics = settings.ShowPathTruthDiagnostics;
         DnsThroughProxy = settings.DnsThroughProxy;
         SecureShareEnabled = settings.SecureShareEnabled;
@@ -1166,6 +1170,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _settings.KillSwitchEnabled = KillSwitchEnabled;
         _settings.BlockIpv6 = BlockIpv6;
         _settings.ChromiumHttpProxyAssist = ChromiumHttpProxyAssist;
+        _settings.GamingBoostActive = GamingBoostActive;
         _settings.ShowPathTruthDiagnostics = ShowPathTruthDiagnostics;
         _settings.DnsThroughProxy = DnsThroughProxy;
         _settings.SecureShareEnabled = SecureShareEnabled;
@@ -1206,6 +1211,20 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ApplyGamingMode() => ApplyNetworkProfile(NetworkProfiles.GamingId);
 
     [RelayCommand]
+    private void ApplyGameCatalogDirect()
+    {
+        var draft = CollectSettings();
+        var pkgs = GameCatalogService.ApplyToDirect(draft, IsMobile);
+        var domains = GameCatalogService.ApplyDomainsToCustomDirect(draft);
+        AndroidBypassPackages = draft.AndroidBypassPackages;
+        DesktopDirectProcesses = draft.DesktopDirectProcesses;
+        CustomDirectRules = draft.CustomDirectRules;
+        StatusText =
+            $"Game catalog → Direct: +{pkgs} apps/processes, +{domains} domains. Save settings to persist. (Full-tunnel Gaming Boost unchanged.)";
+        RefreshPathTruth(draft);
+    }
+
+    [RelayCommand]
     private void ApplySentinelProfile() => ApplyNetworkProfile(NetworkProfiles.SentinelId);
 
     [RelayCommand]
@@ -1240,6 +1259,11 @@ public partial class MainWindowViewModel : ViewModelBase
         DnsThroughProxy = draft.DnsThroughProxy;
         BlockIpv6 = draft.BlockIpv6;
         ChromiumHttpProxyAssist = draft.ChromiumHttpProxyAssist;
+        GamingBoostActive = draft.GamingBoostActive;
+        EnablePacketFragment = draft.EnablePacketFragment;
+        AdaptiveSurviveEnabled = draft.AdaptiveSurviveEnabled;
+        SmartMultipathEnabled = draft.SmartMultipathEnabled;
+        SmartConnectEnabled = draft.SmartConnectEnabled;
         if (!IsMobile)
             EnableTunMode = draft.EnableTunMode && AppServices.Platform.CanUseTunMode;
         else
@@ -1639,6 +1663,7 @@ public partial class MainWindowViewModel : ViewModelBase
         bool DnsThroughProxy,
         bool BlockIpv6,
         bool ChromiumHttpProxyAssist,
+        bool GamingBoostActive,
         bool AllowDesktopNotificationRouting,
         RoutingMode RoutingMode,
         string CustomDirectRules,
@@ -1656,6 +1681,7 @@ public partial class MainWindowViewModel : ViewModelBase
             s.DnsThroughProxy,
             s.BlockIpv6,
             s.ChromiumHttpProxyAssist,
+            s.GamingBoostActive,
             s.AllowDesktopNotificationRouting,
             s.RoutingMode,
             s.CustomDirectRules ?? "",
@@ -1672,6 +1698,7 @@ public partial class MainWindowViewModel : ViewModelBase
         a.DnsThroughProxy != b.DnsThroughProxy ||
         a.BlockIpv6 != b.BlockIpv6 ||
         a.ChromiumHttpProxyAssist != b.ChromiumHttpProxyAssist ||
+        a.GamingBoostActive != b.GamingBoostActive ||
         a.AllowDesktopNotificationRouting != b.AllowDesktopNotificationRouting ||
         a.RoutingMode != b.RoutingMode ||
         !string.Equals(a.CustomDirectRules, b.CustomDirectRules, StringComparison.Ordinal) ||
@@ -1843,6 +1870,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _settings.KillSwitchEnabled = payload.Settings.KillSwitchEnabled;
                 _settings.BlockIpv6 = payload.Settings.BlockIpv6;
                 _settings.ChromiumHttpProxyAssist = payload.Settings.ChromiumHttpProxyAssist;
+                _settings.GamingBoostActive = payload.Settings.GamingBoostActive;
                 _settings.ShowPathTruthDiagnostics = payload.Settings.ShowPathTruthDiagnostics;
                 _settings.DnsThroughProxy = payload.Settings.DnsThroughProxy;
                 _settings.EnablePacketFragment = payload.Settings.EnablePacketFragment;
@@ -2187,7 +2215,8 @@ public partial class MainWindowViewModel : ViewModelBase
                         serversSnapshot,
                         token,
                         settings.EnablePacketFragment,
-                        preferred: forceServer).ConfigureAwait(false);
+                        preferred: forceServer,
+                        profile: SmartConnectService.ResolveRankProfile(settings)).ConfigureAwait(false);
                     await ResumeOnUiAsync().ConfigureAwait(true);
                     await SetOnUiAsync(() =>
                     {
@@ -2213,7 +2242,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     serversSnapshot,
                     rankCts.Token,
                     settings.EnablePacketFragment,
-                    preferred: lastGood);
+                    preferred: lastGood,
+                    profile: SmartConnectService.ResolveRankProfile(settings));
 
                 // Race last-good Connect against ranking — cancel rank if last-good wins.
                 if (lastGood is not null)
@@ -2345,7 +2375,8 @@ public partial class MainWindowViewModel : ViewModelBase
                         serversSnapshot,
                         token,
                         settings.EnablePacketFragment,
-                        SelectedServer).ConfigureAwait(false);
+                        SelectedServer,
+                        profile: SmartConnectService.ResolveRankProfile(settings)).ConfigureAwait(false);
                     await ResumeOnUiAsync().ConfigureAwait(true);
                 }
             }
@@ -2406,7 +2437,8 @@ public partial class MainWindowViewModel : ViewModelBase
                                     serversSnapshot,
                                     token,
                                     enableFragment: false,
-                                    preferred: SelectedServer).ConfigureAwait(false);
+                                    preferred: SelectedServer,
+                                    profile: SmartConnectService.ResolveRankProfile(connectSettings)).ConfigureAwait(false);
                                 await ResumeOnUiAsync().ConfigureAwait(true);
                             }
 

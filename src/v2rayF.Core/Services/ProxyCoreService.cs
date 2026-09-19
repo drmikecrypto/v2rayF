@@ -23,6 +23,10 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public const int PathHealthIntervalMs = 45000;
     /// <summary>Path probe cadence when traffic is active (non-flat).</summary>
     public const int ActivePathHealthIntervalMs = 90000;
+    /// <summary>Gaming Boost: tighter probes when traffic is flat.</summary>
+    public const int GamingPathHealthIntervalMs = 30000;
+    /// <summary>Gaming Boost: tighter probes when traffic is active.</summary>
+    public const int GamingActivePathHealthIntervalMs = 45000;
     public const int PathHealthFailThreshold = 3;
     public const int PathHealthProbeMs = 8000;
     public const int PathHealthProbeVisionMs = 12000;
@@ -47,6 +51,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private bool _activeUseSingBox;
     private bool _activeEnableTunMode;
     private bool _activeChromiumHttpProxyAssist;
+    private bool _activeGamingBoost;
     private int? _activeTunFd;
     private volatile int _consecutivePathFails;
     private volatile int _consecutiveSocksFails;
@@ -369,6 +374,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeUseSingBox = useSingBox;
         _activeEnableTunMode = settings.EnableTunMode;
         _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
+        _activeGamingBoost = settings.GamingBoostActive;
         _activeTunFd = tunFd;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
@@ -423,6 +429,12 @@ public sealed class ProxyCoreService : IAsyncDisposable
             return TunPathNoInternetMessage;
         return "Proxy path failed after connect (HTTPS probe timed out). The tunnel is not usable.";
     }
+
+    /// <summary>Path-health probe cadence (Gaming Boost uses tighter intervals).</summary>
+    public static int ResolvePathHealthIntervalMs(bool trafficFlat, bool gamingBoost) =>
+        gamingBoost
+            ? (trafficFlat ? GamingPathHealthIntervalMs : GamingActivePathHealthIntervalMs)
+            : (trafficFlat ? PathHealthIntervalMs : ActivePathHealthIntervalMs);
 
     // Test seam — PathProbeResult is private; expose gate evaluation for unit tests.
     public static int? EvaluateConnectGateMs(int? socksMs, int? httpMs, bool httpRequired) =>
@@ -707,6 +719,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeUseSingBox = useSingBox;
         _activeEnableTunMode = settings.EnableTunMode;
         _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
+        _activeGamingBoost = settings.GamingBoostActive;
         _activeTunFd = tunFd;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
@@ -739,6 +752,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             KillSwitchEnabled = settings.KillSwitchEnabled,
             BlockIpv6 = settings.BlockIpv6,
             ChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist,
+            GamingBoostActive = settings.GamingBoostActive,
             ShowPathTruthDiagnostics = settings.ShowPathTruthDiagnostics,
             ExperimentalAndroidTunStack = settings.ExperimentalAndroidTunStack,
             AllowExperimentalAndroidTunStack = settings.AllowExperimentalAndroidTunStack,
@@ -775,6 +789,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeTunFd = null;
         _activeEnableTunMode = false;
         _activeChromiumHttpProxyAssist = false;
+        _activeGamingBoost = false;
         RunningStateChanged?.Invoke(this, false);
     }
 
@@ -852,7 +867,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
                         }
                     }
 
-                    var pathInterval = flat ? PathHealthIntervalMs : ActivePathHealthIntervalMs;
+                    var pathInterval = ResolvePathHealthIntervalMs(flat, _activeGamingBoost);
                     if (ActiveServer is not null &&
                         (now - _lastPathProbeUtc).TotalMilliseconds >= pathInterval)
                     {
