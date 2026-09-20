@@ -63,7 +63,7 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/signing/v2rayf-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/v2rayf-release.jks" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: matrix.android == true
         with:
           go-version: "1.23"
