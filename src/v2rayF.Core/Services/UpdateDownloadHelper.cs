@@ -216,42 +216,28 @@ public static class UpdateDownloadHelper
     /// <summary>Extracts a zip rejecting Zip-Slip (absolute / parent-traversal entry names).</summary>
     public static void ExtractZipSafe(string zipPath, string extractDir)
     {
-        var fullRoot = Path.GetFullPath(extractDir)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-            + Path.DirectorySeparatorChar;
+        // Canonical root for CodeQL cs/zipslip (positive StartsWith guard before ExtractToFile).
+        var destDir = Path.GetFullPath(extractDir);
+        if (!destDir.EndsWith(Path.DirectorySeparatorChar) &&
+            !destDir.EndsWith(Path.AltDirectorySeparatorChar))
+            destDir += Path.DirectorySeparatorChar;
 
         using var archive = ZipFile.OpenRead(zipPath);
         foreach (var entry in archive.Entries)
         {
-            if (string.IsNullOrEmpty(entry.Name) && entry.FullName.EndsWith('/'))
-            {
-                // Directory entry — create after validation.
-            }
-
-            // Normalize to relative segments only — never pass entry.FullName into Path.Combine
-            // (CodeQL cs/zipslip tracks FullName as tainted even after validation).
-            var relative = entry.FullName.Replace('\\', '/').TrimStart('/');
-            if (string.IsNullOrEmpty(relative) ||
-                Path.IsPathRooted(relative) ||
-                relative.Contains(':') ||
-                relative.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(p => p is ".." or "."))
-                throw new InvalidOperationException($"Zip entry path is unsafe: {entry.FullName}");
-
-            var safeRelative = string.Join(Path.DirectorySeparatorChar,
-                relative.Split('/', StringSplitOptions.RemoveEmptyEntries));
-            var destination = Path.GetFullPath(Path.Combine(extractDir, safeRelative));
-            if (!destination.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) &&
-                !destination.Equals(fullRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            // Resolve then require the result stay under destDir (Zip-Slip guard).
+            var destinationPath = Path.GetFullPath(Path.Combine(destDir, entry.FullName));
+            if (!destinationPath.StartsWith(destDir, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Zip entry escaped target directory: {entry.FullName}");
 
             if (string.IsNullOrEmpty(entry.Name))
             {
-                Directory.CreateDirectory(destination);
+                Directory.CreateDirectory(destinationPath);
                 continue;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            entry.ExtractToFile(destination, overwrite: true);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            entry.ExtractToFile(destinationPath, overwrite: true);
         }
     }
 }
