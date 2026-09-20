@@ -13,7 +13,7 @@ public static class XrayConfigBuilder
     public const int SocksPort = 10808;
     public const int HttpPort = 10809;
     public const int SpeedtestSocksPort = 10818;
-    public const int DefaultSharePort = 10880;
+    public const int DefaultSharePort = SecureShareEndpoints.DefaultSharePort;
     public const int ApiPort = 10085;
     public const string GooglePingUrl = "https://www.google.com/generate_204";
     public const int TunMtu = 1500;
@@ -134,9 +134,9 @@ public static class XrayConfigBuilder
 
         if (settings.SecureShareEnabled)
         {
-            var sharePort = settings.ShareBindPort > 0 ? settings.ShareBindPort : DefaultSharePort;
-            EnsureShareCredentials(settings);
-            var listen = ResolveShareListenAddress(settings);
+            var sharePort = SecureShareEndpoints.ResolveSocksPort(settings);
+            SecureShareEndpoints.EnsureShareCredentials(settings);
+            var listen = SecureShareEndpoints.ResolveShareListenAddress(settings);
             inbounds.Add(BuildShareSocksInbound(sharePort, settings.ShareAuthUser, settings.ShareAuthPass, listen));
             inbounds.Add(BuildShareHttpInbound(sharePort + 1, settings.ShareAuthUser, settings.ShareAuthPass, listen));
         }
@@ -287,31 +287,15 @@ public static class XrayConfigBuilder
             Settings = new AppSettings { DnsThroughProxy = false }
         });
 
-    public static void EnsureShareCredentials(AppSettings settings)
-    {
-        if (string.IsNullOrWhiteSpace(settings.ShareAuthUser))
-            settings.ShareAuthUser = "v2rayf";
-
-        if (string.IsNullOrWhiteSpace(settings.ShareAuthPass))
-            settings.ShareAuthPass = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
-    }
+    public static void EnsureShareCredentials(AppSettings settings) =>
+        SecureShareEndpoints.EnsureShareCredentials(settings);
 
     /// <summary>Regenerates the Secure Share password (call when user explicitly rotates).</summary>
-    public static void RotateSharePassword(AppSettings settings)
-    {
-        if (string.IsNullOrWhiteSpace(settings.ShareAuthUser))
-            settings.ShareAuthUser = "v2rayf";
-        settings.ShareAuthPass = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
-    }
+    public static void RotateSharePassword(AppSettings settings) =>
+        SecureShareEndpoints.RotateSharePassword(settings);
 
-    public static string ResolveShareListenAddress(AppSettings settings)
-    {
-        if (settings.ShareListenAllInterfaces)
-            return "0.0.0.0";
-
-        var lan = AppServices.Platform?.GetLanIPv4Address();
-        return string.IsNullOrWhiteSpace(lan) ? "0.0.0.0" : lan;
-    }
+    public static string ResolveShareListenAddress(AppSettings settings) =>
+        SecureShareEndpoints.ResolveShareListenAddress(settings);
 
     private static List<ProxyServer> NormalizePeers(
         ProxyServer primary,

@@ -1327,8 +1327,17 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnSecureShareEnabledChanged(bool value)
     {
         if (value)
-            XrayConfigBuilder.EnsureShareCredentials(_settings);
+            SecureShareEndpoints.EnsureShareCredentials(_settings);
         UpdateSecureShareEndpoint();
+        if (IsConnected || ConnectionState == ConnectionState.Connected)
+            StatusText = "Secure Share changed — reconnect to apply listen ports.";
+    }
+
+    partial void OnShareListenAllInterfacesChanged(bool value)
+    {
+        UpdateSecureShareEndpoint();
+        if (IsConnected || ConnectionState == ConnectionState.Connected)
+            StatusText = "Secure Share bind changed — reconnect to apply.";
     }
 
     partial void OnRevealSharePasswordChanged(bool value) => UpdateSecureShareEndpoint();
@@ -1472,17 +1481,37 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var lan = AppServices.Platform.GetLanIPv4Address() ?? "LAN-IP";
-        var port = _settings.ShareBindPort > 0 ? _settings.ShareBindPort : XrayConfigBuilder.DefaultSharePort;
-        XrayConfigBuilder.EnsureShareCredentials(_settings);
-        var pass = RevealSharePassword && VaultUnlocked
-            ? _settings.ShareAuthPass
-            : "••••••••";
-        var bindHint = ShareListenAllInterfaces ? "listen: all interfaces" : $"listen: {lan}";
-        SecureShareEndpoint =
-            $"socks5://{_settings.ShareAuthUser}:{pass}@{lan}:{port}\n" +
-            $"http://{_settings.ShareAuthUser}:{pass}@{lan}:{port + 1}\n" +
-            $"{bindHint} · Hotspot tip: OEM Wi‑Fi hotspot may bypass VPN — use these proxies.";
+        SecureShareEndpoints.EnsureShareCredentials(_settings);
+        var candidates = AppServices.Platform.GetShareAdvertiseAddresses();
+        var lan = SecureShareEndpoints.PreferAdvertiseAddress(candidates)
+                  ?? AppServices.Platform.GetLanIPv4Address()
+                  ?? "LAN-IP";
+        SecureShareEndpoint = SecureShareEndpoints.FormatEndpointBlock(
+            _settings,
+            lan,
+            revealPassword: RevealSharePassword && VaultUnlocked,
+            candidates);
+    }
+
+    private async Task ApplySecureShareSideEffectsAsync(AppSettings settings, CancellationToken cancellationToken = default)
+    {
+        if (settings.SecureShareEnabled)
+        {
+            await ShareFirewall.ApplyAsync(settings, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(ShareFirewall.LastError))
+            {
+                await SetOnUiAsync(() =>
+                    StatusText =
+                        $"Secure Share firewall: {StatusSanitizer.Scrub(ShareFirewall.LastError)} — allow inbound or run as Admin.")
+                    .ConfigureAwait(true);
+            }
+        }
+        else
+        {
+            await ShareFirewall.ClearAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await SetOnUiAsync(UpdateSecureShareEndpoint).ConfigureAwait(true);
     }
 
     private static string GetAndroidVpnFailureMessage()
@@ -1771,7 +1800,14 @@ public partial class MainWindowViewModel : ViewModelBase
         a.SmartMultipathEnabled != b.SmartMultipathEnabled;
 
     [RelayCommand]
-    private async Task CopySecureShareAsync()
+    private async Task CopySecureShareAsync() =>
+        await CopySecureShareLineAsync(http: false).ConfigureAwait(true);
+
+    [RelayCommand]
+    private async Task CopySecureShareHttpAsync() =>
+        await CopySecureShareLineAsync(http: true).ConfigureAwait(true);
+
+    private async Task CopySecureShareLineAsync(bool http)
     {
         if (!SecureShareEnabled || !IsConnected)
         {
@@ -1792,18 +1828,56 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        var lan = AppServices.Platform.GetLanIPv4Address() ?? "LAN-IP";
-        var port = _settings.ShareBindPort > 0 ? _settings.ShareBindPort : XrayConfigBuilder.DefaultSharePort;
-        XrayConfigBuilder.EnsureShareCredentials(_settings);
-        var line = $"socks5://{_settings.ShareAuthUser}:{_settings.ShareAuthPass}@{lan}:{port}";
+        SecureShareEndpoints.EnsureShareCredentials(_settings);
+        var candidates = AppServices.Platform.GetShareAdvertiseAddresses();
+        var lan = SecureShareEndpoints.PreferAdvertiseAddress(candidates)
+                  ?? AppServices.Platform.GetLanIPv4Address()
+                  ?? "LAN-IP";
+        var socks = SecureShareEndpoints.ResolveSocksPort(_settings);
+        var port = http ? socks + 1 : socks;
+        var scheme = http ? "http" : "socks5";
+        var line = $"{scheme}://{_settings.ShareAuthUser}:{_settings.ShareAuthPass}@{lan}:{port}";
         await clipboard.SetTextAsync(line);
-        StatusText = "Secure Share SOCKS endpoint copied (once).";
+        StatusText = http
+            ? "Secure Share HTTP endpoint copied (once)."
+            : "Secure Share SOCKS endpoint copied (once).";
+    }
+
+    [RelayCommand]
+    private async Task CopySecureShareSetupTipAsync()
+    {
+        if (!SecureShareEnabled || !IsConnected)
+        {
+            StatusText = "Connect with Secure Share enabled first.";
+            return;
+        }
+
+        if (!VaultUnlocked)
+        {
+            StatusText = "Unlock vault to copy Secure Share setup tip.";
+            return;
+        }
+
+        var clipboard = GetClipboard();
+        if (clipboard is null)
+        {
+            StatusText = "Clipboard unavailable.";
+            return;
+        }
+
+        var candidates = AppServices.Platform.GetShareAdvertiseAddresses();
+        var lan = SecureShareEndpoints.PreferAdvertiseAddress(candidates)
+                  ?? AppServices.Platform.GetLanIPv4Address()
+                  ?? "LAN-IP";
+        var tip = SecureShareEndpoints.FormatSetupTipMarkdown(_settings, lan, includePassword: true);
+        await clipboard.SetTextAsync(tip);
+        StatusText = "Secure Share setup tip copied — paste on the other device.";
     }
 
     [RelayCommand]
     private async Task RotateSharePasswordAsync()
     {
-        XrayConfigBuilder.RotateSharePassword(_settings);
+        SecureShareEndpoints.RotateSharePassword(_settings);
         RevealSharePassword = false;
         await _settingsStore.SaveAsync(CollectSettings());
         UpdateSecureShareEndpoint();
@@ -2813,6 +2887,7 @@ public partial class MainWindowViewModel : ViewModelBase
             IsConnected = true;
             RefreshPathTruth(settings);
         }).ConfigureAwait(true);
+        await ApplySecureShareSideEffectsAsync(settings, cancellationToken).ConfigureAwait(true);
     }
 
     private async Task ConnectAndroidAsync(
@@ -2925,6 +3000,7 @@ public partial class MainWindowViewModel : ViewModelBase
             IsConnected = true;
             RefreshPathTruth(settings);
         }).ConfigureAwait(true);
+        await ApplySecureShareSideEffectsAsync(settings, cancellationToken).ConfigureAwait(true);
     }
 
     private readonly SemaphoreSlim _sessionResumeGate = new(1, 1);
@@ -3095,6 +3171,15 @@ public partial class MainWindowViewModel : ViewModelBase
             {
                 // Best effort.
             }
+        }
+
+        try
+        {
+            await ShareFirewall.ClearAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best effort.
         }
 
         await SetOnUiAsync(() =>

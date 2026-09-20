@@ -69,8 +69,11 @@ public interface IPlatformIntegration
     /// </summary>
     string? GetPrivateDnsConflictWarning();
 
-    /// <summary>Best-effort first non-loopback IPv4 for Secure Share display.</summary>
+    /// <summary>Best-effort preferred IPv4 for Secure Share (hotspot/SoftAP preferred).</summary>
     string? GetLanIPv4Address();
+
+    /// <summary>Ranked advertise IPs for Secure Share (SoftAP first). Empty when unknown.</summary>
+    IReadOnlyList<string> GetShareAdvertiseAddresses();
 
     /// <summary>
     /// Apps/processes eligible for App Network. Cached by implementers; call when the panel opens.

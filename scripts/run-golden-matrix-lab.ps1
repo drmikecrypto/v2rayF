@@ -14,7 +14,7 @@ $report = Join-Path $sandbox "golden-matrix-lab-$stamp.md"
 $lines = New-Object System.Collections.Generic.List[string]
 function Log([string]$s) { $lines.Add($s); Write-Host $s }
 
-Log "# Golden matrix lab — v2.6.4.2"
+Log "# Golden matrix lab — v2.6.4.3"
 Log ""
 Log "Generated: $(Get-Date -Format o)"
 Log "Host: $env:COMPUTERNAME"
@@ -24,11 +24,11 @@ Log ""
 
 # --- Version pin ---
 $props = Get-Content (Join-Path $root "Directory.Build.props") -Raw
-if ($props -notmatch "<V2rayFVersion>2\.6\.4\.2</V2rayFVersion>") {
-    throw "Expected V2rayFVersion 2.6.4.2 in Directory.Build.props"
+if ($props -notmatch "<V2rayFVersion>2\.6\.4\.3</V2rayFVersion>") {
+    throw "Expected V2rayFVersion 2.6.4.3 in Directory.Build.props"
 }
 Log "## Version"
-Log "- Directory.Build.props: **2.6.4.2** OK"
+Log "- Directory.Build.props: **2.6.4.3** OK"
 Log ""
 
 # --- Core regression (Android soak contracts encoded as tests) ---
@@ -85,9 +85,9 @@ Log ""
 
 # --- Scorecard scaffold for field ---
 Log "## Field scorecard scaffold"
-$field = Join-Path $sandbox "field-scorecard-2.6.4.2.md"
+$field = Join-Path $sandbox "field-scorecard-2.6.4.3.md"
 @"
-# Field scorecard — v2.6.4.2 (private)
+# Field scorecard — v2.6.4.3 (private)
 
 Fill on phone / IR path. Do not commit.
 

@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Principal;
@@ -98,32 +96,11 @@ public sealed class DesktopPlatformIntegration : IPlatformIntegration
         bool chromiumHttpProxyAssist = false) =>
         Task.FromResult<int?>(null);
 
-    public string? GetLanIPv4Address()
-    {
-        try
-        {
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()
-                         .Where(n => n.OperationalStatus == OperationalStatus.Up &&
-                                     n.NetworkInterfaceType != NetworkInterfaceType.Loopback))
-            {
-                foreach (var addr in nic.GetIPProperties().UnicastAddresses)
-                {
-                    if (addr.Address.AddressFamily != AddressFamily.InterNetwork)
-                        continue;
-                    var ip = addr.Address.ToString();
-                    if (ip.StartsWith("127.", StringComparison.Ordinal))
-                        continue;
-                    return ip;
-                }
-            }
-        }
-        catch
-        {
-            // ignore
-        }
+    public string? GetLanIPv4Address() =>
+        SecureShareEndpoints.PreferAdvertiseAddress(GetShareAdvertiseAddresses());
 
-        return null;
-    }
+    public IReadOnlyList<string> GetShareAdvertiseAddresses() =>
+        SecureShareEndpoints.CollectAdvertiseAddressesFromSystem();
 
     public async Task EnableProxyAsync(CancellationToken cancellationToken = default)
     {

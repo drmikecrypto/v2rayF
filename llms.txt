@@ -62,6 +62,7 @@ pwsh -File scripts/clean-artifacts.ps1
 - [docs/tips/gaming-boost.md](docs/tips/gaming-boost.md) — Gaming Boost (honest GearUP-inspired posture)
 - [docs/tips/golden-matrix-2.6.4.1.md](docs/tips/golden-matrix-2.6.4.1.md) — lock/unlock + Windows TUN + Free soak (lab: `scripts/run-golden-matrix-lab.ps1`)
 - [docs/tips/phase-c.md](docs/tips/phase-c.md) — Phase C open (UX / multipath / diagnostics) after 2.6.4.1 field soak
+- [docs/tips/secure-share.md](docs/tips/secure-share.md) — Secure Share LAN SOCKS/HTTP (sing-box + Xray; hotspot proxy path)
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 

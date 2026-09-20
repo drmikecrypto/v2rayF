@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
@@ -152,35 +150,11 @@ public sealed class AndroidPlatformIntegration : IPlatformIntegration
         }
     }
 
-    public string? GetLanIPv4Address()
-    {
-        try
-        {
-            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (nic.OperationalStatus != OperationalStatus.Up)
-                    continue;
-                if (nic.NetworkInterfaceType is NetworkInterfaceType.Loopback)
-                    continue;
+    public string? GetLanIPv4Address() =>
+        SecureShareEndpoints.PreferAdvertiseAddress(GetShareAdvertiseAddresses());
 
-                foreach (var addr in nic.GetIPProperties().UnicastAddresses)
-                {
-                    if (addr.Address.AddressFamily != AddressFamily.InterNetwork)
-                        continue;
-                    var ip = addr.Address.ToString();
-                    if (ip.StartsWith("127.", StringComparison.Ordinal))
-                        continue;
-                    return ip;
-                }
-            }
-        }
-        catch
-        {
-            // ignore
-        }
-
-        return null;
-    }
+    public IReadOnlyList<string> GetShareAdvertiseAddresses() =>
+        SecureShareEndpoints.CollectAdvertiseAddressesFromSystem();
 
     public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
         bool forceRefresh = false,

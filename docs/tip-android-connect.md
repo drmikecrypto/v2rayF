@@ -9,6 +9,7 @@
 - Lock/unlock: soft session recovery force-rebinds TUN when needed (no manual Disconnect).
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
 - **Copy session diagnostics** (Settings) exports Connect → SOCKS → TUN → soft recovery timeline — see [`tips/phase-c.md`](tips/phase-c.md)
+- **Secure Share**: LAN SOCKS/HTTP so other devices use this phone’s tunnel (set proxy on clients; OEM hotspot bypasses VPN) — [`tips/secure-share.md`](tips/secure-share.md)
 - Android TUN stack = **gvisor** (do not enable experimental system/mixed without sandbox flags)
 
 1. Prefer the in-app **Update** button when a new GitHub release is available — it downloads the signed APK, verifies SHA256, and installs over the existing app (native cores refresh automatically).

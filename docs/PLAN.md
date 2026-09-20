@@ -4,7 +4,7 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.4.2** Phase C first slice — session diagnostics + Daily/Gaming CTAs + multipath flake honesty).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for local **2.6.4.3** Secure Share harden — ship when asked).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
@@ -13,6 +13,8 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 **Android-first** (Iran/China phones) for 3–6 months; Windows follows. macOS/Linux TUN/kill-switch after that.
 
 **Field soak:** v2.6.4.1 accepted on Android phone + Windows (maintainer) — Phase C unlocked.
+
+**Multi-device:** Secure Share (authenticated LAN SOCKS/HTTP) is the supported path for hotspot/LAN clients — see [`tips/secure-share.md`](tips/secure-share.md). Transparent tether/ICS is out of scope.
 
 ## Success criteria (Connect green)
 

@@ -340,6 +340,7 @@ public class SmartConnectShortlistTests
             bool chromiumHttpProxyAssist = false) => false;
         public string? GetPrivateDnsConflictWarning() => null;
         public string? GetLanIPv4Address() => null;
+        public IReadOnlyList<string> GetShareAdvertiseAddresses() => Array.Empty<string>();
         public Task<IReadOnlyList<InstalledAppInfo>> GetNetworkAppsAsync(
             bool forceRefresh = false,
             CancellationToken cancellationToken = default) =>

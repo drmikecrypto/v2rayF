@@ -62,7 +62,7 @@ Use **Apply Sentinel profile** for maximum anti-censorship defaults (Global rout
 |--------|----------|
 | **Smart Connect** | Probes added servers and connects to the fastest working one (failover on failure) |
 | **Smart Multipath** | Balances across top nodes via Xray observatory |
-| **Secure Share** | LAN SOCKS/HTTP gateway so other devices use this tunnel — see [Secure Share](tips/secure-share.md) |
+| **Secure Share** | Authenticated LAN SOCKS/HTTP so other devices use this tunnel (proxy once; Xray + sing-box) — see [Secure Share](tips/secure-share.md) |
 | **Kill switch** | Blocks clearnet if the tunnel drops (needs admin on desktop) |
 | **DNS through proxy** | Prevents ISP DNS leaks |
 | **Block IPv6** | Stops IPv6 bypass around the tunnel |

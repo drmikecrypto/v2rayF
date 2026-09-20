@@ -141,6 +141,49 @@ public static class SingBoxConfigBuilder
             });
         }
 
+        if (settings.SecureShareEnabled && listen == SocksPort)
+        {
+            SecureShareEndpoints.EnsureShareCredentials(settings);
+            var shareListen = SecureShareEndpoints.ResolveShareListenAddress(settings);
+            var shareSocks = SecureShareEndpoints.ResolveSocksPort(settings);
+            var shareHttp = SecureShareEndpoints.ResolveHttpPort(settings);
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "socks",
+                ["tag"] = "share-socks",
+                ["listen"] = shareListen,
+                ["listen_port"] = shareSocks,
+                ["users"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["username"] = settings.ShareAuthUser,
+                        ["password"] = settings.ShareAuthPass
+                    }
+                },
+                ["udp"] = true,
+                ["sniff"] = true,
+                ["sniff_override_destination"] = false
+            });
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "http",
+                ["tag"] = "share-http",
+                ["listen"] = shareListen,
+                ["listen_port"] = shareHttp,
+                ["users"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["username"] = settings.ShareAuthUser,
+                        ["password"] = settings.ShareAuthPass
+                    }
+                },
+                ["sniff"] = true,
+                ["sniff_override_destination"] = false
+            });
+        }
+
         // Android: inherited VpnService fd (posix_spawn). Desktop: auto_route WinTun when EnableTunMode.
         var androidTun = tunFd is int inheritedFd && inheritedFd >= 0;
         var desktopTun = !androidTun && settings.EnableTunMode;

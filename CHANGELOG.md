@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.4.3] - 2026-09-20
+
+### Added
+
+- **Secure Share** production harden: sing-box share SOCKS/HTTP inbounds (Android classic + Hy2/TUIC/WG), SoftAP/hotspot-aware advertise IP, Windows inbound firewall for share ports, Copy SOCKS/HTTP/setup tip, UI for both cores. Tip: [`docs/tips/secure-share.md`](docs/tips/secure-share.md).
+
+### Changed
+
+- Product version **2.6.4.3** (Android versionCode 20643)
+
 ## [2.6.4.2] - 2026-09-20
 
 ### Added
