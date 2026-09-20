@@ -190,8 +190,11 @@ public class SessionReliabilityTests
     {
         var dir = Path.Combine(Path.GetTempPath(), "v2rayf-ks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
+        var prev = AppServices.Platform;
         try
         {
+            // PreferSingBoxOnAndroid must not steal classic VLESS when another test left Platform mobile.
+            AppServices.Platform = null!;
             var xray = Path.Combine(dir, "xray.exe");
             var sing = Path.Combine(dir, "sing-box.exe");
             File.WriteAllText(xray, "");
@@ -209,6 +212,7 @@ public class SessionReliabilityTests
         }
         finally
         {
+            AppServices.Platform = prev!;
             try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
         }
     }

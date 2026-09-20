@@ -116,7 +116,7 @@ public static class SingBoxConfigBuilder
         int? tunFd = null)
     {
         var listen = socksPort ?? SocksPort;
-        var outbound = BuildOutbound(server);
+        var outbound = BuildOutbound(server, liveTun: UsesTun(settings, tunFd));
         var inbounds = new JsonArray
         {
             new JsonObject
@@ -264,7 +264,8 @@ public static class SingBoxConfigBuilder
     /// </summary>
     public static string BuildSpeedtest(ProxyServer server, int socksPort)
     {
-        var outbound = BuildOutbound(server);
+        // Speedtest is SOCKS TCP-only — do not inject TUN UDP packet encoding.
+        var outbound = BuildOutbound(server, liveTun: false);
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = "warn" },
@@ -743,7 +744,7 @@ public static class SingBoxConfigBuilder
         ShareLinkParser.IsVisionFlow(server) ||
         string.Equals(server.Security, "reality", StringComparison.OrdinalIgnoreCase);
 
-    private static JsonObject BuildOutbound(ProxyServer server)
+    private static JsonObject BuildOutbound(ProxyServer server, bool liveTun)
     {
         var outbound = server.Protocol switch
         {
@@ -751,8 +752,8 @@ public static class SingBoxConfigBuilder
             ProxyProtocol.Tuic => BuildTuic(server),
             ProxyProtocol.WireGuard => BuildWireGuard(server),
             ProxyProtocol.AnyTls => BuildAnyTls(server),
-            ProxyProtocol.VLESS => BuildVless(server),
-            ProxyProtocol.VMess => BuildVmess(server),
+            ProxyProtocol.VLESS => BuildVless(server, liveTun),
+            ProxyProtocol.VMess => BuildVmess(server, liveTun),
             ProxyProtocol.Trojan => BuildTrojan(server),
             ProxyProtocol.Shadowsocks => BuildShadowsocks(server),
             _ => throw new InvalidOperationException(
@@ -763,7 +764,7 @@ public static class SingBoxConfigBuilder
         return outbound;
     }
 
-    private static JsonObject BuildVless(ProxyServer server)
+    private static JsonObject BuildVless(ProxyServer server, bool liveTun)
     {
         ShareLinkParser.NormalizeVisionFlow(server);
         var o = new JsonObject
@@ -776,13 +777,14 @@ public static class SingBoxConfigBuilder
         };
         if (!string.IsNullOrWhiteSpace(server.Flow))
             o["flow"] = server.Flow;
-        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
-            o["packet_encoding"] = server.PacketEncoding;
+        var encoding = PacketEncodingPolicy.Resolve(server, liveTun);
+        if (!string.IsNullOrWhiteSpace(encoding))
+            o["packet_encoding"] = encoding;
         ApplyTlsAndTransport(o, server);
         return o;
     }
 
-    private static JsonObject BuildVmess(ProxyServer server)
+    private static JsonObject BuildVmess(ProxyServer server, bool liveTun)
     {
         var o = new JsonObject
         {
@@ -794,8 +796,9 @@ public static class SingBoxConfigBuilder
             ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher,
             ["alter_id"] = server.AlterId
         };
-        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
-            o["packet_encoding"] = server.PacketEncoding;
+        var encoding = PacketEncodingPolicy.Resolve(server, liveTun);
+        if (!string.IsNullOrWhiteSpace(encoding))
+            o["packet_encoding"] = encoding;
         ApplyTlsAndTransport(o, server);
         return o;
     }

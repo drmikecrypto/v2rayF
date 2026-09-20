@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.4.4] - 2026-09-20
+
+### Fixed
+
+- Live TUN: plain VLESS/VMess (`security=none`, `network=tcp`) inject `packet_encoding=xudp` / `packetEncoding=xudp` when the link omits it. TUN DNS = UDP→proxy; SOCKS latency = TCP-only. Skips Vision/TLS/REALITY/WS and speedtest (2.0.7–2.0.9 crawl). Session diagnostics: SOCKS-ok + TUN-weak; Connect timeline logs inject.
+
+### Changed
+
+- Product version **2.6.4.4** (Android versionCode 20644)
+
 ## [2.6.4.3] - 2026-09-20
 
 ### Added

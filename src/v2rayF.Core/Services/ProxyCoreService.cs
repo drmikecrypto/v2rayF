@@ -412,6 +412,14 @@ public sealed class ProxyCoreService : IAsyncDisposable
                 : gateResult.TunRequired ? " · TUN ok" : "") +
             (_activeMultipathCount > 1 ? $" · multipath×{_activeMultipathCount}" : "") +
             (_activeGamingBoost ? " · Gaming" : ""));
+        var liveTun = tunFd is >= 0 || settings.EnableTunMode;
+        if (PacketEncodingPolicy.Resolve(server, liveTun) is { } enc &&
+            string.IsNullOrWhiteSpace(server.PacketEncoding) &&
+            enc == PacketEncodingPolicy.TunUdpDefault)
+        {
+            Diagnostics.Record(
+                $"TUN UDP: injected packet_encoding={enc} for plain TCP {server.Protocol} (DNS via proxy)");
+        }
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
         ScheduleHttpAssistAdvisoryProbe(server);

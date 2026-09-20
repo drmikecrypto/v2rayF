@@ -67,7 +67,7 @@ public static class XrayConfigBuilder
             });
         }
 
-        outbounds.Add(BuildOutbound(server, "proxy", useFragment));
+        outbounds.Add(BuildOutbound(server, "proxy", useFragment, liveTun: false));
         outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
         outbounds.Add(new JsonObject { ["tag"] = "dns-out", ["protocol"] = "dns" });
 
@@ -180,6 +180,7 @@ public static class XrayConfigBuilder
 
         var useFragmentDialer = settings.EnablePacketFragment &&
                                 peers.Any(p => !IsVisionFlow(p));
+        var liveTun = tunFd is >= 0 || settings.EnableTunMode;
 
         if (useFragmentDialer)
         {
@@ -202,11 +203,11 @@ public static class XrayConfigBuilder
         if (useBalancer)
         {
             for (var i = 0; i < peers.Count; i++)
-                outbounds.Add(BuildOutbound(peers[i], $"proxy-{i}", useFragmentDialer));
+                outbounds.Add(BuildOutbound(peers[i], $"proxy-{i}", useFragmentDialer, liveTun));
         }
         else
         {
-            outbounds.Add(BuildOutbound(peers[0], "proxy", useFragmentDialer));
+            outbounds.Add(BuildOutbound(peers[0], "proxy", useFragmentDialer, liveTun));
         }
 
         outbounds.Add(new JsonObject { ["tag"] = "direct", ["protocol"] = "freedom" });
@@ -748,12 +749,12 @@ public static class XrayConfigBuilder
         }
     };
 
-    private static JsonObject BuildOutbound(ProxyServer server, string tag, bool enableFragment)
+    private static JsonObject BuildOutbound(ProxyServer server, string tag, bool enableFragment, bool liveTun)
     {
         var outbound = server.Protocol switch
         {
-            ProxyProtocol.VMess => BuildVmessOutbound(server, tag),
-            ProxyProtocol.VLESS => BuildVlessOutbound(server, tag),
+            ProxyProtocol.VMess => BuildVmessOutbound(server, tag, liveTun),
+            ProxyProtocol.VLESS => BuildVlessOutbound(server, tag, liveTun),
             ProxyProtocol.Shadowsocks => BuildShadowsocksOutbound(server, tag),
             ProxyProtocol.Trojan => BuildTrojanOutbound(server, tag),
             ProxyProtocol.Socks => BuildSocksOutbound(server, tag),
@@ -815,7 +816,7 @@ public static class XrayConfigBuilder
     private static bool IsVisionFlow(ProxyServer server) =>
         ShareLinkParser.IsVisionFlow(server);
 
-    private static JsonObject BuildVmessOutbound(ProxyServer server, string tag)
+    private static JsonObject BuildVmessOutbound(ProxyServer server, string tag, bool liveTun)
     {
         var user = new JsonObject
         {
@@ -823,8 +824,9 @@ public static class XrayConfigBuilder
             ["alterId"] = server.AlterId,
             ["security"] = string.IsNullOrWhiteSpace(server.Cipher) ? "auto" : server.Cipher
         };
-        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
-            user["packetEncoding"] = server.PacketEncoding;
+        var encoding = PacketEncodingPolicy.Resolve(server, liveTun);
+        if (!string.IsNullOrWhiteSpace(encoding))
+            user["packetEncoding"] = encoding;
 
         var outbound = new JsonObject
         {
@@ -848,7 +850,7 @@ public static class XrayConfigBuilder
         return outbound;
     }
 
-    private static JsonObject BuildVlessOutbound(ProxyServer server, string tag)
+    private static JsonObject BuildVlessOutbound(ProxyServer server, string tag, bool liveTun)
     {
         ShareLinkParser.NormalizeVisionFlow(server);
 
@@ -860,8 +862,9 @@ public static class XrayConfigBuilder
 
         if (!string.IsNullOrWhiteSpace(server.Flow))
             user["flow"] = server.Flow;
-        if (!string.IsNullOrWhiteSpace(server.PacketEncoding))
-            user["packetEncoding"] = server.PacketEncoding;
+        var encoding = PacketEncodingPolicy.Resolve(server, liveTun);
+        if (!string.IsNullOrWhiteSpace(encoding))
+            user["packetEncoding"] = encoding;
 
         return new JsonObject
         {

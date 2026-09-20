@@ -77,6 +77,9 @@ public sealed class SessionDiagnostics
             sb.AppendLine(tunMs == LatencyService.TunVpnMissingMs
                 ? "- TUN: **VPN/adapter missing** (TunVpnMissingMs — fail-closed path)"
                 : "- TUN: **weak** (app-path probe; messengers may need force-stop / soft recovery)");
+            if (socksOk)
+                sb.AppendLine(
+                    "- Note: SOCKS green + TUN weak often means TUN UDP/DNS via proxy failed while TCP probe worked (plain VLESS TCP needs packet_encoding=xudp).");
         }
         else if (tunWeak is false)
             sb.AppendLine("- TUN: ok or not required");
