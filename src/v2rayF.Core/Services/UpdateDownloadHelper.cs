@@ -228,12 +228,18 @@ public static class UpdateDownloadHelper
                 // Directory entry — create after validation.
             }
 
-            var relative = entry.FullName.Replace('\\', '/');
-            if (Path.IsPathRooted(relative) ||
-                relative.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(p => p == ".."))
+            // Normalize to relative segments only — never pass entry.FullName into Path.Combine
+            // (CodeQL cs/zipslip tracks FullName as tainted even after validation).
+            var relative = entry.FullName.Replace('\\', '/').TrimStart('/');
+            if (string.IsNullOrEmpty(relative) ||
+                Path.IsPathRooted(relative) ||
+                relative.Contains(':') ||
+                relative.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(p => p is ".." or "."))
                 throw new InvalidOperationException($"Zip entry path is unsafe: {entry.FullName}");
 
-            var destination = Path.GetFullPath(Path.Combine(extractDir, entry.FullName));
+            var safeRelative = string.Join(Path.DirectorySeparatorChar,
+                relative.Split('/', StringSplitOptions.RemoveEmptyEntries));
+            var destination = Path.GetFullPath(Path.Combine(extractDir, safeRelative));
             if (!destination.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) &&
                 !destination.Equals(fullRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Zip entry escaped target directory: {entry.FullName}");
