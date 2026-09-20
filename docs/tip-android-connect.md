@@ -1,11 +1,11 @@
 # Tip: Android Connect troubleshooting
 
-## Current defaults (2.6.3.5+)
+## Current defaults (2.6.4.6+)
 
-- **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`; Meta feed/CDN QUIC shoved to TCP→10809
+- **Daily mode** (default assist posture): Chromium HTTP proxy assist **on** — Play Store / Translate via `10809`; Meta feed/CDN + Graph HTTPS QUIC shoved to TCP→10809; MQTT/chat gateways CONNECT-excluded → TUN
 - **Gaming Boost**: assist **off** + fragment/Survive **off** + multipath **on** + UDP-aware Smart Connect — full TUN; expect Play/Translate to fail (lab vs V2Box: [`tips/game-v2box-scorecard.md`](tips/game-v2box-scorecard.md)). Details: [`tips/gaming-boost.md`](tips/gaming-boost.md)
 - **Sentinel / Iran / China**: leak-oriented presets; assist **on**
-- Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed.
+- Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed/Graph.
 - Lock/unlock: soft session recovery force-rebinds TUN when needed (no manual Disconnect).
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
 - **Copy session diagnostics** (Settings) exports Connect → SOCKS → TUN → soft recovery timeline — see [`tips/phase-c.md`](tips/phase-c.md)
@@ -16,10 +16,15 @@
 2. Tap **Connect** and allow the **VPN** permission when prompted.
 3. If connect fails with **TUN path failed**, the VPN Network was missing after start — try again or reinstall the release APK. A weak-TUN tip while Connected is advisory (not a hard fail).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
-5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if Direct feed pull-to-refresh stalls (Connected status tips this once).
-6. **VLESS/VMess** can show fast Test delay then Connected with no system internet: latency is SOCKS TCP; TUN DNS is UDP via the proxy. Live TUN injects `packet_encoding=xudp` when the link omits it (any transport/TLS/REALITY; Vision skipped — core already muxes UDP). Shadowsocks carries UDP natively. If it still fails, Copy session diagnostics and compare SOCKS vs TUN.
+5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if feed or Direct history stalls (Connected status tips this once).
+6. **Direct history scroll** (older messages) uses Graph/HTTPS on `10809` with feed — not MQTT. Send/receive/like can work while history spins if Graph was stranded on TUN; score both cells. **VLESS/VMess** TUN UDP DNS still needs `packet_encoding=xudp` (live TUN inject; Vision skipped). If it still fails, Copy session diagnostics and compare SOCKS vs TUN.
 7. Use **Daily** / **Gaming Boost** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 8. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
+
+## v2.6.4.6 — Direct history on 10809
+
+- `graph.instagram.com` / `b-graph.facebook.com` removed from HTTP CONNECT exclusions (MQTT/chat only)
+- Scorecard: Direct send/receive vs Direct history scroll
 
 ## v2.6.3.4 — lock/unlock Connected blackhole
 

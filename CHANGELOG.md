@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+## [2.6.4.6] - 2026-09-20
+
+### Fixed
+
+- Instagram Direct **history scroll** spinner while send/receive/like worked: `graph.instagram.com` / `b-graph.facebook.com` no longer bypass VpnService HTTP CONNECT — Graph HTTPS uses `10809` with feed (MQTT/chat gateways stay TUN-excluded).
+- Scorecard splits Direct send/receive vs Direct history scroll. Secure DNS (DoH) UI notes TUN ignores DoH.
+
+### Changed
+
+- Product version **2.6.4.6** (Android versionCode 20646)
+
 ## [2.6.4.5] - 2026-09-20
 
 ### Fixed

@@ -337,16 +337,32 @@ public class DualCoreSingBoxTests
         Assert.Contains("mqtt-mini.facebook.com", excl);
         Assert.Contains("mqtt.facebook.com", excl);
         Assert.Contains("gateway.facebook.com", excl);
+        Assert.Contains("z-m-gateway.facebook.com", excl);
         Assert.Contains("gateway.instagram.com", excl);
-        Assert.Contains("graph.instagram.com", excl);
         Assert.Contains("edge-chat.facebook.com", excl);
         Assert.Contains("chat-e2ee.facebook.com", excl);
         Assert.Contains("web-chat-e2ee.facebook.com", excl);
+        // Graph HTTPS rides 10809 with feed — Direct history scroll (not MQTT).
+        Assert.DoesNotContain("graph.instagram.com", excl);
+        Assert.DoesNotContain("*.graph.instagram.com", excl);
+        Assert.DoesNotContain("b-graph.facebook.com", excl);
+        Assert.DoesNotContain("*.b-graph.facebook.com", excl);
         Assert.DoesNotContain("instagram.com", excl);
         Assert.DoesNotContain("*.instagram.com", excl);
         Assert.DoesNotContain("cdninstagram.com", excl);
         Assert.DoesNotContain("facebook.com", excl);
         Assert.Equal(SingBoxConfigBuilder.MetaMqttHttpProxyExclusionHosts.Length * 2, excl.Count);
+    }
+
+    [Fact]
+    public void MetaDnsExactHosts_StillIncludeGraphForTunRoutes()
+    {
+        Assert.Contains("graph.instagram.com", SingBoxConfigBuilder.MetaDnsExactHosts);
+        Assert.Contains("b-graph.facebook.com", SingBoxConfigBuilder.MetaDnsExactHosts);
+        var routes = SingBoxConfigBuilder.GetAndroidPushRouteHosts();
+        Assert.Contains("graph.instagram.com", routes);
+        Assert.Contains("b-graph.facebook.com", routes);
+        Assert.Contains("edge-mqtt.facebook.com", routes);
     }
 
     [Fact]

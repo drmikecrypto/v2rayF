@@ -33,7 +33,8 @@ Same link · Daily mode first. Mark each cell; Mbps alone does not pass.
 |-------|--------------|---------------|---------|-------|-------|
 | Chrome HTTPS | | | | | |
 | Instagram feed | | | | | |
-| Instagram Direct (MQTT) | | | | | |
+| Instagram Direct send/receive | | | | |
+| Instagram Direct history scroll | | | | | |
 | WhatsApp chat | | | | | |
 | Telegram chat + media | | | | | |
 | YouTube playback | | | | | |

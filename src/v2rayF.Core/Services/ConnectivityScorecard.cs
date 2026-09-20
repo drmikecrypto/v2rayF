@@ -10,7 +10,8 @@ public static class ConnectivityScorecard
     [
         "Chrome HTTPS",
         "Instagram feed",
-        "Instagram Direct",
+        "Instagram Direct send/receive",
+        "Instagram Direct history scroll",
         "WhatsApp chat",
         "Telegram chat/media",
         "YouTube playback",

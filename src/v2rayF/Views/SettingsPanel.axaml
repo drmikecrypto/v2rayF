@@ -85,8 +85,8 @@
             <TextBlock Text="Kill switch needs TUN mode; with system proxy only it would block non-proxy apps."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowDesktopProxySettings}"/>
-            <CheckBox Content="Secure DNS (DoH)" IsChecked="{Binding DnsThroughProxy}"/>
-            <TextBlock Text="Encrypts DNS via DoH; can add first-page latency vs plain DNS. Off by default for snappier browsing."
+            <CheckBox Content="Secure DNS (DoH) — desktop / non-TUN only" IsChecked="{Binding DnsThroughProxy}"/>
+            <TextBlock Text="Encrypts DNS via DoH when TUN is off. Live Android/desktop TUN always uses UDP DNS via proxy (this toggle does not enable DoH on TUN)."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <CheckBox Content="Block IPv6 leaks" IsChecked="{Binding BlockIpv6}"/>
             <CheckBox Content="Chromium HTTP proxy assist (10809)"

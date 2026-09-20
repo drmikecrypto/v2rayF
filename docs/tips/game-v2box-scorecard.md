@@ -9,7 +9,8 @@ Same phone · same Sentinel subscription · Private DNS **Off**.
 | Chrome HTTPS | | | | |
 | Play Store open | | | | Expect fail on Gaming |
 | Google Translate | | | | Expect fail on Gaming |
-| Instagram Direct | | | | |
+| Instagram Direct send/receive | | | | |
+| Instagram Direct history scroll | | | | |
 | WhatsApp | | | | |
 | Unity game Web Access (e.g. Narco) | | | | |
 | Unity lag / DNS-TCP diagnosis | | | | |

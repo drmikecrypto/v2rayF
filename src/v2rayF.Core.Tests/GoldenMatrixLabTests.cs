@@ -9,6 +9,8 @@ public class GoldenMatrixLabTests
     [Fact]
     public void Scorecard_IncludesFreeAndGamingChecks()
     {
+        Assert.Contains("Instagram Direct send/receive", ConnectivityScorecard.AppChecks);
+        Assert.Contains("Instagram Direct history scroll", ConnectivityScorecard.AppChecks);
         Assert.Contains("Free Worker shortlist", ConnectivityScorecard.AppChecks);
         Assert.Contains("Free slots ≤5 pulse-free", ConnectivityScorecard.AppChecks);
         Assert.Contains("Free prefer 150 fill 450", ConnectivityScorecard.AppChecks);

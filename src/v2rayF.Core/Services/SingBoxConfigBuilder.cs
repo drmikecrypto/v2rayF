@@ -37,7 +37,10 @@ public static class SingBoxConfigBuilder
         "threads.net"
     ];
 
-    /// <summary>Meta MQTT / realtime hosts (exact) + graph gateways.</summary>
+    /// <summary>
+    /// Meta exact hosts for TUN domain→proxy routes (MQTT + Graph).
+    /// Graph stays here for assist-off / native stacks that skip SetHttpProxy.
+    /// </summary>
     public static readonly string[] MetaDnsExactHosts =
     [
         "graph.instagram.com",
@@ -54,10 +57,23 @@ public static class SingBoxConfigBuilder
     ];
 
     /// <summary>
-    /// Hosts that must bypass VPN HTTP CONNECT (Instagram Direct MQTToT).
-    /// Feed/CDN stay on 10809 — do not exclude apex instagram.com / facebook.com.
+    /// VpnService HTTP CONNECT exclusions — MQTT / chat gateways only.
+    /// Graph HTTPS (graph.instagram.com, b-graph) must stay on 10809 with feed
+    /// (Direct history scroll); excluding them stranded Graph on TUN while send/like MQTT worked.
+    /// Do not exclude apex instagram.com / facebook.com / CDN.
     /// </summary>
-    public static readonly string[] MetaMqttHttpProxyExclusionHosts = MetaDnsExactHosts;
+    public static readonly string[] MetaMqttHttpProxyExclusionHosts =
+    [
+        "gateway.instagram.com",
+        "edge-mqtt.facebook.com",
+        "mqtt-mini.facebook.com",
+        "mqtt.facebook.com",
+        "gateway.facebook.com",
+        "z-m-gateway.facebook.com",
+        "edge-chat.facebook.com",
+        "chat-e2ee.facebook.com",
+        "web-chat-e2ee.facebook.com"
+    ];
 
     /// <summary>
     /// UDP/443 block for Chromium Translate/Play assets only — not apex google.com (FCM/GMS).
@@ -96,11 +112,11 @@ public static class SingBoxConfigBuilder
         return list;
     }
 
-    /// <summary>Meta MQTT + FCM exact hosts for explicit TUN proxy route (WhatsApp edges optional).</summary>
+    /// <summary>Meta exact + FCM hosts for explicit TUN proxy route (WhatsApp edges optional).</summary>
     public static string[] GetAndroidPushRouteHosts()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var host in MetaMqttHttpProxyExclusionHosts)
+        foreach (var host in MetaDnsExactHosts)
             set.Add(host);
         foreach (var host in PushRoutingDomains.FcmDnsExactHosts)
             set.Add(host);
