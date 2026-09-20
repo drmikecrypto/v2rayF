@@ -4,13 +4,15 @@ Single source of truth for product direction. Older notes in [`roadmap-engine-fi
 
 ## Operating rules
 
-- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.4.1** Free Worker default + Iran-realistic latency fill).
+- GitHub push / public release only when the maintainer explicitly asks (authorized for **v2.6.4.2** Phase C first slice — session diagnostics + Daily/Gaming CTAs + multipath flake honesty).
 - Local builds, APK sideloads, and private testing are fine between releases.
 - North star: drop any valid config → **every app on the device** reaches the internet through that exit — not “browser works, Instagram Direct dies.”
 
 ## Focus
 
-**Android-first** (Iran/China phones) for 3–6 months. Windows follows once Android full-tunnel QA passes. macOS/Linux TUN/kill-switch after that.
+**Android-first** (Iran/China phones) for 3–6 months; Windows follows. macOS/Linux TUN/kill-switch after that.
+
+**Field soak:** v2.6.4.1 accepted on Android phone + Windows (maintainer) — Phase C unlocked.
 
 ## Success criteria (Connect green)
 
@@ -77,7 +79,7 @@ Same subscription, clean install, Private DNS **Off**. Mark pass/fail (not Mbps 
 - [x] Scorecard template export (Settings)
 - [x] Desktop TUN / kill-switch honesty on macOS/Linux (`TunRequirementMessage`)
 - [x] Windows TUN reliability bar — missing `v2rayF` WinTun adapter → `TunVpnMissingMs` fail-closed (same gate as Android VpnService Network); kill switch waits on `DesktopTunInterface`; soft recovery escalates when adapter stays gone (`DesktopPlatformIntegration.ProbeTunAppPathAsync`)
-- [ ] Former Phase C (UX / multipath polish / richer diagnostics) — **deferred**; Gaming Boost (UDP-aware rank + hotter leastPing) is the first honest multipath/gaming slice — see [`tips/gaming-boost.md`](tips/gaming-boost.md). Full Phase C still waits on golden-matrix soak ([`tips/golden-matrix-2.6.3.4.md`](tips/golden-matrix-2.6.3.4.md)).
+- [x] Former Phase C (UX / multipath polish / richer diagnostics) — **open**; Gaming Boost is the first honest multipath/gaming slice — see [`tips/gaming-boost.md`](tips/gaming-boost.md). Working backlog: [`tips/phase-c.md`](tips/phase-c.md). Field soak of **v2.6.4.1** accepted (Android + Windows).
 
 ### Phase 5 — Distribution for CN/IR
 

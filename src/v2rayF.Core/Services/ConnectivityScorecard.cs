@@ -19,7 +19,11 @@ public static class ConnectivityScorecard
         "UDP game or voice",
         "Lock unlock Chrome without app",
         "Windows TUN adapter present",
-        "Windows no Connected blackhole"
+        "Windows no Connected blackhole",
+        "Free Worker shortlist",
+        "Free slots ≤5 pulse-free",
+        "Free prefer 150 fill 450",
+        "Gaming Boost UDP vs V2Box"
     ];
 
     public static string ExportMarkdown(

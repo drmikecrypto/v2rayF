@@ -8,6 +8,7 @@
 - Connect green requires SOCKS. Fail-closed only if VpnService **Network is missing**. gen204/FCM miss → weak-TUN tip + soft rebind (not Connect failure). HTTP `10809` remains advisory for Play + Instagram feed.
 - Lock/unlock: soft session recovery force-rebinds TUN when needed (no manual Disconnect).
 - Path diagnostics line is **off** unless Settings → **Show path diagnostics while Connected**
+- **Copy session diagnostics** (Settings) exports Connect → SOCKS → TUN → soft recovery timeline — see [`tips/phase-c.md`](tips/phase-c.md)
 - Android TUN stack = **gvisor** (do not enable experimental system/mixed without sandbox flags)
 
 1. Prefer the in-app **Update** button when a new GitHub release is available — it downloads the signed APK, verifies SHA256, and installs over the existing app (native cores refresh automatically).

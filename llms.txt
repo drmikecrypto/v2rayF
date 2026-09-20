@@ -60,7 +60,8 @@ pwsh -File scripts/clean-artifacts.ps1
 - [docs/tip-android-connect.md](docs/tip-android-connect.md) — Android connect tips
 - [docs/tips/game-v2box-scorecard.md](docs/tips/game-v2box-scorecard.md) — private game vs V2Box lab template
 - [docs/tips/gaming-boost.md](docs/tips/gaming-boost.md) — Gaming Boost (honest GearUP-inspired posture)
-- [docs/tips/golden-matrix-2.6.3.4.md](docs/tips/golden-matrix-2.6.3.4.md) — lock/unlock + Windows TUN soak
+- [docs/tips/golden-matrix-2.6.4.1.md](docs/tips/golden-matrix-2.6.4.1.md) — lock/unlock + Windows TUN + Free soak (lab: `scripts/run-golden-matrix-lab.ps1`)
+- [docs/tips/phase-c.md](docs/tips/phase-c.md) — Phase C open (UX / multipath / diagnostics) after 2.6.4.1 field soak
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 

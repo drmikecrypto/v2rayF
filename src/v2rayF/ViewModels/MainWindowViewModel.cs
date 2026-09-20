@@ -817,6 +817,8 @@ public partial class MainWindowViewModel : ViewModelBase
         if (SelectedServer is null)
             return false;
 
+        _proxyCore.Diagnostics.Record("session resume / lock-unlock check");
+
         // Resume must not treat SOCKS-green + dead TUN as healthy (lock/unlock blackhole).
         var live = await _proxyCore.VerifyLivePathAsync(CancellationToken.None).ConfigureAwait(true);
         if (ProxyCoreService.IsResumePathHealthy(live, _proxyCore.LastConnectTunWeak))
@@ -1195,7 +1197,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var md = ConnectivityScorecard.ExportMarkdown(
             "v2rayF",
             ConnectivityScorecard.AppChecks.ToDictionary(c => c, _ => (bool?)null),
-            notes: "Fill yes/no after testing. Same phone + same subscription vs v2rayNG / V2Box.");
+            notes: "Fill yes/no after testing. Same phone + same subscription vs v2rayNG / V2Box. Hint: Chrome / Instagram Direct / WhatsApp are the Daily exit gates.");
         var clipboard = GetClipboard();
         if (clipboard is null)
         {
@@ -1205,6 +1207,40 @@ public partial class MainWindowViewModel : ViewModelBase
 
         await clipboard.SetTextAsync(md);
         StatusText = "Scorecard template copied — paste into notes and mark pass/fail.";
+    }
+
+    [RelayCommand]
+    private async Task ExportSessionDiagnosticsAsync()
+    {
+        var flake = SessionDiagnostics.FormatMultipathFlakeHint(
+            _proxyCore.ActiveMultipathCount > 1,
+            _proxyCore.ActiveGamingBoost || GamingBoostActive,
+            _proxyCore.ConsecutivePathFails);
+        var blob = _proxyCore.Diagnostics.Export(
+            productVersion: AppVersion.Current,
+            serverLabel: SelectedServer is null ? null : StatusSanitizer.Scrub(SelectedServer.Name),
+            socksOk: _proxyCore.IsRunning && _proxyCore.LastConnectProbeMs is > 0,
+            httpWeak: _proxyCore.LastConnectHttpWeak,
+            tunWeak: _proxyCore.LastConnectTunWeak,
+            socksProbeMs: _proxyCore.LastConnectProbeMs,
+            tunMs: null,
+            gamingBoost: GamingBoostActive || _proxyCore.ActiveGamingBoost,
+            multipath: _proxyCore.ActiveMultipathCount > 1 || SmartMultipathEnabled,
+            consecutivePathFails: _proxyCore.ConsecutivePathFails,
+            multipathHint: flake,
+            extraNotes: SessionDiagnostics.FormatRecoverCta(
+                _proxyCore.LastConnectTunWeak,
+                _proxyCore.LastConnectHttpWeak,
+                GamingBoostActive || _proxyCore.ActiveGamingBoost));
+        var clipboard = GetClipboard();
+        if (clipboard is null)
+        {
+            StatusText = "Clipboard unavailable — diagnostics not copied.";
+            return;
+        }
+
+        await clipboard.SetTextAsync(blob);
+        StatusText = "Session diagnostics copied — paste into private notes (no share links).";
     }
 
     [RelayCommand]
@@ -1375,10 +1411,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnShowPathTruthDiagnosticsChanged(bool value) => RefreshPathTruth();
 
-    /// <summary>Connected status with D12 honesty: weak HTTP/TUN + OEM SetHttpProxy failure.</summary>
+    /// <summary>Connected status with D12 honesty: weak HTTP/TUN + OEM SetHttpProxy failure + Phase C recover CTAs.</summary>
     private string FormatConnectedStatus(ProxyServer server, string modeLabel, string? multipathSuffix = null)
     {
         var multi = multipathSuffix ?? "";
+        if (string.IsNullOrEmpty(multi) && _proxyCore.ActiveMultipathCount > 1)
+            multi = $" · multipath×{_proxyCore.ActiveMultipathCount}";
+
         var status = $"Connected — {StatusSanitizer.Scrub(server.Name)} ({modeLabel}{multi})";
         if (_proxyCore.LastConnectHttpWeak)
             status += " · HTTP assist weak (Instagram feed/CDN + Play may need reconnect)";
@@ -1389,6 +1428,21 @@ public partial class MainWindowViewModel : ViewModelBase
             status += " · force-stop Instagram once if Direct feed stuck";
             _instagramForceStopTipPending = false;
         }
+
+        var flake = SessionDiagnostics.FormatMultipathFlakeHint(
+            _proxyCore.ActiveMultipathCount > 1,
+            _proxyCore.ActiveGamingBoost || GamingBoostActive,
+            _proxyCore.ConsecutivePathFails);
+        if (!string.IsNullOrWhiteSpace(flake))
+            status += $" · {flake}";
+
+        var recover = SessionDiagnostics.FormatRecoverCta(
+            _proxyCore.LastConnectTunWeak,
+            _proxyCore.LastConnectHttpWeak,
+            GamingBoostActive || _proxyCore.ActiveGamingBoost);
+        if (!string.IsNullOrWhiteSpace(recover))
+            status += $" · {recover}";
+
         var httpWarn = AppServices.Platform.LastHttpProxyWarning;
         if (!string.IsNullOrWhiteSpace(httpWarn))
             status += $" · {StatusSanitizer.Scrub(httpWarn)}";

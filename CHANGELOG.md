@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.4.2] - 2026-09-20
+
+### Added
+
+- **Phase C** first slice (after v2.6.4.1 field soak on Android + Windows): session diagnostics blob (Settings → Copy session diagnostics), Daily/Gaming recover CTAs on Connected status, multipath flake status honesty (Survive stays off). Tip: [`docs/tips/phase-c.md`](docs/tips/phase-c.md).
+- Golden-matrix lab harness: `scripts/run-golden-matrix-lab.ps1`, tip [`docs/tips/golden-matrix-2.6.4.1.md`](docs/tips/golden-matrix-2.6.4.1.md), scorecard Free/Gaming rows, `GoldenMatrixLabTests`, `SessionDiagnosticsTests`.
+
+### Changed
+
+- Product version **2.6.4.2** (Android versionCode 20642)
+
 ## [2.6.4.1] - 2026-09-19
 
 ### Fixed

@@ -42,5 +42,7 @@ public class DesktopTunInterfaceTests
         Assert.Contains("Lock unlock Chrome without app", ConnectivityScorecard.AppChecks);
         Assert.Contains("Windows TUN adapter present", ConnectivityScorecard.AppChecks);
         Assert.Contains("Windows no Connected blackhole", ConnectivityScorecard.AppChecks);
+        Assert.Contains("Free Worker shortlist", ConnectivityScorecard.AppChecks);
+        Assert.Contains("Gaming Boost UDP vs V2Box", ConnectivityScorecard.AppChecks);
     }
 }

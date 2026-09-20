@@ -1,0 +1,88 @@
+# Golden matrix soak — v2.6.4.1
+
+Repeatable lab runbook for **trusted tunnel** QA on the current release. Fill results privately — **do not commit** share links, subscriptions, or phone logs.
+
+Canonical criteria: [`PLAN.md`](../PLAN.md). Game/UDP sheet: [`game-v2box-scorecard.md`](game-v2box-scorecard.md). Export template: Settings → scorecard / `ConnectivityScorecard`.
+
+**Automated contract gate (dev machine):**
+
+```powershell
+pwsh -File scripts/run-golden-matrix-lab.ps1
+```
+
+Writes a private scaffold under `_sandbox/` (gitignored). Phone / IR path cells still require a human.
+
+## Setup
+
+| Item | Value |
+|------|--------|
+| Build | Release **v2.6.4.1** — [GitHub release](https://github.com/drmikecrypto/v2rayF/releases/tag/v2.6.4.1) (`v2rayF-android-arm64.zip` + optional desktop zip) |
+| Phone | Clean install (uninstall → install). Private DNS **Off**. Battery unrestricted for v2rayF. |
+| Config | Same Sentinel subscription / share link for all clients |
+| Modes | Daily (HTTP assist on) and **Gaming Boost** (assist/fragment/Survive off) |
+| Peers | v2rayF · v2rayNG · V2Box |
+| Free | Tap **Free** once on IR path — expect ≤5 `pulse-free` slots (prefer ≤150ms, fill ≤450ms via Worker) |
+
+Optional lab feed: parent-folder Sentinel VPS (`deep_fix.sh`) — keep credentials out of git.
+
+## Android app matrix (pass / fail)
+
+Same link · Daily mode first. Mark each cell; Mbps alone does not pass.
+
+| Check | v2rayF Daily | v2rayF Gaming | v2rayNG | V2Box | Notes |
+|-------|--------------|---------------|---------|-------|-------|
+| Chrome HTTPS | | | | | |
+| Instagram feed | | | | | |
+| Instagram Direct (MQTT) | | | | | |
+| WhatsApp chat | | | | | |
+| Telegram chat + media | | | | | |
+| YouTube playback | | | | | |
+| Maps load + search | | | | | |
+| Play Services FCM push | | | | | |
+| UDP game or voice | | | | | Expect Gaming ≈ V2Box |
+
+## Session resume (lock/unlock — do not skip)
+
+1. Connect (Daily) until status is Connected and Chrome HTTPS works.
+2. Lock the phone 1–2 minutes (screen off).
+3. Unlock — **do not open v2rayF**.
+4. Open Chrome → HTTPS must work within a few seconds.
+5. Instagram Direct / Play Store still OK after unlock.
+6. Optional: open v2rayF — status must not stay “Connected” with no system internet. Weak TUN tip is OK; silent blackhole is a fail.
+
+| Step | Pass? | Notes |
+|------|-------|-------|
+| Lock → unlock → Chrome without opening app | | |
+| Instagram Direct after unlock | | |
+| No Connected blackhole (fail-closed or recover) | | |
+
+## Free / Pulse (2.6.4.1)
+
+| Check | Pass? | Notes |
+|------|-------|-------|
+| Free fetches via Worker (not raw GitHub only) | | Default `PulseWorkerBase` |
+| ≤5 Free-tagged servers; user imports untouched | | Green **Free** badge |
+| Prefer ≤150ms; fill remaining ≤450ms | | Iran-realistic |
+| Re-tap keeps fast Free; replaces slow only | | 60s cooldown |
+
+## Desktop Windows TUN honesty (Phase 4)
+
+Run as Administrator with TUN + kill switch on (Sentinel / Iran / China presets).
+
+| Check | Pass? | Notes |
+|------|-------|-------|
+| Connect → system traffic via TUN (not only SOCKS) | | |
+| Adapter named `v2rayF` present while Connected | | `Get-NetAdapter -Name v2rayF` |
+| Kill switch armed only when TUN up | | Missing adapter → KS not armed |
+| Sleep / lock → wake → path recovers or tears down (no blackhole) | | |
+| Disconnect restores clearnet | | |
+
+## Exit gates
+
+- **Android:** Daily green on Chrome + Instagram Direct + WhatsApp without manual App Network tweaks; Gaming UDP row matches V2Box; lock/unlock verify passes.
+- **Windows:** TUN Connect never means “SOCKS green + dead WinTun + kill switch blackhole.”
+- **Free:** Worker shortlist usable on IR path; slots respect 150/450ms contract.
+
+When **field** gates pass (private notes), update [`PLAN.md`](../PLAN.md) Phase 4 former Phase C line and open Phase C (UX / multipath / diagnostics) — see [`phase-c.md`](phase-c.md). Lab harness green alone does **not** unlock Phase C; maintainer accepted Android + Windows soak for **v2.6.4.1**.
+
+Prior runbook (v2.6.3.4): [`golden-matrix-2.6.3.4.md`](golden-matrix-2.6.3.4.md).

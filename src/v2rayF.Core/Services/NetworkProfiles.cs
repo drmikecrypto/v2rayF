@@ -76,9 +76,10 @@ public static class NetworkProfiles
 
     public static string StatusHint(string profileId) => profileId switch
     {
-        DailyId => "Daily mode applied — Chromium assist on (Play/Translate). Save settings to persist.",
+        DailyId =>
+            "Daily mode — Chromium assist ON (Play/Translate). Full tunnel + soft MQTT path. Save settings to persist. Weak TUN? Reconnect or wait for soft rebind.",
         GamingId =>
-            "Gaming Boost — full TUN, assist/fragment/Survive off, multipath on. Optimizes your exit for UDP games (not a private booster backbone). Save settings to persist.",
+            "Gaming Boost — assist/fragment/Survive OFF, multipath ON (full TUN for UDP). Not a private booster. Play/Translate may fail. Save settings to persist.",
         ChinaId => "China profile applied — Save settings to persist.",
         IranId => "Iran profile applied — Save settings to persist.",
         _ => "Sentinel profile applied — Save settings to persist."

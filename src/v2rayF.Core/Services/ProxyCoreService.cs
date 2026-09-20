@@ -53,6 +53,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
     private bool _activeChromiumHttpProxyAssist;
     private bool _activeGamingBoost;
     private int? _activeTunFd;
+    private int _activeMultipathCount;
     private volatile int _consecutivePathFails;
     private volatile int _consecutiveSocksFails;
     private volatile int _consecutiveTunOnlyFails;
@@ -78,6 +79,17 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
     /// <summary>True when Connect left SOCKS green but TUN app-path was weak (advisory).</summary>
     public bool LastConnectTunWeak { get; private set; }
+
+    /// <summary>Phase C session timeline for clipboard export.</summary>
+    public SessionDiagnostics Diagnostics { get; } = new();
+
+    /// <summary>Path-fail streak while Connected (flat-traffic probes).</summary>
+    public int ConsecutivePathFails => _consecutivePathFails;
+
+    /// <summary>Peers in the active Xray Soft Multipath balancer (0–1 = off).</summary>
+    public int ActiveMultipathCount => _activeMultipathCount;
+
+    public bool ActiveGamingBoost => _activeGamingBoost;
 
     public bool IsRunning => ProcessHost.IsRunning;
 
@@ -134,12 +146,17 @@ public sealed class ProxyCoreService : IAsyncDisposable
     public bool IsSoftRecoveryInFlight => Volatile.Read(ref _softRecoveryInFlight) != 0;
 
     /// <summary>Begin soft recovery — path health will not escalate to UnexpectedStop until EndSoftRecovery.</summary>
-    public void BeginSoftRecovery() => Interlocked.Exchange(ref _softRecoveryInFlight, 1);
+    public void BeginSoftRecovery()
+    {
+        Interlocked.Exchange(ref _softRecoveryInFlight, 1);
+        Diagnostics.Record("soft recovery begin");
+    }
 
     /// <summary>End soft recovery; on success reset fail counters.</summary>
     public void EndSoftRecovery(bool success)
     {
         Interlocked.Exchange(ref _softRecoveryInFlight, 0);
+        Diagnostics.Record(success ? "soft recovery ok" : "soft recovery failed");
         if (success)
             ResetPathHealthState();
     }
@@ -366,6 +383,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         if (ShouldFailClosedOnWeakTun(gateResult.LocalhostOk, gateResult.TunMs, gateResult.TunRequired))
         {
+            Diagnostics.Record("connect fail-closed: TUN/VPN adapter missing");
             await StopAsync(cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(TunPathNoInternetMessage);
         }
@@ -376,6 +394,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
         _activeGamingBoost = settings.GamingBoostActive;
         _activeTunFd = tunFd;
+        _activeMultipathCount = multipathServers?.Count ?? 0;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _consecutiveTunOnlyFails = 0;
@@ -383,6 +402,16 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _lastPathProbeUtc = DateTimeOffset.UtcNow;
         _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
+        Diagnostics.Clear();
+        Diagnostics.Record(
+            $"connect SOCKS ok ({probeMs} ms)" +
+            (LastConnectTunWeak
+                ? gateResult.TunMs == LatencyService.TunVpnMissingMs
+                    ? " · TUN missing"
+                    : " · TUN weak"
+                : gateResult.TunRequired ? " · TUN ok" : "") +
+            (_activeMultipathCount > 1 ? $" · multipath×{_activeMultipathCount}" : "") +
+            (_activeGamingBoost ? " · Gaming" : ""));
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
         ScheduleHttpAssistAdvisoryProbe(server);
@@ -616,6 +645,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
             LastConnectHttpWeak = true;
         }
 
+        if (LastConnectHttpWeak)
+            Diagnostics.Record("HTTP assist weak (advisory)");
         HttpAssistAdvisoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -710,6 +741,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
 
         if (ShouldFailClosedOnWeakTun(probeMs.LocalhostOk, probeMs.TunMs, probeMs.TunRequired))
         {
+            Diagnostics.Record("refresh fail-closed: TUN/VPN adapter missing");
             await ProcessHost.StopAsync(cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException(TunPathNoInternetMessage);
         }
@@ -721,6 +753,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeChromiumHttpProxyAssist = settings.ChromiumHttpProxyAssist;
         _activeGamingBoost = settings.GamingBoostActive;
         _activeTunFd = tunFd;
+        _activeMultipathCount = multipathServers?.Count ?? 0;
         _consecutivePathFails = 0;
         _consecutiveSocksFails = 0;
         _consecutiveTunOnlyFails = 0;
@@ -728,6 +761,9 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _lastPathProbeUtc = DateTimeOffset.UtcNow;
         _lastNatKeepaliveUtc = DateTimeOffset.UtcNow;
         _lastVpnKeepaliveUtc = DateTimeOffset.UtcNow;
+        Diagnostics.Record(
+            $"refresh SOCKS ok ({gateMs} ms)" +
+            (LastConnectTunWeak ? " · TUN weak" : probeMs.TunRequired ? " · TUN ok" : ""));
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);
         ScheduleHttpAssistAdvisoryProbe(server);
@@ -790,6 +826,8 @@ public sealed class ProxyCoreService : IAsyncDisposable
         _activeEnableTunMode = false;
         _activeChromiumHttpProxyAssist = false;
         _activeGamingBoost = false;
+        _activeMultipathCount = 0;
+        Diagnostics.Record("disconnect");
         RunningStateChanged?.Invoke(this, false);
     }
 
@@ -906,8 +944,17 @@ public sealed class ProxyCoreService : IAsyncDisposable
                             _consecutiveLocalhostHealthy = 0;
                             _consecutiveTunOnlyFails = 0;
                             _consecutivePathFails++;
+                            var flake = SessionDiagnostics.FormatMultipathFlakeHint(
+                                _activeMultipathCount > 1,
+                                _activeGamingBoost,
+                                _consecutivePathFails);
+                            if (flake is not null)
+                                Diagnostics.Record(flake);
+                            else
+                                Diagnostics.Record($"path probe miss (SOCKS) ×{_consecutivePathFails}");
                             if (ShouldRaiseOnPathFails(_consecutivePathFails))
                             {
+                                Diagnostics.Record("unexpected stop: path fails threshold");
                                 RaiseUnexpectedStop();
                                 return;
                             }
@@ -926,6 +973,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
                             if (_consecutiveTunOnlyFails >= TunOnlyFailThreshold)
                             {
                                 BeginSoftRecovery();
+                                Diagnostics.Record($"TUN weak ×{_consecutiveTunOnlyFails} — soft recovery");
                                 TunPathFailed?.Invoke(this, EventArgs.Empty);
                             }
 

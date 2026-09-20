@@ -14,7 +14,7 @@
                 <Button Grid.Column="1" Content="Gaming Boost" Command="{Binding ApplyGamingModeCommand}"
                         HorizontalAlignment="Stretch"/>
             </Grid>
-            <TextBlock Text="Gaming Boost: full TUN, assist/fragment/Survive off, multipath on. Optimizes your exit for UDP — not a private booster backbone."
+            <TextBlock Text="Daily: Chromium assist ON (Play/Translate). Gaming Boost: assist/fragment/Survive OFF + multipath ON — full TUN for UDP games (not a private booster). Save settings to persist."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <Button Content="Apply Sentinel profile" Command="{Binding ApplySentinelProfileCommand}"
                     HorizontalAlignment="Stretch"/>
@@ -26,6 +26,10 @@
             </Grid>
             <Button Content="Copy scorecard template" Command="{Binding ExportScorecardTemplateCommand}"
                     HorizontalAlignment="Stretch"/>
+            <Button Content="Copy session diagnostics" Command="{Binding ExportSessionDiagnosticsCommand}"
+                    HorizontalAlignment="Stretch"/>
+            <TextBlock Text="Diagnostics: Connect → SOCKS → TUN → soft recovery timeline. Paste into private notes — no share links."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
             <Button Content="Apply game catalog → App Network Direct"
                     Command="{Binding ApplyGameCatalogDirectCommand}"
                     HorizontalAlignment="Stretch"
@@ -37,9 +41,12 @@
             <CheckBox Content="Rank servers on startup" IsChecked="{Binding StartupRankServersEnabled}"/>
             <CheckBox Content="Smart Multipath" IsChecked="{Binding SmartMultipathEnabled}"
                       IsVisible="{Binding ShowXrayOnlyFeatures}"/>
+            <TextBlock Text="When multipath flakes under Gaming, status says so — Soft Multipath re-ranks on reconnect; Survive stays off."
+                       TextWrapping="Wrap" FontSize="11" Opacity="0.7"
+                       IsVisible="{Binding ShowXrayOnlyFeatures}"/>
             <CheckBox Content="Show path diagnostics while Connected"
                       IsChecked="{Binding ShowPathTruthDiagnostics}"/>
-            <TextBlock Text="Off by default. When on, shows TUN / HTTP assist / App Network Direct under status."
+            <TextBlock Text="Off by default. When on, shows TUN / HTTP assist / App Network Direct under status. Prefer Copy session diagnostics for a full timeline."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"/>
 
             <TextBlock Text="Network" FontWeight="SemiBold" FontSize="15" Margin="0,8,0,0"/>
@@ -85,7 +92,7 @@
             <CheckBox Content="Chromium HTTP proxy assist (10809)"
                       IsChecked="{Binding ChromiumHttpProxyAssist}"
                       IsVisible="{Binding ShowAndroidBypass}"/>
-            <TextBlock Text="Prefer Daily / Gaming Boost presets above. On: Play/Translate via CONNECT. Off: full TUN — breaks Play (2.3.1)."
+            <TextBlock Text="Prefer Daily (assist on) or Gaming Boost (assist off, multipath on) above. Weak TUN/HTTP tips include recover CTAs on the status line."
                        TextWrapping="Wrap" FontSize="11" Opacity="0.7"
                        IsVisible="{Binding ShowAndroidBypass}"/>
             <CheckBox Content="Packet fragment (DPI, slower)" IsChecked="{Binding EnablePacketFragment}"/>
