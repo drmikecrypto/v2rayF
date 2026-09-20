@@ -418,7 +418,7 @@ public sealed class ProxyCoreService : IAsyncDisposable
             enc == PacketEncodingPolicy.TunUdpDefault)
         {
             Diagnostics.Record(
-                $"TUN UDP: injected packet_encoding={enc} for plain TCP {server.Protocol} (DNS via proxy)");
+                $"TUN UDP: injected packet_encoding={enc} for {server.Protocol} (DNS via proxy)");
         }
         StartHealthMonitor();
         RunningStateChanged?.Invoke(this, true);

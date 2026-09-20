@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [2.6.4.5] - 2026-09-20
+
+### Fixed
+
+- Live TUN `packet_encoding=xudp` inject covers all non-Vision VLESS/VMess (TLS / REALITY / WS / gRPC / …), not only plain TCP/none. Vision still skipped (in-core XUDP). Speedtest still omits (2.0.7–2.0.9 crawl).
+
+### Changed
+
+- Product version **2.6.4.5** (Android versionCode 20645)
+
 ## [2.6.4.4] - 2026-09-20
 
 ### Fixed

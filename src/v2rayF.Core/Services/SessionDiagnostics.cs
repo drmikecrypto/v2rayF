@@ -79,7 +79,7 @@ public sealed class SessionDiagnostics
                 : "- TUN: **weak** (app-path probe; messengers may need force-stop / soft recovery)");
             if (socksOk)
                 sb.AppendLine(
-                    "- Note: SOCKS green + TUN weak often means TUN UDP/DNS via proxy failed while TCP probe worked (plain VLESS TCP needs packet_encoding=xudp).");
+                    "- Note: SOCKS green + TUN weak often means TUN UDP/DNS via proxy failed while TCP probe worked (VLESS/VMess needs packet_encoding=xudp; Vision handles UDP in-core).");
         }
         else if (tunWeak is false)
             sb.AppendLine("- TUN: ok or not required");

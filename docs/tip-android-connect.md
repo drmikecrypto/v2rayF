@@ -17,7 +17,7 @@
 3. If connect fails with **TUN path failed**, the VPN Network was missing after start — try again or reinstall the release APK. A weak-TUN tip while Connected is advisory (not a hard fail).
 4. Uninstall first only if the installer reports a **signature mismatch** (very old sideload builds before stable signing).
 5. Keep Private DNS **Off** (Settings → Network → Private DNS). Opportunistic/strict Private DNS breaks VPN DNS hijack — the app warns when it detects this. After a TUN/DNS change, **force-stop Instagram once** if Direct feed pull-to-refresh stalls (Connected status tips this once).
-6. **Plain VLESS TCP (no TLS)** can show fast Test delay then Connected with no system internet: latency is SOCKS TCP; TUN DNS is UDP via the proxy. Live TUN now injects `packet_encoding=xudp` for that class (Shadowsocks already carries UDP). If it still fails, Copy session diagnostics and compare SOCKS vs TUN.
+6. **VLESS/VMess** can show fast Test delay then Connected with no system internet: latency is SOCKS TCP; TUN DNS is UDP via the proxy. Live TUN injects `packet_encoding=xudp` when the link omits it (any transport/TLS/REALITY; Vision skipped — core already muxes UDP). Shadowsocks carries UDP natively. If it still fails, Copy session diagnostics and compare SOCKS vs TUN.
 7. Use **Daily** / **Gaming Boost** / **Iran** / **China** / **Sentinel** presets in Settings (Save settings to persist).
 8. fa/zh Private DNS + battery: [`tips/fa-zh-connect.md`](tips/fa-zh-connect.md). Subscription mirrors: [`tips/subscription-mirrors.md`](tips/subscription-mirrors.md).
 

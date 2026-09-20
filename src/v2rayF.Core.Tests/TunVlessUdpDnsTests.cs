@@ -20,12 +20,30 @@ public class TunVlessUdpDnsTests
     private const string RealityVision =
         "vless://2a05c3ec-a0e2-4c33-ac92-35c36f4fdf16@169.40.32.81:443?security=reality&encryption=none&pbk=18bUh7KFc0-1RBGAOSy-KOB5qFjm1T0juWB50roV9S0&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=www.yahoo.com&sid=05d78a9d#Sentinel-443-Reality-Vision";
 
+    private const string VlessWsTls =
+        "vless://1947cbe1-1aff-4dfe-b325-003fdc711ed1@169.40.32.81:443?type=ws&security=tls&path=%2Fws&host=ws.example&sni=ws.example#ws-tls";
+
+    private const string VlessGrpcReality =
+        "vless://1947cbe1-1aff-4dfe-b325-003fdc711ed1@169.40.32.81:443?type=grpc&security=reality&serviceName=GunService&pbk=18bUh7KFc0-1RBGAOSy-KOB5qFjm1T0juWB50roV9S0&fp=chrome&sni=www.yahoo.com&sid=05d78a9d#grpc-reality";
+
+    private const string VlessTcpTls =
+        "vless://1947cbe1-1aff-4dfe-b325-003fdc711ed1@169.40.32.81:443?type=tcp&security=tls&sni=example.com#tcp-tls";
+
     [Fact]
     public void Policy_PlainTcpNone_LiveTun_InjectsXudp()
     {
         var server = ConfigImportParser.Parse(Vless3306).First();
         Assert.Equal("xudp", PacketEncodingPolicy.Resolve(server, liveTun: true));
         Assert.Null(PacketEncodingPolicy.Resolve(server, liveTun: false));
+    }
+
+    [Fact]
+    public void Policy_WsTls_GrpcReality_TcpTls_LiveTun_InjectsXudp()
+    {
+        Assert.Equal("xudp", PacketEncodingPolicy.Resolve(ConfigImportParser.Parse(VlessWsTls).First(), liveTun: true));
+        Assert.Equal("xudp", PacketEncodingPolicy.Resolve(ConfigImportParser.Parse(VlessGrpcReality).First(), liveTun: true));
+        Assert.Equal("xudp", PacketEncodingPolicy.Resolve(ConfigImportParser.Parse(VlessTcpTls).First(), liveTun: true));
+        Assert.Null(PacketEncodingPolicy.Resolve(ConfigImportParser.Parse(VlessWsTls).First(), liveTun: false));
     }
 
     [Fact]
