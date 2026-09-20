@@ -5,9 +5,10 @@
 | Version | Supported          |
 | ------- | ------------------ |
 | 2.6.x   | :white_check_mark: |
-| 2.5.x   | :white_check_mark: |
-| 2.4.x   | :x:                |
-| 1.4.x   | :x:                |
+| 2.5.x   | :x:                |
+| ≤ 2.4.x | :x:                |
+
+Only the latest **2.6.x** release line receives security fixes. Upgrade via in-app Update or [Releases](https://github.com/drmikecrypto/v2rayF/releases).
 
 ## Reporting a vulnerability
 
