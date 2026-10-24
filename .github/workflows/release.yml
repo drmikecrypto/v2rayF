@@ -127,7 +127,7 @@ jobs:
           cd artifacts
           sha256sum *.zip | tee SHA256SUMS
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: v2rayF ${{ github.ref_name }}
           files: |
